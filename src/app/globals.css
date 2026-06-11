@@ -1,0 +1,313 @@
+@import "tailwindcss";
+
+/* ============================================================
+   SHUR-SHUR design tokens — "juicy collage"
+   Deep cherry maroon + bright red + cream paper + graphite ink.
+   Tailwind v4 CSS-first: ALL tokens live here, no tailwind.config.
+   ============================================================ */
+
+@theme {
+  /* ==== Cycle-1 brand tokens (redesign brief §2) ====
+     The page BASE is dark cherry; cream exists only as "paper objects"
+     and breathing sections. Pure #FFFFFF as a field is forbidden. */
+  --color-cherry-deep: #4a0d14; /* page base, oxblood */
+  --color-cherry-black: #2a0a0e; /* footer; never pure black */
+  --color-cherry-juice: #c8102e; /* hot accent: CTA field, marquee */
+  --color-paper: #f4efe6; /* warm cream of "crumpled cards" */
+  --color-cream-type: #fff8f0; /* type on dark */
+
+  /* Legacy cherry / maroon scale (kept for compatibility) */
+  --color-cherry-950: #260308;
+  --color-cherry-900: #3f0a12;
+  --color-cherry-800: #5c1a23;
+  --color-cherry-700: #7a1f2b;
+  --color-cherry-600: #8b0000;
+
+  /* Bright juice accent */
+  --color-juice-500: #d6202f;
+  --color-juice-400: #e63946;
+  /* Light juice for SMALL accents/hovers on near-black fields:
+     juice-400 on cherry-black ≈4.4:1 (fails AA), juice-300 ≈5.6:1. */
+  --color-juice-300: #f06a76;
+
+  /* Paper / cream */
+  --color-paper-50: #faf7f0;
+  --color-paper-100: #f3eee2;
+  --color-paper-200: #e9e1cf;
+
+  /* Graphite ink */
+  --color-ink-900: #1c1a19;
+  --color-ink-700: #3a3735;
+  --color-ink-500: #6b6661;
+
+  /* Animation */
+  --animate-marquee: marquee 28s linear infinite;
+  --animate-float-slow: float-slow 7s ease-in-out infinite;
+  --animate-wiggle: wiggle 5s ease-in-out infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  @keyframes float-slow {
+    0%,
+    100% {
+      transform: translateY(0) rotate(var(--float-rotate, 0deg));
+    }
+    50% {
+      transform: translateY(-14px) rotate(var(--float-rotate, 0deg));
+    }
+  }
+
+  @keyframes wiggle {
+    0%,
+    100% {
+      transform: rotate(-2deg);
+    }
+    50% {
+      transform: rotate(2.5deg);
+    }
+  }
+}
+
+/* Fonts come from next/font CSS variables → expose them to Tailwind utilities */
+@theme inline {
+  --font-display: var(--font-unbounded);
+  --font-body: var(--font-manrope);
+  --font-logo: "Courier New", "Nimbus Mono PS", Courier, monospace;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Color flip (cycle 1): dark cherry is the FIELD, cream is the type.
+   Paper sections re-establish ink text color locally. */
+body {
+  background: var(--color-cherry-deep);
+  color: var(--color-cream-type);
+  font-family: var(--font-body), system-ui, sans-serif;
+  overflow-x: clip;
+}
+
+::selection {
+  background: var(--color-cherry-juice);
+  color: var(--color-cream-type);
+}
+
+/* Two-layer focus ring: cream outline reads on dark fields, the juice
+   box-shadow ring (filling the offset gap) reads on paper fields. */
+:focus-visible {
+  outline: 3px solid var(--color-cream-type);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--color-cherry-juice);
+}
+
+/* ============================================================
+   Collage utilities
+   ============================================================ */
+
+/* Film-grain overlay (SVG turbulence, data URI — no asset request).
+   2–4% per brief §2 — it must sit on every dark section. */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.7'/%3E%3C/svg%3E");
+}
+
+/* Crumpled-paper texture for cards.
+   Cards are "paper objects" on the dark field → they always re-establish
+   ink as their text color (body default is now cream-type). */
+.paper-texture {
+  color: var(--color-ink-900);
+  background-color: var(--color-paper-100);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.018' numOctaves='4' seed='7'/%3E%3CfeDiffuseLighting lighting-color='%23ffffff' surfaceScale='1.6'%3E%3CfeDistantLight azimuth='235' elevation='58'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E");
+  background-blend-mode: multiply;
+}
+
+/* Torn-paper edge (used by TapeDivider) */
+.torn-edge {
+  clip-path: polygon(
+    0% 0%, 4% 62%, 9% 18%, 14% 71%, 19% 30%, 25% 80%, 31% 22%, 37% 65%,
+    43% 12%, 49% 70%, 55% 28%, 61% 78%, 67% 20%, 73% 66%, 79% 14%,
+    85% 72%, 91% 26%, 96% 64%, 100% 8%, 100% 100%, 0% 100%
+  );
+}
+
+/* Masking-tape strip */
+.tape {
+  background: color-mix(in srgb, var(--color-paper-50) 86%, transparent);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
+  clip-path: polygon(2% 0%, 98% 4%, 100% 88%, 96% 100%, 3% 96%, 0% 12%);
+}
+
+/* Display type defaults */
+.display-type {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 0.96;
+  text-wrap: balance;
+}
+
+/* Kinetic "breathing" headings — driven by .is-inview from IntersectionObserver */
+.kinetic {
+  transition:
+    letter-spacing 1.4s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 1.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.kinetic.is-inview {
+  letter-spacing: 0.005em;
+}
+
+/* Per-char reveal scaffolding (GSAP animates .char) */
+.char-line {
+  display: block;
+  overflow: hidden;
+}
+
+.char {
+  display: inline-block;
+  will-change: transform;
+}
+
+/* Reveal-on-scroll (IO toggles .is-inview) */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0s);
+}
+
+.reveal.is-inview {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Marquee track */
+.marquee-track {
+  animation: var(--animate-marquee);
+  will-change: transform;
+}
+
+/* Hero rotating sub-headline word (§3): each swap re-mounts the span
+   (React key), CSS pops it in. Killed under reduced motion below. */
+@keyframes word-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.55em) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.rotating-word {
+  display: inline-block;
+  animation: word-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Hero slam title: SplitText chars get will-change from GSAP at runtime.
+   The h1 itself stays visible in static HTML (no-js / pre-hydration / LCP);
+   GSAP hides chars only at animation start. */
+.hero-slam .char {
+  will-change: transform, opacity, filter;
+}
+
+/* ============================================================
+   No-JS fallback. html.no-js is removed by a synchronous inline
+   script before paint; if JS is disabled/blocked it stays, so all
+   JS-driven choreography must degrade to readable static layout.
+   ============================================================ */
+
+/* Reveal-on-scroll baseline hides content → force it visible. */
+.no-js .reveal {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+/* Services pinned horizontal track (lg:flex lg:w-max) would clip without
+   GSAP → fall back to the stacked (mobile) layout on all widths. */
+.no-js .services-track {
+  display: grid !important;
+  width: 100% !important;
+  max-width: 80rem;
+  margin-inline: auto;
+  padding-inline: 1.5rem !important;
+}
+
+.no-js .services-track [data-service-card] > * {
+  width: auto !important;
+}
+
+/* Honeypot field: visually hidden but NOT display:none (bots skip those) */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Reduced motion: kill every decorative animation
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .kinetic,
+  .kinetic.is-inview {
+    transition: none;
+    letter-spacing: -0.02em;
+  }
+
+  .animate-float-slow,
+  .animate-wiggle,
+  .rotating-word {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
