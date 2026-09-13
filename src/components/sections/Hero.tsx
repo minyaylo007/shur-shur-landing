@@ -41,7 +41,7 @@ export function Hero({ locale, dict, marquee }: HeroProps) {
           (two variants, never both active, so their order cannot matter). */}
       <div aria-hidden="true" className="absolute inset-0 -z-10">
         <Image
-          src="/brand/cover.png"
+          src="/brand/cover.webp"
           alt=""
           fill
           priority
