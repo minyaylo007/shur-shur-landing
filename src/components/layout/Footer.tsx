@@ -2,7 +2,7 @@ import type { Dictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
 import { Logo } from "@/components/ui/Logo";
 import { FooterYear } from "./FooterYear";
-import { CherryIcon, InstagramIcon, TelegramIcon } from "@/components/ui/icons";
+import { CherryIcon, InstagramIcon, PhoneIcon, TelegramIcon } from "@/components/ui/icons";
 
 interface FooterProps {
   nav: Dictionary["nav"];
@@ -26,10 +26,10 @@ export function Footer({ nav, footer }: FooterProps) {
             <span className="font-display text-xs font-bold tracking-[0.18em] text-juice-300 uppercase">
               {footer.nav}
             </span>
+            {/* Same four destinations as the header — one IA, stated twice. */}
+            <a href="#work" className="cursor-pointer transition-colors hover:text-juice-300">{nav.work}</a>
             <a href="#services" className="cursor-pointer transition-colors hover:text-juice-300">{nav.services}</a>
-            <a href="#cases" className="cursor-pointer transition-colors hover:text-juice-300">{nav.cases}</a>
             <a href="#about" className="cursor-pointer transition-colors hover:text-juice-300">{nav.about}</a>
-            <a href="#team" className="cursor-pointer transition-colors hover:text-juice-300">{nav.team}</a>
             <a href="#contact" className="cursor-pointer transition-colors hover:text-juice-300">{nav.contact}</a>
           </nav>
 
@@ -56,6 +56,24 @@ export function Footer({ nav, footer }: FooterProps) {
               <TelegramIcon className="size-4" />
               <span dir="ltr">{site.socials.telegramHandle}</span>
             </a>
+          </div>
+
+          {/* Brief §19: contacts repeated at the bottom, phone included. v1
+              had the number only inside wa.me/viber deep-links, so a visitor
+              who wanted to simply call had nothing to click. */}
+          <div className="flex flex-col gap-2 text-sm">
+            <span className="font-display text-xs font-bold tracking-[0.18em] text-juice-300 uppercase">
+              {footer.contacts}
+            </span>
+            <a
+              href={site.phone.tel}
+              className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
+            >
+              <PhoneIcon className="size-4" />
+              {/* dir="ltr": without it the leading "+" is re-ordered in Hebrew. */}
+              <span dir="ltr">{site.phone.display}</span>
+            </a>
+            <p className="text-paper-200/70">{footer.city}</p>
           </div>
         </div>
 

@@ -12,7 +12,7 @@
      and breathing sections. Pure #FFFFFF as a field is forbidden. */
   --color-cherry-deep: #4a0d14; /* page base, oxblood */
   --color-cherry-black: #2a0a0e; /* footer; never pure black */
-  --color-cherry-juice: #c8102e; /* hot accent: CTA field, marquee */
+  --color-cherry-juice: #c8102e; /* hot accent: CTA field, contact control */
   --color-paper: #f4efe6; /* warm cream of "crumpled cards" */
   --color-cream-type: #fff8f0; /* type on dark */
 
@@ -39,53 +39,6 @@
   --color-ink-900: #1c1a19;
   --color-ink-700: #3a3735;
   --color-ink-500: #6b6661;
-
-  /* Animation */
-  --animate-marquee: marquee 28s linear infinite;
-  --animate-float-slow: float-slow 7s ease-in-out infinite;
-  --animate-wiggle: wiggle 5s ease-in-out infinite;
-
-  @keyframes marquee {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(-50%);
-    }
-  }
-
-  /* Same loop for RTL. The track is `w-max` inside an overflow-hidden band, so
-     under dir="rtl" it hangs off the LEFT edge and the duplicate row sits to
-     the left of the first one — scrolling must therefore run the other way, or
-     the band would drift into blank space. */
-  @keyframes marquee-rtl {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(50%);
-    }
-  }
-
-  @keyframes float-slow {
-    0%,
-    100% {
-      transform: translateY(0) rotate(var(--float-rotate, 0deg));
-    }
-    50% {
-      transform: translateY(-14px) rotate(var(--float-rotate, 0deg));
-    }
-  }
-
-  @keyframes wiggle {
-    0%,
-    100% {
-      transform: rotate(-2deg);
-    }
-    50% {
-      transform: rotate(2.5deg);
-    }
-  }
 }
 
 /* Fonts come from next/font CSS variables → expose them to Tailwind utilities */
@@ -178,13 +131,6 @@ body {
   );
 }
 
-/* Masking-tape strip */
-.tape {
-  background: color-mix(in srgb, var(--color-paper-50) 86%, transparent);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
-  clip-path: polygon(2% 0%, 98% 4%, 100% 88%, 96% 100%, 3% 96%, 0% 12%);
-}
-
 /* Display type defaults */
 .display-type {
   font-family: var(--font-display), var(--font-body), sans-serif;
@@ -231,41 +177,6 @@ body {
   transform: translateY(0);
 }
 
-/* Marquee track */
-.marquee-track {
-  animation: var(--animate-marquee);
-  will-change: transform;
-}
-
-[dir="rtl"] .marquee-track {
-  animation-name: marquee-rtl;
-}
-
-/* Hero rotating sub-headline word (§3): each swap re-mounts the span
-   (React key), CSS pops it in. Killed under reduced motion below. */
-@keyframes word-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.55em) scale(0.92);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.rotating-word {
-  display: inline-block;
-  animation: word-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* Hero slam title: SplitText chars get will-change from GSAP at runtime.
-   The h1 itself stays visible in static HTML (no-js / pre-hydration / LCP);
-   GSAP hides chars only at animation start. */
-.hero-slam .char {
-  will-change: transform, opacity, filter;
-}
-
 /* ============================================================
    No-JS fallback. html.no-js is removed by a synchronous inline
    script before paint; if JS is disabled/blocked it stays, so all
@@ -276,20 +187,6 @@ body {
 .no-js .reveal {
   opacity: 1 !important;
   transform: none !important;
-}
-
-/* Services pinned horizontal track (lg:flex lg:w-max) would clip without
-   GSAP → fall back to the stacked (mobile) layout on all widths. */
-.no-js .services-track {
-  display: grid !important;
-  width: 100% !important;
-  max-width: 80rem;
-  margin-inline: auto;
-  padding-inline: 1.5rem !important;
-}
-
-.no-js .services-track [data-service-card] > * {
-  width: auto !important;
 }
 
 /* Honeypot field: visually hidden but NOT display:none (bots skip those) */
@@ -309,10 +206,6 @@ body {
    Reduced motion: kill every decorative animation
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track {
-    animation: none;
-  }
-
   .reveal {
     opacity: 1;
     transform: none;
@@ -323,12 +216,6 @@ body {
   .kinetic.is-inview {
     transition: none;
     letter-spacing: var(--display-tracking);
-  }
-
-  .animate-float-slow,
-  .animate-wiggle,
-  .rotating-word {
-    animation: none;
   }
 
   *,

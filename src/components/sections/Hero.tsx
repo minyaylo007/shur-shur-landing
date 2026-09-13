@@ -1,151 +1,131 @@
-import Image from "next/image";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
-import { CherryHero } from "@/components/three/CherryHero";
-import { AuditForm } from "@/components/forms/AuditForm";
-import { HeroSlam } from "@/components/motion/HeroSlam";
-import { RotatingWords } from "@/components/motion/RotatingWords";
+import { site } from "@/lib/site";
+import { heroVideo } from "@/lib/work";
+import { AutoVideo } from "@/components/media/AutoVideo";
+import { KineticHeading } from "@/components/motion/KineticHeading";
 import { Reveal } from "@/components/motion/Reveal";
-import { Magnetic } from "@/components/motion/Magnetic";
-import { FloatingCherries } from "@/components/motion/FloatingCherries";
-import { Marquee } from "@/components/sections/Marquee";
 import { StickerBadge } from "@/components/ui/StickerBadge";
-import { PaperCard } from "@/components/ui/PaperCard";
 import { ButtonLink } from "@/components/ui/Button";
-import { SplatCTA } from "@/components/ui/SplatCTA";
-import { ArrowUpRightIcon } from "@/components/ui/icons";
+import { InstagramIcon, TelegramIcon, PhoneIcon } from "@/components/ui/icons";
 
 interface HeroProps {
   locale: Locale;
   dict: Dictionary["hero"];
-  marquee: Dictionary["marquee"];
+  contactLabels: { call: string };
 }
 
 /**
- * Cycle-1 hero (brief §2/§3): cherry-deep field + full-bleed brand photo
- * under a 40–60% scrim, cream condensed display slammed in by SplitText,
- * a crumpled paper card carrying the CTA, and marquee tickers framing the
- * first screen top & bottom (the bottom one lives in page.tsx).
+ * First screen (brief §5).
+ *
+ * v1 stacked nine competing elements here — a marquee, a 3D cherry, a
+ * rotating word, three statistics, two buttons and the whole audit form.
+ * v2 keeps four things: who we are, what we do, one primary action, and a
+ * direct way to reach a human. The audit form moved to its own section
+ * further down, where it is a step in the funnel rather than a second
+ * headline competing with the first.
+ *
+ * The media is one clip of the agency shooting on its own street. It is
+ * 9:16, like every other file in the archive, so it is used natively: on a
+ * phone it fills the screen exactly, and from `lg` up it becomes a tall
+ * frame on the inline-end side instead of being cropped into a wide band.
+ * `start-auto`/`end-*` are logical, so under RTL the frame moves to the
+ * other side on its own and the text still leads.
  */
-export function Hero({ locale, dict, marquee }: HeroProps) {
+export function Hero({ locale, dict, contactLabels }: HeroProps) {
   return (
     <section
       id="top"
-      className="relative isolate flex min-h-svh flex-col overflow-hidden bg-cherry-deep pb-16 text-cream-type md:pb-20"
+      className="relative isolate flex min-h-[88svh] items-center overflow-hidden bg-cherry-black text-cream-type"
     >
-      {/* Full-bleed brand photo + cherry tint + scrims. Text NEVER sits on
-          raw pixels: the inline-start/bottom gradients keep 40–60%+ coverage
-          under every line of type (brief §2 contrast invariant). The copy
-          column sits on the inline-start side, so the dark end of the
-          horizontal scrim has to follow it — hence the mirrored pair below
-          (two variants, never both active, so their order cannot matter). */}
-      <div aria-hidden="true" className="absolute inset-0 -z-10">
-        <Image
-          src="/brand/cover.png"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-[center_30%]"
+      <div className="absolute inset-0 lg:inset-y-10 lg:start-auto lg:end-10 lg:w-[36%] lg:rounded-2xl lg:overflow-hidden">
+        <AutoVideo
+          eager
+          src={heroVideo.src}
+          poster={heroVideo.poster}
+          width={heroVideo.width}
+          height={heroVideo.height}
+          label={heroVideo.alt[locale]}
+          className="size-full object-cover"
         />
-        <div className="absolute inset-0 bg-cherry-deep/40 mix-blend-multiply" />
-        <div className="absolute inset-0 from-cherry-deep/90 via-cherry-deep/50 to-cherry-deep/15 ltr:bg-linear-to-r rtl:bg-linear-to-l" />
-        <div className="absolute inset-0 bg-linear-to-b from-cherry-deep/80 via-transparent to-cherry-deep" />
+        {/* Scrim: heavy on phones, where the text sits on top of the clip;
+            from `lg` the text has its own column and only a light edge
+            gradient is needed to keep the frame from glaring. */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-linear-to-t from-cherry-black via-cherry-black/75 to-cherry-black/35 lg:bg-linear-to-t lg:from-cherry-black/40 lg:via-transparent lg:to-transparent"
+        />
       </div>
 
-      {/* Top ticker frame — straight band right under the fixed header. */}
-      <div className="pt-16 md:pt-[72px]">
-        <Marquee dict={marquee} tilt={false} />
-      </div>
-
-      {/* Depth-parallax collage layer (brief §4 #2): 8 floating cherries /
-          drops / scraps on different z-depths — scroll-scrub + mouse drift. */}
-      <FloatingCherries variant="hero" />
-
-      <div className="mx-auto grid w-full max-w-7xl flex-1 items-center gap-10 px-4 pt-10 pb-4 sm:px-6 md:pt-14 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="relative z-10 flex flex-col items-start gap-6">
+      <div className="relative mx-auto w-full max-w-7xl px-4 py-24 sm:px-6 lg:py-28">
+        <div className="flex max-w-xl flex-col items-start gap-7 lg:max-w-[52%]">
           <Reveal>
-            <StickerBadge variant="juice" rotate={-2.5}>
+            <StickerBadge variant="juice" rotate={-2}>
               {dict.badge}
             </StickerBadge>
           </Reveal>
 
-          <HeroSlam
+          <KineticHeading
+            as="h1"
+            immediate
             lines={dict.titleLines}
-            className="text-[clamp(3rem,11vw,8rem)] font-black text-cream-type drop-shadow-[0_6px_30px_rgba(42,10,14,0.6)]"
+            className="text-[clamp(2.4rem,8vw,5.2rem)] font-extrabold text-cream-type"
           />
 
-          <p className="display-type flex items-baseline gap-3 text-2xl font-extrabold md:text-3xl">
-            <span aria-hidden="true" className="inline-block text-cream-type/70 rtl:scale-x-[-1]">
-              →
-            </span>
-            <RotatingWords
-              words={dict.rotatingWords}
-              className="inline-block min-w-[8ch] text-juice-400"
-            />
-          </p>
+          <Reveal delay={0.1}>
+            <p className="max-w-md text-base leading-relaxed text-cream-type/85 md:text-lg">
+              {dict.subtitle}
+            </p>
+          </Reveal>
 
-          {/* Crumpled paper card "taped" over the photo — carries the CTA,
-              so the primary action stays inside the first viewport. */}
-          <Reveal delay={0.35} className="mt-2 w-full max-w-xl">
-            <PaperCard rotate={-1.2} className="flex flex-col gap-5 p-6 md:p-8">
-              <p className="text-base leading-relaxed text-ink-700 md:text-lg">{dict.subtitle}</p>
+          {/* Exactly one primary action (brief §21). Everything beside it is
+              a text link, so there is no second filled button to compete. */}
+          <Reveal delay={0.18} className="w-full">
+            <ButtonLink href="#contact" variant="juice" className="w-full sm:w-auto">
+              {dict.cta}
+            </ButtonLink>
+          </Reveal>
 
-              <div className="flex flex-wrap items-center gap-4">
-                <Magnetic>
-                  {/* Splat-CTA (brief §4 #3): hover bursts juice drops out of
-                      the button, leave goo-merges them back. */}
-                  <SplatCTA>
-                    <ButtonLink href="#contact" variant="juice">
-                      {dict.cta}
-                      <ArrowUpRightIcon className="size-4" />
-                    </ButtonLink>
-                  </SplatCTA>
-                </Magnetic>
-                <ButtonLink href="#services" variant="ghost" className="text-cherry-900">
-                  {dict.secondaryCta}
-                </ButtonLink>
+          <Reveal delay={0.26} className="w-full">
+            <div className="flex flex-col gap-3">
+              <span className="font-display text-[11px] font-bold tracking-[0.2em] text-cream-type/60 uppercase">
+                {dict.contactLabel}
+              </span>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm font-semibold">
+                {/* The number was already in the project, inside the wa.me
+                    and viber links — brief §5 asks for it to be visible and
+                    tappable, so here it is as a real tel: link. */}
+                <a
+                  href={site.phone.tel}
+                  aria-label={contactLabels.call}
+                  className="inline-flex cursor-pointer items-center gap-2 text-cream-type transition-colors hover:text-juice-300"
+                >
+                  <PhoneIcon className="size-4 shrink-0" />
+                  <span dir="ltr">{site.phone.display}</span>
+                </a>
+                <a
+                  href={site.socials.telegram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex cursor-pointer items-center gap-2 text-cream-type transition-colors hover:text-juice-300"
+                >
+                  <TelegramIcon className="size-4 shrink-0" />
+                  <span dir="ltr">{site.socials.telegramHandle}</span>
+                </a>
+                <a
+                  href={site.socials.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex cursor-pointer items-center gap-2 text-cream-type transition-colors hover:text-juice-300"
+                >
+                  <InstagramIcon className="size-4 shrink-0" />
+                  <span dir="ltr">{site.socials.instagramHandle}</span>
+                </a>
               </div>
-
-              <div className="grid grid-cols-3 gap-4 border-t border-cherry-900/15 pt-4">
-                {dict.stats.map((stat) => (
-                  <div key={stat.label} className="flex flex-col gap-1">
-                    {/* dir="ltr": figures like "3+" are bidi-neutral at the
-                        edges, so an RTL paragraph would reorder them to "+3". */}
-                    <span
-                      dir="ltr"
-                      className="display-type text-3xl font-black text-juice-500 md:text-4xl"
-                    >
-                      {stat.value}
-                    </span>
-                    <span className="text-xs leading-snug text-ink-500 md:text-sm">
-                      {stat.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Cycle-4 conversion offer (brief §7.3): one-field free IG
-                  audit — minimal friction, same lead pipeline (kind=audit). */}
-              <div className="border-t border-cherry-900/15 pt-4">
-                <AuditForm locale={locale} dict={dict.audit} />
-              </div>
-            </PaperCard>
+            </div>
           </Reveal>
         </div>
-
-        {/* 3D cherry (drops into frame, then idles) / poster fallback */}
-        <div className="relative mx-auto aspect-square w-full max-w-105 md:max-w-130 lg:max-w-full">
-          <CherryHero posterAlt={dict.posterAlt} />
-        </div>
       </div>
-
-      <p
-        aria-hidden="true"
-        className="hidden justify-center font-display text-[11px] font-bold tracking-[0.3em] text-cream-type/60 uppercase md:flex"
-      >
-        ↓ {dict.scrollHint} ↓
-      </p>
     </section>
   );
 }

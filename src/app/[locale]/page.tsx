@@ -3,20 +3,38 @@ import { getDictionary } from "@/dictionaries";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Hero } from "@/components/sections/Hero";
-import { Marquee } from "@/components/sections/Marquee";
-import { Pain } from "@/components/sections/Pain";
+import { SelectedWork } from "@/components/sections/SelectedWork";
+import { ProcessResult } from "@/components/sections/ProcessResult";
 import { Services } from "@/components/sections/Services";
-import { Cases } from "@/components/sections/Cases";
-import { Numbers } from "@/components/sections/Numbers";
-import { About } from "@/components/sections/About";
-import { Team } from "@/components/sections/Team";
-import { Socials } from "@/components/sections/Socials";
-import { Contact } from "@/components/sections/Contact";
+import { Trust } from "@/components/sections/Trust";
+import { AuditCta } from "@/components/sections/AuditCta";
 import { TapeDivider } from "@/components/ui/TapeDivider";
-import { CherryCursor } from "@/components/motion/CherryCursor";
-import { MessengerFab } from "@/components/conversion/MessengerFab";
-import { StickyCta } from "@/components/conversion/StickyCta";
+import { ContactBar } from "@/components/conversion/ContactBar";
 
+/**
+ * Redesign v2 information architecture (brief §4).
+ *
+ * v1 ran thirteen blocks — hero, marquee, pain, services, cases, numbers,
+ * about, team, socials, contact, plus a FAB, a sticky bar and a cursor
+ * companion. The problem the brief names is cognitive overload, not the
+ * visual language, so this is a consolidation, not a repaint:
+ *
+ *   hero            → hero, minus the audit form and the stats strip
+ *   marquee + pain  → removed (both told; the work now shows)
+ *   —               → SELECTED WORK, moved directly under the hero (§7)
+ *   —               → PROCESS → RESULT, the backstage/final pair (§8)
+ *   services        → kept, flattened from a pinned scroll track to cards
+ *   cases + numbers → removed: unverified figures (§16, see Trust.tsx)
+ *   about + team + wall of love → TRUST, one compact proof section (§17–18)
+ *   socials         → folded into SELECTED WORK's "stories" cluster
+ *   contact         → AUDIT + CONTACT, one conversion destination (§19–20)
+ *   FAB + sticky CTA → ContactBar, one control instead of five (§19)
+ *   cherry cursor   → removed (§14: no excessive cursor effects)
+ *
+ * Scroll rhythm: one dark chapter (hero + work), a torn edge into the cream
+ * body (process, services, trust, audit), a torn edge back into the dark
+ * footer. Two boundaries instead of seven — the tape was becoming wallpaper.
+ */
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: rawLocale } = await params;
   const locale: Locale = isLocale(rawLocale) ? rawLocale : defaultLocale;
@@ -26,38 +44,20 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     <>
       <Header locale={locale} nav={dict.nav} langSwitcher={dict.langSwitcher} />
       {/* tabIndex={-1}: the skip-link must be able to MOVE focus here (WCAG 2.4.1). */}
-      {/* Section rhythm (brief §2, cycle 3): dark hero → cream services →
-          photographic dark cases + deep numbers (one dark "proof" chapter) →
-          cream about/team breath → photographic dark socials → juice CTA →
-          near-black footer. Torn edges stitch every dark↔cream transition;
-          collage decor overlaps the boundary in two places. */}
       <main id="main" tabIndex={-1} className="scroll-mt-20">
-        <Hero locale={locale} dict={dict.hero} marquee={dict.marquee} />
-        <Marquee dict={dict.marquee} />
-        {/* Pain block (cycle 4, brief §7): same dark field as the hero —
-            one chapter visually, the torn edge below still does the flip. */}
-        <Pain dict={dict.pain} />
-        <TapeDivider color="paper" decor="cherry" />
+        <Hero locale={locale} dict={dict.hero} contactLabels={{ call: dict.nav.callLabel }} />
+        <SelectedWork locale={locale} dict={dict.work} />
+        <TapeDivider color="paper1" decor="cherry" />
+        <ProcessResult locale={locale} dict={dict.process} />
         <Services dict={dict.services} />
-        <TapeDivider color="deep" flip />
-        <Cases dict={dict.cases} />
-        <Numbers dict={dict.numbers} />
-        <TapeDivider color="paper" />
-        <About dict={dict.about} />
-        <TapeDivider color="paper2" />
-        <Team dict={dict.team} />
-        <TapeDivider color="deep" decor="clip" />
-        <Socials locale={locale} dict={dict.socials} />
-        <TapeDivider color="cherry" />
-        <Contact locale={locale} dict={dict.contact} />
+        <Trust dict={dict.trust} />
+        <AuditCta locale={locale} dict={dict.audit} />
       </main>
+      <TapeDivider color="black" decor="clip" flip />
       <Footer nav={dict.nav} footer={dict.footer} />
-      {/* Cycle-4 conversion layer (brief §7): messenger FAB + mobile sticky
-          CTA — both scroll-gated past the hero, z-40 (under header/grain). */}
-      <MessengerFab locale={locale} dict={dict.fab} />
-      <StickyCta dict={dict.stickyCta} />
-      {/* Trailing cherry cursor companion — desktop fine pointers only. */}
-      <CherryCursor />
+      {/* Brief §19: ONE persistent contact control, scroll-gated past the
+          hero so it never covers the hero's own CTA. z-40, under the header. */}
+      <ContactBar locale={locale} dict={dict.contactBar} callLabel={dict.nav.callLabel} />
     </>
   );
 }

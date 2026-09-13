@@ -35,11 +35,12 @@ function flatten(value: unknown, path = ""): [string, string][] {
 }
 
 /* Strings that are the SAME in every locale by design:
-   — the wall of love quotes are verbatim client comments (§9 honesty: we
-     translate the attribution, never the quote itself);
+   — the proof quotes are verbatim Ukrainian comments and post excerpts from
+     real Instagram posts (§28 honesty: we translate the attribution and the
+     caption that frames them, never the quote itself);
    — the «Укр» pill names the Ukrainian language in Ukrainian. */
 const isVerbatim = (path: string) =>
-  /^socials\.wallOfLove\.quotes\[\d+\]\.text$/.test(path) || path === "langSwitcher.uk";
+  /^trust\.quotes\.items\[\d+\]\.text$/.test(path) || path === "langSwitcher.uk";
 
 /* ============================================================
    i18n core — 4 locales, one source of truth (lib/i18n)
@@ -108,20 +109,17 @@ describe("dictionaries — one per locale", () => {
   it("every locale resolves to its own dictionary object", () => {
     const dicts = locales.map((locale) => getDictionary(locale));
     expect(new Set(dicts).size).toBe(locales.length);
-    for (const dict of dicts) expect(dict.nav.cases.length).toBeGreaterThan(1);
+    for (const dict of dicts) expect(dict.nav.work.length).toBeGreaterThan(1);
   });
 
   it("no locale shares a heading with another (no copy-paste stubs)", () => {
-    const headings = locales.map((locale) => getDictionary(locale).pain.heading);
+    const headings = locales.map((locale) => getDictionary(locale).work.heading);
     expect(new Set(headings).size).toBe(locales.length);
   });
 
-  it("no empty or whitespace-only string anywhere (bar unit-less figures)", () => {
-    // numbers.items[].suffix is legitimately empty for a bare figure («215»).
-    const mayBeEmpty = /^numbers\.items\[\d+\]\.suffix$/;
+  it("no empty or whitespace-only string anywhere", () => {
     for (const locale of locales) {
       for (const [path, value] of flatten(getDictionary(locale))) {
-        if (mayBeEmpty.test(path)) continue;
         expect(value.trim(), `${locale}.${path}`).not.toBe("");
       }
     }
@@ -162,15 +160,16 @@ describe("dictionaries — no untranslated leftovers", () => {
     for (const value of [
       he.meta.title,
       he.meta.description,
-      he.nav.cases,
+      he.nav.work,
       he.hero.cta,
-      he.hero.audit.submit,
-      he.contact.form.submit,
-      he.contact.form.errors.name,
-      he.contact.form.successTitle,
+      he.work.heading,
+      he.process.btsLabel,
+      he.trust.heading,
+      he.audit.form.submit,
+      he.audit.form.errors.igHandle,
+      he.audit.form.successTitle,
       he.footer.rights,
-      he.fab.label,
-      he.stickyCta.cta,
+      he.contactBar.label,
     ]) {
       expect(value).toMatch(HEBREW);
     }
@@ -252,18 +251,22 @@ describe("RTL — Hebrew typography", () => {
 });
 
 describe("RTL — flipped choreography", () => {
-  it("globals.css: neutral display tracking + a mirrored marquee under dir=rtl", () => {
+  it("globals.css: Hebrew gets neutral display tracking, LTR keeps the tight one", () => {
     const css = read("../src/app/globals.css");
     expect(css).toMatch(/--display-tracking:\s*-0\.02em/);
     expect(css).toMatch(/\[dir="rtl"\]\s*\{\s*--display-tracking:\s*0em/);
-    expect(css).toContain("@keyframes marquee-rtl");
-    expect(css).toMatch(/\[dir="rtl"\] \.marquee-track\s*\{\s*animation-name: marquee-rtl/);
   });
 
-  it("Services: the pinned horizontal scrub runs the other way under rtl", () => {
-    const src = read("../src/components/sections/Services.tsx");
-    expect(src).toMatch(/document\.documentElement\.dir === "rtl"/);
-    expect(src).toMatch(/rtl \? getDistance\(\) : -getDistance\(\)/);
+  /* Redesign v2 deleted the marquee and the pinned Services track — the two
+     places that needed a hand-mirrored animation. Nothing on the page now
+     mirrors itself in JS or in keyframes, so the RTL surface is smaller: it
+     is the `dir` attribute plus logical utilities, both checked below. This
+     test guards the deletion, so a re-introduced physical animation has to
+     bring its own RTL story rather than silently inheriting none. */
+  it("no animation is mirrored by hand any more (nothing left to mirror)", () => {
+    const css = read("../src/app/globals.css");
+    expect(css).not.toContain("marquee");
+    expect(read("../src/components/sections/Services.tsx")).not.toContain("ScrollTrigger");
   });
 
   it("the up-right arrow glyph mirrors itself once, at its definition", () => {
@@ -272,20 +275,51 @@ describe("RTL — flipped choreography", () => {
     );
   });
 
-  it("numeric figures are bidi-isolated so «+4 180» never reorders", () => {
+  it("numerals and @handles are bidi-isolated so «+380 97…» never reorders", () => {
     for (const rel of [
-      "../src/components/sections/Cases.tsx",
-      "../src/components/sections/Numbers.tsx",
       "../src/components/sections/Hero.tsx",
+      "../src/components/sections/Trust.tsx",
+      "../src/components/sections/AuditCta.tsx",
+      "../src/components/conversion/ContactBar.tsx",
+      "../src/components/layout/Header.tsx",
+      "../src/components/layout/Footer.tsx",
+      "../src/components/forms/AuditForm.tsx",
     ]) {
       expect(read(rel), rel).toContain('dir="ltr"');
     }
   });
 
+  it("mixed-language quotes let the browser decide their direction", () => {
+    // The proof quotes stay Ukrainian in every locale — a Hebrew page must
+    // still lay each one out LTR, which only dir="auto" gets right.
+    expect(read("../src/components/sections/Trust.tsx")).toContain('dir="auto"');
+  });
+
   it("layout-bearing utilities are logical, not physical (spot check)", () => {
     expect(read("../src/components/layout/Header.tsx")).toContain("focus-visible:start-2");
-    expect(read("../src/components/sections/Contact.tsx")).toContain("border-s-4");
-    expect(read("../src/components/conversion/MessengerFab.tsx")).toContain("end-4");
+    // The hero video frame and the contact control both sit on the inline
+    // edge — in Hebrew they must swap sides without a mirrored copy.
+    expect(read("../src/components/sections/Hero.tsx")).toContain("lg:end-10");
+    expect(read("../src/components/conversion/ContactBar.tsx")).toContain("end-4");
     expect(read("../src/components/ui/Logo.tsx")).toContain("ms-1");
+  });
+
+  it("no physical left/right utility sneaks into the new sections", () => {
+    /* Matches the utilities that hard-code a side — `ml-4`, `pr-[2px]`,
+       `left-1/2`, `text-right` — while leaving prose like "right-to-left"
+       and logical `ms-`/`me-`/`ps-`/`pe-`/`start-`/`end-` alone. */
+    const physical =
+      /\b(?:ml|mr|pl|pr)-(?:\d|\[|auto|px|full)|\b(?:left|right)-(?:\d|\[|auto|full)|\btext-(?:left|right)\b/;
+    for (const rel of [
+      "../src/components/sections/Hero.tsx",
+      "../src/components/sections/SelectedWork.tsx",
+      "../src/components/sections/ProcessResult.tsx",
+      "../src/components/sections/Services.tsx",
+      "../src/components/sections/Trust.tsx",
+      "../src/components/sections/AuditCta.tsx",
+      "../src/components/conversion/ContactBar.tsx",
+    ]) {
+      expect(read(rel), rel).not.toMatch(physical);
+    }
   });
 });
