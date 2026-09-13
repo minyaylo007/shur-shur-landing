@@ -99,7 +99,7 @@ export async function generateMetadata({ params }: LayoutParams): Promise<Metada
       description: dict.meta.description,
       locale: ogLocales[locale],
       alternateLocale: locales.filter((code) => code !== locale).map((code) => ogLocales[code]),
-      images: [{ url: "/og.png", width: 500, height: 600, alt: dict.meta.ogAlt }],
+      images: [{ url: "/og.png", width: 1080, height: 1350, alt: dict.meta.ogAlt }],
     },
     twitter: {
       card: "summary_large_image",
