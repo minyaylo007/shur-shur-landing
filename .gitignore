@@ -40,8 +40,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# agent tooling state (local only)
-/.claude/
+# agent working folder — the whole thing, at any depth, never in git.
+# Not just settings: task files, prompts and draft plans are written by us and
+# have leaked live credentials elsewhere in the fleet. Nothing from here is
+# tracked today; if something ever needs sharing, unignore it by name.
+.claude/
 
 # private research and client data — never publish
 /docs/private/
