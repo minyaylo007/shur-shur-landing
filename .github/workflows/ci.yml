@@ -1,0 +1,43 @@
+name: CI
+
+# Проверки на каждый push в любую ветку и на каждый pull request.
+# Деплой отдельно (deploy.yml) и только после зелёного CI на main.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          # Для проверки сборки достаточно заглушки; настоящий адрес задаётся в Vercel.
+          NEXT_PUBLIC_SITE_URL: https://example.invalid

@@ -1,0 +1,88 @@
+name: Deploy
+
+# Выкат в прод Vercel.
+#  * автоматически — только когда CI прошёл на push в main, и ровно тот коммит,
+#    который CI проверил (head_sha);
+#  * вручную — Actions → Deploy → Run workflow с полем ref: так же делается откат
+#    на предыдущий рабочий коммит.
+# Нужны: секрет VERCEL_TOKEN и переменные VERCEL_ORG_ID / VERCEL_PROJECT_ID.
+# Без них workflow не падает, а пропускает выкат с предупреждением.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Коммит, тег или ветка для выката (для отката — SHA предыдущей рабочей версии)"
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Автовыкат только после успешного CI на push в main (не на PR и не на форк).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check deploy credentials
+        id: creds
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::warning::Выкат пропущен: нужен секрет VERCEL_TOKEN и переменные VERCEL_ORG_ID / VERCEL_PROJECT_ID"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
+
+      - uses: actions/setup-node@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Pull Vercel production settings
+        if: steps.creds.outputs.ready == 'true'
+        run: npx --yes vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build
+        if: steps.creds.outputs.ready == 'true'
+        run: npx --yes vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy
+        if: steps.creds.outputs.ready == 'true'
+        id: deploy
+        run: |
+          url=$(npx --yes vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Выкачено: $url (commit $(git rev-parse --short HEAD))" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke check
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.deploy.outputs.url }}/uk")
+          echo "GET /uk -> $code"
+          # 401/403 — это защита превью Vercel, не поломка; падаем только на 5xx и отсутствии ответа.
+          case "$code" in 5*|000) exit 1 ;; esac
