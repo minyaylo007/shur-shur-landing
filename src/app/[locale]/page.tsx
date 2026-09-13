@@ -1,4 +1,4 @@
-import { isLocale, type Locale } from "@/lib/i18n";
+import { isLocale, defaultLocale, type Locale } from "@/lib/i18n";
 import { getDictionary } from "@/dictionaries";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -19,7 +19,7 @@ import { StickyCta } from "@/components/conversion/StickyCta";
 
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: rawLocale } = await params;
-  const locale: Locale = isLocale(rawLocale) ? rawLocale : "uk";
+  const locale: Locale = isLocale(rawLocale) ? rawLocale : defaultLocale;
   const dict = getDictionary(locale);
 
   return (

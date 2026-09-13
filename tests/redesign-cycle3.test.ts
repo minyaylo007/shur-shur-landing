@@ -3,11 +3,17 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { uk } from "../src/dictionaries/uk";
 import { en } from "../src/dictionaries/en";
+import { he } from "../src/dictionaries/he";
+import { ro } from "../src/dictionaries/ro";
+import { locales } from "../src/lib/i18n";
 import { site } from "../src/lib/site";
 import { posts, knownHandles } from "../src/lib/posts";
 
 const read = (rel: string) =>
   readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+
+/** Every shipped dictionary — a new locale joins these assertions by itself. */
+const allDicts = [uk, en, he, ro];
 
 /* ============================================================
    PART A — carry-over fixes mandated by the cycle-2 review
@@ -72,12 +78,13 @@ describe("cycle 3 — lib/posts.ts (Instagram Approach A, verified URLs)", () =>
     expect(profileLinks).toHaveLength(3);
   });
 
-  it("every tile uses an owned /brand asset (not smm.png — that is the Socials backdrop) with both alts", () => {
+  it("every tile uses an owned /brand asset (not smm.png — that is the Socials backdrop) with an alt in every locale", () => {
     for (const post of posts) {
       expect(post.image).toMatch(/^\/brand\/[\w-]+\.png$/);
       expect(post.image).not.toBe("/brand/smm.png");
-      expect(post.alt.uk.length).toBeGreaterThan(3);
-      expect(post.alt.en.length).toBeGreaterThan(3);
+      for (const locale of locales) {
+        expect(post.alt[locale].length).toBeGreaterThan(3);
+      }
     }
   });
 
@@ -94,14 +101,15 @@ describe("cycle 3 — lib/posts.ts (Instagram Approach A, verified URLs)", () =>
   });
 });
 
-describe("cycle 3 — dictionaries (uk source, en typed parity)", () => {
-  it("nav gains the #cases anchor in both locales", () => {
-    expect(uk.nav.cases.length).toBeGreaterThan(2);
-    expect(en.nav.cases.length).toBeGreaterThan(2);
+describe("cycle 3 — dictionaries (uk source, en/he/ro typed parity)", () => {
+  it("nav gains the #cases anchor in every locale", () => {
+    for (const dict of allDicts) {
+      expect(dict.nav.cases.length).toBeGreaterThan(2);
+    }
   });
 
   it("cases: 4 anonymized metric cards (placeholder strategy §5) with Obys numbering", () => {
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       expect(dict.cases.items).toHaveLength(4);
       expect(dict.cases.items.map((i) => i.num)).toEqual(["01", "02", "03", "04"]);
       for (const item of dict.cases.items) {
@@ -117,27 +125,29 @@ describe("cycle 3 — dictionaries (uk source, en typed parity)", () => {
   });
 
   it("cases: knownBy names align 1:1 with knownHandles; reels alts align with the 4 phones", () => {
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       expect(dict.cases.knownBy.names).toHaveLength(knownHandles.length);
       expect(dict.cases.reels.alts).toHaveLength(4);
     }
   });
 
   it("numbers: the §5 counter strip values, SSR'd as finals", () => {
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       expect(dict.numbers.items.map((i) => i.value)).toEqual([27, 4.2, 850, 11]);
       expect(dict.numbers.items.map((i) => i.decimals)).toEqual([0, 1, 0, 0]);
     }
   });
 
   it("socials: curated framing «Найсоковитіше з @shur.shur.agency» + follow CTA", () => {
-    expect(uk.socials.heading.toLowerCase()).toContain("@shur.shur.agency");
-    expect(en.socials.heading.toLowerCase()).toContain("@shur.shur.agency");
+    for (const dict of allDicts) {
+      expect(dict.socials.heading.toLowerCase()).toContain("@shur.shur.agency");
+      expect(dict.socials.ctaInstagram.length).toBeGreaterThan(3);
+    }
     expect(uk.socials.ctaInstagram).toBe("Підписатися");
   });
 
   it("wall of love: 3 REAL community quotes, honestly sourced (§9: no fake social proof)", () => {
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       expect(dict.socials.wallOfLove.quotes).toHaveLength(3);
       expect(dict.socials.wallOfLove.caption.length).toBeGreaterThan(10);
       for (const quote of dict.socials.wallOfLove.quotes) {
@@ -233,10 +243,11 @@ describe("cycle 3 — proof sections (brief §8 cycle 3)", () => {
    ============================================================ */
 describe("REM-FIX-C3 — §9 honest social proof", () => {
   it("case-card niches never deanonymize the verified «Нас знають» clients", () => {
-    const ukNiches = uk.cases.items.map((i) => i.niche).join(" ");
-    const enNiches = en.cases.items.map((i) => i.niche).join(" ");
-    expect(ukNiches).not.toMatch(/текстил|теніс|одяг|радіо/i);
-    expect(enNiches).not.toMatch(/textile|tennis|clothing|radio/i);
+    const niches = (dict: typeof uk) => dict.cases.items.map((i) => i.niche).join(" ");
+    expect(niches(uk)).not.toMatch(/текстил|теніс|одяг|радіо/i);
+    expect(niches(en)).not.toMatch(/textile|tennis|clothing|radio/i);
+    expect(niches(he)).not.toMatch(/טקסטיל|טניס|בגדים|רדיו/);
+    expect(niches(ro)).not.toMatch(/textil|tenis|haine|radio/i);
   });
 
   it("uses the brief §5 illustrative niche set", () => {
@@ -253,10 +264,13 @@ describe("REM-FIX-C3 — §9 honest social proof", () => {
     expect(uk.cases.sub).toContain("Типові");
     expect(en.cases.sub).not.toMatch(/real client results/i);
     expect(en.cases.sub.toLowerCase()).toContain("typical");
+    // Same hedge in the new locales: «טיפוסיות» / «tipice».
+    expect(he.cases.sub).toContain("טיפוסיות");
+    expect(ro.cases.sub.toLowerCase()).toContain("tipice");
   });
 
   it("spaced figures use NBSP, never a breaking space", () => {
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       for (const item of dict.cases.items) {
         expect(item.value).not.toMatch(/\d \d/);
       }
@@ -270,7 +284,7 @@ describe("REM-FIX-C3 — §9 honest social proof", () => {
   });
 
   it("wall of love: verbatim appendix quotes («Дай Боже» unembellished, quote 3 marks truncation with «…»)", () => {
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       const texts = dict.socials.wallOfLove.quotes.map((q) => q.text);
       expect(texts).toContain("Дай Боже");
       expect(texts).not.toContain("Дай Боже!");

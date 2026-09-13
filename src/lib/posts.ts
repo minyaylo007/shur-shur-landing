@@ -25,6 +25,8 @@ export const posts: InstaPost[] = [
     alt: {
       uk: "Пост-знайомство з командою Shur Shur Agency",
       en: "Meet-the-team post by Shur Shur Agency",
+      he: "פוסט היכרות עם הצוות של Shur Shur Agency",
+      ro: "Postare de prezentare a echipei Shur Shur Agency",
     },
   },
   {
@@ -33,6 +35,8 @@ export const posts: InstaPost[] = [
     alt: {
       uk: "Reels зі студії радіо «Буковинська Хвиля» про бізнес під час війни",
       en: "Reel from the Bukovynska Khvylia radio studio on wartime local business",
+      he: "ריל מהאולפן של רדיו Bukovynska Khvylia על עסקים מקומיים בזמן מלחמה",
+      ro: "Reel din studioul radioului Bukovynska Khvylia despre afacerile locale în timp de război",
     },
   },
   {
@@ -41,6 +45,8 @@ export const posts: InstaPost[] = [
     alt: {
       uk: "Fashion-reels «Court Style» — зйомка для тенісного клубу та бренду одягу",
       en: "“Court Style” fashion reel shot for a tennis club and a clothing brand",
+      he: "ריל אופנה «Court Style» — צילומים למועדון טניס ולמותג אופנה",
+      ro: "Reel fashion „Court Style” — filmat pentru un club de tenis și un brand de haine",
     },
   },
   {
@@ -49,6 +55,8 @@ export const posts: InstaPost[] = [
     alt: {
       uk: "Обкладинка послуги «Таргетована реклама» — наш профіль в Instagram",
       en: "“Paid advertising” service cover — our Instagram profile",
+      he: "עטיפת השירות «פרסום ממומן» — הפרופיל שלנו באינסטגרם",
+      ro: "Coperta serviciului „Reclame plătite” — profilul nostru de Instagram",
     },
   },
   {
@@ -57,6 +65,8 @@ export const posts: InstaPost[] = [
     alt: {
       uk: "Обкладинка послуги «Маркетингова консультація» — наш профіль в Instagram",
       en: "“Marketing consulting” service cover — our Instagram profile",
+      he: "עטיפת השירות «ייעוץ שיווקי» — הפרופיל שלנו באינסטגרם",
+      ro: "Coperta serviciului „Consultanță de marketing” — profilul nostru de Instagram",
     },
   },
   {
@@ -65,6 +75,8 @@ export const posts: InstaPost[] = [
     alt: {
       uk: "Обкладинка послуги «IT та AI-рішення» — наш профіль в Instagram",
       en: "“IT & AI solutions” service cover — our Instagram profile",
+      he: "עטיפת השירות «פתרונות IT ו-AI» — הפרופיל שלנו באינסטגרם",
+      ro: "Coperta serviciului „Soluții IT și AI” — profilul nostru de Instagram",
     },
   },
 ];

@@ -44,7 +44,8 @@ export function Footer({ nav, footer }: FooterProps) {
               className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
             >
               <InstagramIcon className="size-4" />
-              {site.socials.instagramHandle}
+              {/* dir="ltr": keeps the "@" in front of the handle under RTL. */}
+              <span dir="ltr">{site.socials.instagramHandle}</span>
             </a>
             <a
               href={site.socials.telegram}
@@ -53,7 +54,7 @@ export function Footer({ nav, footer }: FooterProps) {
               className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
             >
               <TelegramIcon className="size-4" />
-              {site.socials.telegramHandle}
+              <span dir="ltr">{site.socials.telegramHandle}</span>
             </a>
           </div>
         </div>

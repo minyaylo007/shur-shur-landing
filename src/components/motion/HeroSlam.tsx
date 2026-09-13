@@ -39,6 +39,13 @@ export function HeroSlam({ lines, className = "" }: HeroSlamProps) {
         aria: "none",
       });
 
+      /* Splitting turns every char into its own inline-block, so the word box
+         decides their order: under dir="rtl" a Latin word would be slammed in
+         mirrored ("SMM" → "MMS"). `dir="auto"` resolves each word from its own
+         first strong character; in an LTR document it resolves to what those
+         words already were, so uk/en/ro render exactly as before. */
+      for (const word of split.words) word.setAttribute("dir", "auto");
+
       const tween = gsap.from(split.chars, {
         yPercent: 110,
         scale: 1.45,

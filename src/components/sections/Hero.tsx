@@ -34,8 +34,11 @@ export function Hero({ locale, dict, marquee }: HeroProps) {
       className="relative isolate flex min-h-svh flex-col overflow-hidden bg-cherry-deep pb-16 text-cream-type md:pb-20"
     >
       {/* Full-bleed brand photo + cherry tint + scrims. Text NEVER sits on
-          raw pixels: the left/bottom gradients keep 40–60%+ coverage under
-          every line of type (brief §2 contrast invariant). */}
+          raw pixels: the inline-start/bottom gradients keep 40–60%+ coverage
+          under every line of type (brief §2 contrast invariant). The copy
+          column sits on the inline-start side, so the dark end of the
+          horizontal scrim has to follow it — hence the mirrored pair below
+          (two variants, never both active, so their order cannot matter). */}
       <div aria-hidden="true" className="absolute inset-0 -z-10">
         <Image
           src="/brand/cover.png"
@@ -46,7 +49,7 @@ export function Hero({ locale, dict, marquee }: HeroProps) {
           className="object-cover object-[center_30%]"
         />
         <div className="absolute inset-0 bg-cherry-deep/40 mix-blend-multiply" />
-        <div className="absolute inset-0 bg-linear-to-r from-cherry-deep/90 via-cherry-deep/50 to-cherry-deep/15" />
+        <div className="absolute inset-0 from-cherry-deep/90 via-cherry-deep/50 to-cherry-deep/15 ltr:bg-linear-to-r rtl:bg-linear-to-l" />
         <div className="absolute inset-0 bg-linear-to-b from-cherry-deep/80 via-transparent to-cherry-deep" />
       </div>
 
@@ -73,7 +76,9 @@ export function Hero({ locale, dict, marquee }: HeroProps) {
           />
 
           <p className="display-type flex items-baseline gap-3 text-2xl font-extrabold md:text-3xl">
-            <span aria-hidden="true" className="text-cream-type/70">→</span>
+            <span aria-hidden="true" className="inline-block text-cream-type/70 rtl:scale-x-[-1]">
+              →
+            </span>
             <RotatingWords
               words={dict.rotatingWords}
               className="inline-block min-w-[8ch] text-juice-400"
@@ -105,7 +110,12 @@ export function Hero({ locale, dict, marquee }: HeroProps) {
               <div className="grid grid-cols-3 gap-4 border-t border-cherry-900/15 pt-4">
                 {dict.stats.map((stat) => (
                   <div key={stat.label} className="flex flex-col gap-1">
-                    <span className="display-type text-3xl font-black text-juice-500 md:text-4xl">
+                    {/* dir="ltr": figures like "3+" are bidi-neutral at the
+                        edges, so an RTL paragraph would reorder them to "+3". */}
+                    <span
+                      dir="ltr"
+                      className="display-type text-3xl font-black text-juice-500 md:text-4xl"
+                    >
                       {stat.value}
                     </span>
                     <span className="text-xs leading-snug text-ink-500 md:text-sm">

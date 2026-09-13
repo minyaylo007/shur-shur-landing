@@ -48,12 +48,15 @@ export function Header({ locale, nav, langSwitcher }: HeaderProps) {
       <a
         href="#main"
         onClick={(e) => handleAnchor(e, "#main")}
-        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-60 focus-visible:rounded-full focus-visible:bg-juice-500 focus-visible:px-4 focus-visible:py-2 focus-visible:text-paper-50"
+        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:start-2 focus-visible:z-60 focus-visible:rounded-full focus-visible:bg-juice-500 focus-visible:px-4 focus-visible:py-2 focus-visible:text-paper-50"
       >
         {nav.skipToContent}
       </a>
 
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 md:h-[72px]">
+      {/* `gap-2` below `sm`: the switcher grew from two pills to four, and on a
+          320px screen the old `gap-4` pushed it past the edge. From `sm` up the
+          bar keeps the spacing it always had. */}
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6 md:h-[72px]">
         <a
           href="#top"
           onClick={(e) => handleAnchor(e, "#top")}

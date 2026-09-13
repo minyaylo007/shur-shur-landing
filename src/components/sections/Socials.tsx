@@ -67,7 +67,7 @@ export function Socials({ locale, dict }: { locale: Locale; dict: Dictionary["so
             >
               <InstagramIcon className="size-5" />
               {dict.ctaInstagram}
-              <ArrowUpRightIcon className="size-4 transition-[translate] duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              <ArrowUpRightIcon className="size-4 transition-[translate] duration-200 ltr:group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 group-hover:-translate-y-0.5" />
             </a>
           </Magnetic>
           <a

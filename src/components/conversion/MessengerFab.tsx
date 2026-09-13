@@ -21,16 +21,32 @@ interface MessengerFabProps {
 /** Static tilt per paper scrap (CSS rotate property — survives reduce). */
 const SCRAP_TILTS = [-2, 1.6, -1.2, 2.2];
 
+type ChannelKey = "telegram" | "whatsapp" | "instagram" | "viber";
+
+/**
+ * Which messenger sits closest to the thumb, per locale. There is no geo-IP
+ * here, so the page language stands in for the region: Ukrainian visitors get
+ * Telegram first (≈92% weekly usage in Ukraine), everyone else — English,
+ * Hebrew, Romanian — gets WhatsApp first, which dominates in Israel, Romania
+ * and most of the rest of our market. Spelled out per locale on purpose: a new
+ * language must state its own preference instead of inheriting a `!== "uk"`.
+ */
+const MESSENGER_ORDER: Record<Locale, readonly ChannelKey[]> = {
+  uk: ["telegram", "instagram", "whatsapp", "viber"],
+  en: ["whatsapp", "telegram", "instagram", "viber"],
+  he: ["whatsapp", "telegram", "instagram", "viber"],
+  ro: ["whatsapp", "telegram", "instagram", "viber"],
+};
+
 /**
  * Floating multi-messenger button (brief §7.1). A cherry chat FAB in the
  * bottom-right corner that unfolds into paper-scrap deep-links.
  *
  * Geo-ordering approximation: no geo-IP infrastructure exists, so the order
- * follows the page locale — uk → Telegram first (≈92% weekly usage in
- * Ukraine), en → WhatsApp first (Israel/Romania visitors). Honest subset of
- * the brief's Accept-Language/IP idea. Channels whose contact details are
- * still placeholders are gated out by the `ready` flag in lib/site — the
- * full order above kicks in by itself once the real numbers land.
+ * follows the page locale — see MESSENGER_ORDER above. Honest subset of the
+ * brief's Accept-Language/IP idea. Channels whose contact details are still
+ * placeholders are gated out by the `ready` flag in lib/site — the full order
+ * kicks in by itself once the real numbers land.
  *
  * Gates: appears only after the hero is scrolled out of view (IO on #top);
  * SSR/no-js keep it inert + invisible (footer/contact carry the same links).
@@ -54,11 +70,9 @@ export function MessengerFab({ locale, dict }: MessengerFabProps) {
   };
   // Only launch-ready channels render — placeholder-numbered deep-links
   // (ready:false in lib/site) would silently swallow real enquiries.
-  const order = (
-    locale === "uk"
-      ? [channels.telegram, channels.instagram, channels.whatsapp, channels.viber]
-      : [channels.whatsapp, channels.telegram, channels.instagram, channels.viber]
-  ).filter((channel) => channel.ready);
+  const order = MESSENGER_ORDER[locale]
+    .map((key) => channels[key])
+    .filter((channel) => channel.ready);
 
   // Scroll gate: reveal only after the hero (#top) fully leaves the viewport.
   useEffect(() => {
@@ -124,7 +138,7 @@ export function MessengerFab({ locale, dict }: MessengerFabProps) {
     <div
       ref={rootRef}
       inert={!visible}
-      className={`fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 flex flex-col items-end gap-3 transition-[opacity,translate] duration-300 md:right-6 md:bottom-6 ${
+      className={`fixed end-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 flex flex-col items-end gap-3 transition-[opacity,translate] duration-300 md:end-6 md:bottom-6 ${
         visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0"
       }`}
     >

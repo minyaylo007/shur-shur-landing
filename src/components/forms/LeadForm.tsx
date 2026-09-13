@@ -225,7 +225,8 @@ export function LeadForm({ locale, dict }: LeadFormProps) {
               className="inline-flex cursor-pointer items-center gap-1.5 text-cherry-700 underline underline-offset-4 hover:text-cherry-900"
             >
               <TelegramIcon className="size-4" />
-              {site.socials.telegramHandle}
+              {/* dir="ltr": keeps the "@" in front of the handle under RTL. */}
+              <span dir="ltr">{site.socials.telegramHandle}</span>
             </a>
             <a
               href={site.socials.instagram}
@@ -234,7 +235,7 @@ export function LeadForm({ locale, dict }: LeadFormProps) {
               className="inline-flex cursor-pointer items-center gap-1.5 text-cherry-700 underline underline-offset-4 hover:text-cherry-900"
             >
               <InstagramIcon className="size-4" />
-              {site.socials.instagramHandle}
+              <span dir="ltr">{site.socials.instagramHandle}</span>
             </a>
           </p>
         </div>

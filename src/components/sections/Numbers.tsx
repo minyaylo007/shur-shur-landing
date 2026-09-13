@@ -27,8 +27,13 @@ export function Numbers({ dict }: { dict: Dictionary["numbers"] }) {
             delay={(index % 4) * 0.08}
             className="flex flex-col items-center gap-3 text-center"
           >
-            {/* Statement typography: 80px+ display digits on desktop. */}
-            <span className="display-type text-[clamp(3.2rem,9vw,6.5rem)] leading-none font-black text-cream-type">
+            {/* Statement typography: 80px+ display digits on desktop.
+                dir="ltr" keeps figure and suffix in that order — under RTL the
+                "850" / "+" runs would otherwise swap into "+850" reversed. */}
+            <span
+              dir="ltr"
+              className="display-type text-[clamp(3.2rem,9vw,6.5rem)] leading-none font-black text-cream-type"
+            >
               <CountUp value={item.value} decimals={item.decimals} />
               {item.suffix ? (
                 /* 0.35em keeps «4.2 млн» on one line in the lg column; the

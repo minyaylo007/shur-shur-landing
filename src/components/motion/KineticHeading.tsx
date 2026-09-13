@@ -84,7 +84,17 @@ export function KineticHeading({
           <span className="sr-only">{line}</span>
           <span aria-hidden="true">
             {line.split(" ").map((word, wordIndex, words) => (
-              <span key={wordIndex} className="inline-block overflow-hidden align-bottom whitespace-nowrap">
+              /* Every char is its own inline-block, so the WORD decides their
+                 order: under dir="rtl" a Latin word would come out mirrored
+                 ("SMM" → "MMS"). `dir="auto"` resolves each word from its own
+                 first strong character — Hebrew words stay RTL, Latin and
+                 numeric ones go LTR. In an LTR document it resolves to the
+                 direction those words already had, so uk/en/ro are untouched. */
+              <span
+                key={wordIndex}
+                dir="auto"
+                className="inline-block overflow-hidden align-bottom whitespace-nowrap"
+              >
                 {word.split("").map((char, charIndex) => (
                   <span key={charIndex} className="char">
                     {char}

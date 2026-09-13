@@ -3,10 +3,16 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { uk } from "../src/dictionaries/uk";
 import { en } from "../src/dictionaries/en";
+import { he } from "../src/dictionaries/he";
+import { ro } from "../src/dictionaries/ro";
+import { locales } from "../src/lib/i18n";
 import { site, messengers } from "../src/lib/site";
 
 const read = (rel: string) =>
   readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+
+/** Every shipped dictionary — a new locale joins these assertions by itself. */
+const allDicts = [uk, en, he, ro];
 
 /* ============================================================
    Cycle 4 — «Конверсионная машина» (brief §7/§8, §9 honesty)
@@ -22,7 +28,7 @@ describe("cycle 4 — site.ts messenger deep-links", () => {
 
 describe("cycle 4 — dictionaries (uk source, en typed parity)", () => {
   it("fab: trigger labels + 4 channel names in both locales", () => {
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       expect(dict.fab.open.length).toBeGreaterThan(3);
       expect(dict.fab.close.length).toBeGreaterThan(3);
       expect(dict.fab.label.length).toBeGreaterThan(3);
@@ -35,7 +41,7 @@ describe("cycle 4 — dictionaries (uk source, en typed parity)", () => {
   it("pain: provocative question + exactly 3 pains in both locales", () => {
     expect(uk.pain.heading).toBe("ВЕДЕТЕ INSTAGRAM, А ЗАЯВОК НЕМАЄ?");
     expect(en.pain.heading.toUpperCase()).toContain("INSTAGRAM");
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       expect(dict.pain.pains).toHaveLength(3);
       for (const pain of dict.pain.pains) expect(pain.length).toBeGreaterThan(10);
       expect(dict.pain.cta.length).toBeGreaterThan(5);
@@ -45,7 +51,7 @@ describe("cycle 4 — dictionaries (uk source, en typed parity)", () => {
   it("hero.audit: one-field audit offer with a 24h promise", () => {
     expect(uk.hero.audit.submit).toBe("Отримати аудит");
     expect(en.hero.audit.submit.toLowerCase()).toContain("audit");
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       expect(dict.hero.audit.title.length).toBeGreaterThan(5);
       expect(dict.hero.audit.note).toContain("24");
       expect(dict.hero.audit.successText).toContain("24");
@@ -56,7 +62,7 @@ describe("cycle 4 — dictionaries (uk source, en typed parity)", () => {
   it("stickyCta: brand-voice CTA, not «Contact us»", () => {
     expect(uk.stickyCta.cta).toBe("Хочу соковито");
     expect(en.stickyCta.cta.length).toBeGreaterThan(3);
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       expect(dict.stickyCta.telegramLabel.length).toBeGreaterThan(3);
     }
   });
@@ -64,7 +70,7 @@ describe("cycle 4 — dictionaries (uk source, en typed parity)", () => {
   it("contact.scarcity: honest capacity line (3 brands/month), no fake countdowns", () => {
     expect(uk.contact.scarcity).toContain("3 нові бренди");
     expect(en.contact.scarcity.toLowerCase()).toContain("3 new brands");
-    for (const dict of [uk, en]) {
+    for (const dict of allDicts) {
       expect(dict.contact.scarcity).not.toMatch(/таймер|годин залишилось|hours left|hurry/i);
     }
   });
@@ -73,9 +79,14 @@ describe("cycle 4 — dictionaries (uk source, en typed parity)", () => {
 describe("cycle 4 — MessengerFab (brief §7.1)", () => {
   const src = () => read("../src/components/conversion/MessengerFab.tsx");
 
-  it("orders channels by locale: uk → Telegram first, en → WhatsApp first", () => {
-    expect(src()).toMatch(/locale === "uk"\s*\?\s*\[channels\.telegram/);
-    expect(src()).toMatch(/:\s*\[channels\.whatsapp/);
+  it("orders channels by locale: uk → Telegram first, everyone else → WhatsApp first", () => {
+    const order = src().match(/const MESSENGER_ORDER[\s\S]*?\n\};/)?.[0] ?? "";
+    expect(order).toMatch(/uk:\s*\["telegram"/);
+    // Every non-Ukrainian locale must be listed explicitly and lead with WhatsApp.
+    for (const code of locales.filter((l) => l !== "uk")) {
+      expect(order).toMatch(new RegExp(`${code}:\\s*\\["whatsapp"`));
+    }
+    expect(src()).toMatch(/MESSENGER_ORDER\[locale\]/);
   });
 
   it("is scroll-gated past the hero via IntersectionObserver", () => {

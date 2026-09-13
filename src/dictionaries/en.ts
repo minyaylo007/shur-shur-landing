@@ -22,6 +22,8 @@ export const en: Dictionary = {
     label: "Site language",
     uk: "Укр",
     en: "Eng",
+    he: "עב",
+    ro: "Rom",
   },
   hero: {
     badge: "SMM agency • Chernivtsi, Ukraine",

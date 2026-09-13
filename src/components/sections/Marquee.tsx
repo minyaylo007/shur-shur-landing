@@ -31,7 +31,13 @@ export function Marquee({ dict, tilt = true, className = "" }: MarqueeProps) {
           ? "-my-4 -rotate-2 py-4 shadow-[0_10px_30px_rgb(38_3_8/0.35)] md:py-5"
           : "py-3 md:py-4"
       } ${className}`}
-      style={tilt ? { width: "104%", marginLeft: "-2%" } : undefined}
+      /* The tilted band is deliberately wider than its container and hangs 2%
+         over each edge (the page clips it). `marginInlineStart` keeps that
+         symmetric under RTL too: with a physical `margin-left` the
+         over-constrained margin resolves on the other side and the band hangs
+         4% over one edge and 0 over the other. In LTR it still compiles to
+         `margin-left: -2%`, so uk/en/ro are untouched. */
+      style={tilt ? { width: "104%", marginInlineStart: "-2%" } : undefined}
     >
       <div className="marquee-track flex w-max">
         {row}
