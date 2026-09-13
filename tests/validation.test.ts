@@ -16,11 +16,11 @@ describe("leadSchema", () => {
   });
 
   it("trims whitespace around name and contact", () => {
-    const result = leadSchema.safeParse({ ...valid, name: "  Ірина  ", contact: " ira@mail.com " });
+    const result = leadSchema.safeParse({ ...valid, name: "  Ірина  ", contact: " ira@example.com " });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.name).toBe("Ірина");
-      expect(result.data.contact).toBe("ira@mail.com");
+      expect(result.data.contact).toBe("ira@example.com");
     }
   });
 
@@ -151,7 +151,7 @@ describe("isSpam — per-kind elapsed thresholds (REM-FIX-C4)", () => {
   });
 
   it("treats an omitted honeypot as empty (schema default)", () => {
-    const result = leadSchema.safeParse({ name: "Ірина", contact: "ira@mail.com", elapsedMs: 9000 });
+    const result = leadSchema.safeParse({ name: "Ірина", contact: "ira@example.com", elapsedMs: 9000 });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(isSpam(result.data)).toBe(false);

@@ -13,25 +13,21 @@ export const site = {
     // Placeholder until the client provides the real channel/username.
     telegram: "https://t.me/shur_shur_agency",
     telegramHandle: "@shur_shur_agency",
-    // PLACEHOLDER phone number — replace with the agency's real WhatsApp
-    // number (international format, no +) before launch.
-    whatsapp: "https://wa.me/380000000000",
-    // PLACEHOLDER phone number — replace with the agency's real Viber number
-    // (URL-encoded +) before launch.
-    viber: "viber://chat?number=%2B380000000000",
+    whatsapp: "https://wa.me/380972499107",
+    viber: "viber://chat?number=%2B380972499107",
   },
 } as const;
 
 /**
  * Messenger channels with launch readiness (REM-FIX-C4). `ready: false`
- * means the contact detail above is still a PLACEHOLDER (the 380000000000
- * numbers) and the UI must NOT render the link — a dead wa.me/viber
- * deep-link silently swallows real enquiries. Flip the flag to `true` once
- * the client provides the real number; no other code changes are needed.
+ * means the contact detail above is still a placeholder number and the UI
+ * must NOT render the link — a dead wa.me/viber deep-link silently swallows
+ * real enquiries. Flip the flag to `true` once the real number is wired;
+ * no other code changes are needed.
  */
 export const messengers = {
   telegram: { href: site.socials.telegram, ready: true },
   instagram: { href: site.socials.instagramDm, ready: true },
-  whatsapp: { href: site.socials.whatsapp, ready: false },
-  viber: { href: site.socials.viber, ready: false },
+  whatsapp: { href: site.socials.whatsapp, ready: true },
+  viber: { href: site.socials.viber, ready: true },
 } as const satisfies Record<string, { href: string; ready: boolean }>;

@@ -212,11 +212,15 @@ describe("REM-FIX-C4 — per-kind spam thresholds reach the pipeline", () => {
 });
 
 describe("REM-FIX-C4 — dead placeholder deep-links never render", () => {
-  it("site.ts: placeholder-numbered channels are marked ready:false", () => {
-    expect(messengers.whatsapp.ready).toBe(false);
-    expect(messengers.viber.ready).toBe(false);
+  it("site.ts: all channels ready and no placeholder number remains (real number wired 2026-06-11)", () => {
+    expect(messengers.whatsapp.ready).toBe(true);
+    expect(messengers.viber.ready).toBe(true);
     expect(messengers.telegram.ready).toBe(true);
     expect(messengers.instagram.ready).toBe(true);
+    const src = read("../src/lib/site.ts");
+    expect(src).not.toContain("380000000000");
+    expect(src).toContain("wa.me/380972499107");
+    expect(src).toContain("%2B380972499107");
   });
 
   it("FAB filters channels by the ready flag (code guard, not a comment)", () => {
