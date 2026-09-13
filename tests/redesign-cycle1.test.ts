@@ -3,6 +3,11 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { uk } from "../src/dictionaries/uk";
 import { en } from "../src/dictionaries/en";
+import { he } from "../src/dictionaries/he";
+import { ro } from "../src/dictionaries/ro";
+
+/** Every shipped dictionary — a new locale joins these assertions by itself. */
+const allDicts = [uk, en, he, ro];
 
 const css = readFileSync(
   fileURLToPath(new URL("../src/app/globals.css", import.meta.url)),
@@ -38,14 +43,23 @@ describe("cycle 1 — color flip tokens (@theme)", () => {
   });
 });
 
-describe("cycle 1 — dictionaries (uk source, en typed parity)", () => {
-  it("has the §3 rotating hero words in both locales", () => {
+describe("cycle 1 — dictionaries (uk source, typed parity everywhere else)", () => {
+  it("has the §3 rotating hero words in every locale", () => {
     expect(uk.hero.rotatingWords).toEqual(["SMM", "REELS", "ТАРГЕТ", "КОНТЕНТ"]);
     expect(en.hero.rotatingWords).toEqual(["SMM", "REELS", "ADS", "CONTENT"]);
+    expect(he.hero.rotatingWords).toEqual(["SMM", "REELS", "ממומן", "תוכן"]);
+    expect(ro.hero.rotatingWords).toEqual(["SMM", "REELS", "RECLAME", "CONȚINUT"]);
+    for (const dict of allDicts) expect(dict.hero.rotatingWords).toHaveLength(4);
   });
 
-  it("uses the §3B six-item ticker in both locales", () => {
+  it("uses the §3B six-item ticker in every locale", () => {
     expect(uk.marquee.items).toEqual(["SMM", "REELS", "ТАРГЕТ", "КОНТЕНТ", "MOTION", "AI"]);
     expect(en.marquee.items).toEqual(["SMM", "REELS", "ADS", "CONTENT", "MOTION", "AI"]);
+    expect(he.marquee.items).toEqual(["SMM", "REELS", "ממומן", "תוכן", "MOTION", "AI"]);
+    expect(ro.marquee.items).toEqual(["SMM", "REELS", "RECLAME", "CONȚINUT", "MOTION", "AI"]);
+    // The ticker is the rotating set plus the two universal craft words.
+    for (const dict of allDicts) {
+      expect(dict.marquee.items).toEqual([...dict.hero.rotatingWords, "MOTION", "AI"]);
+    }
   });
 });

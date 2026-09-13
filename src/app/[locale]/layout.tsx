@@ -1,7 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Unbounded, Manrope } from "next/font/google";
+import { Unbounded, Manrope, Rubik, Assistant } from "next/font/google";
 import { notFound } from "next/navigation";
-import { locales, isLocale, type Locale } from "@/lib/i18n";
+import {
+  locales,
+  defaultLocale,
+  isLocale,
+  getDirection,
+  ogLocales,
+  type Locale,
+} from "@/lib/i18n";
 import { getDictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
 import { SmoothScroll } from "@/components/motion/SmoothScroll";
@@ -21,6 +28,41 @@ const manrope = Manrope({
   display: "swap",
 });
 
+/* Hebrew pair. Unbounded/Manrope ship no Hebrew glyphs, so `he` would fall
+   back to whatever the OS has — different metrics on every device and none of
+   the brand character. Rubik keeps the heavy geometric display voice and
+   Assistant the neutral grotesk body voice, both with a real `hebrew` subset.
+   They bind to the SAME CSS variables, so every component and the Tailwind
+   `--font-display`/`--font-body` theme keep working unchanged.
+
+   `preload: false` on purpose: all four families live in this one shared
+   layout, so `<link rel="preload">` would be emitted on EVERY locale — the
+   Ukrainian page would start four Hebrew font downloads at highest priority.
+   Hebrew therefore loads its faces when the CSS first uses them (one hop
+   later, `display: swap` covers the gap) and uk/en/ro keep exactly the head
+   they had before this locale existed. */
+const rubik = Rubik({
+  subsets: ["latin", "hebrew"],
+  variable: "--font-unbounded",
+  display: "swap",
+  preload: false,
+});
+
+const assistant = Assistant({
+  subsets: ["latin", "hebrew"],
+  variable: "--font-manrope",
+  display: "swap",
+  preload: false,
+});
+
+/** Font classes for a locale: the Hebrew pair for `he`, the Latin/Cyrillic
+ *  pair for everyone else — only one pair is ever emitted per document. */
+function fontClasses(locale: Locale): string {
+  return locale === "he"
+    ? `${rubik.variable} ${assistant.variable}`
+    : `${unbounded.variable} ${manrope.variable}`;
+}
+
 export const dynamicParams = false;
 
 export function generateStaticParams() {
@@ -31,8 +73,15 @@ type LayoutParams = { params: Promise<{ locale: string }> };
 
 export async function generateMetadata({ params }: LayoutParams): Promise<Metadata> {
   const { locale: rawLocale } = await params;
-  const locale: Locale = isLocale(rawLocale) ? rawLocale : "uk";
+  const locale: Locale = isLocale(rawLocale) ? rawLocale : defaultLocale;
   const dict = getDictionary(locale);
+
+  /* hreflang map built from `locales`, so a new language needs no edit here.
+     x-default points at the default locale — the same target as `/`. */
+  const languages: Record<string, string> = Object.fromEntries([
+    ...locales.map((code) => [code, `/${code}`]),
+    ["x-default", `/${defaultLocale}`],
+  ]);
 
   return {
     metadataBase: new URL(site.siteUrl),
@@ -40,11 +89,7 @@ export async function generateMetadata({ params }: LayoutParams): Promise<Metada
     description: dict.meta.description,
     alternates: {
       canonical: `/${locale}`,
-      languages: {
-        uk: "/uk",
-        en: "/en",
-        "x-default": "/uk",
-      },
+      languages,
     },
     openGraph: {
       type: "website",
@@ -52,8 +97,8 @@ export async function generateMetadata({ params }: LayoutParams): Promise<Metada
       siteName: site.name,
       title: dict.meta.title,
       description: dict.meta.description,
-      locale: locale === "uk" ? "uk_UA" : "en_US",
-      alternateLocale: locale === "uk" ? "en_US" : "uk_UA",
+      locale: ogLocales[locale],
+      alternateLocale: locales.filter((code) => code !== locale).map((code) => ogLocales[code]),
       images: [{ url: "/og.png", width: 500, height: 600, alt: dict.meta.ogAlt }],
     },
     twitter: {
@@ -83,8 +128,15 @@ export default async function RootLayout({
     /* `no-js` is removed synchronously by the inline script below before the
        page paints; while it stays (JS disabled/failed) CSS keeps `.reveal`
        content visible and the Services track stacked. The class mismatch on
-       purpose → suppressHydrationWarning (scoped to this element only). */
-    <html lang={locale} className={`no-js ${unbounded.variable} ${manrope.variable}`} suppressHydrationWarning>
+       purpose → suppressHydrationWarning (scoped to this element only).
+       `dir` comes from the locale: it drives the logical Tailwind utilities,
+       the `[dir="rtl"]` rules in globals.css and the Services scrub sign. */
+    <html
+      lang={locale}
+      dir={getDirection(locale)}
+      className={`no-js ${fontClasses(locale)}`}
+      suppressHydrationWarning
+    >
       <body className="grain antialiased">
         <script
           dangerouslySetInnerHTML={{

@@ -20,9 +20,21 @@ export function TelegramIcon(props: IconProps) {
   );
 }
 
-export function ArrowUpRightIcon(props: IconProps) {
+/* "Up and away" points up-LEFT once the page reads right-to-left, so the glyph
+   is mirrored here rather than at each of its call sites. Tailwind v4 writes
+   `scale` and `translate` as separate properties, so the hover nudges callers
+   add keep working on top of the flip. */
+export function ArrowUpRightIcon({ className = "", ...props }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true" {...props}>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      aria-hidden="true"
+      className={`rtl:scale-x-[-1] ${className}`}
+      {...props}
+    >
       <path d="M6 18 18 6M9 6h9v9" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );

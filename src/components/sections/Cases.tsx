@@ -62,8 +62,14 @@ export function Cases({ dict }: { dict: Dictionary["cases"] }) {
                   {item.niche}
                 </h3>
 
-                {/* ONE giant figure per card (Ragged Edge formula, brief §5). */}
-                <span className="display-type text-[clamp(2.9rem,4.5vw,4rem)] leading-none font-black text-cherry-juice">
+                {/* ONE giant figure per card (Ragged Edge formula, brief §5).
+                    dir="ltr" pins the glyph order: "+4 180" and "×3.2" open
+                    with a bidi-neutral sign an RTL paragraph would move to the
+                    other end of the number. */}
+                <span
+                  dir="ltr"
+                  className="display-type text-[clamp(2.9rem,4.5vw,4rem)] leading-none font-black text-cherry-juice"
+                >
                   {item.value}
                 </span>
                 <p className="text-sm font-semibold text-ink-700">{item.context}</p>
@@ -98,7 +104,10 @@ export function Cases({ dict }: { dict: Dictionary["cases"] }) {
                 rel="noopener noreferrer"
                 className="group inline-flex cursor-pointer items-baseline gap-1.5 text-sm transition-colors duration-200 hover:text-juice-300"
               >
-                <span className="font-bold">{known.handle}</span>
+                {/* dir="ltr": keeps the "@" in front of the handle under RTL. */}
+                <span dir="ltr" className="font-bold">
+                  {known.handle}
+                </span>
                 <span className="text-cream-type/65 transition-colors duration-200 group-hover:text-juice-300/80">
                   — {dict.knownBy.names[index]}
                 </span>

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { leadSchema, isSpam, MIN_ELAPSED_MS } from "../src/lib/validation";
+import { locales } from "../src/lib/i18n";
 
 const valid = {
   name: "Олександра",
@@ -54,9 +55,12 @@ describe("leadSchema", () => {
     expect(leadSchema.safeParse({ ...valid, extra_field: "Bot Inc" }).success).toBe(true);
   });
 
-  it("accepts supported locales (uk/en)", () => {
-    expect(leadSchema.safeParse({ ...valid, locale: "uk" }).success).toBe(true);
-    expect(leadSchema.safeParse({ ...valid, locale: "en" }).success).toBe(true);
+  it("accepts every supported locale (uk/en/he/ro)", () => {
+    // Driven by lib/i18n, so a new locale is accepted without touching this test.
+    for (const locale of locales) {
+      expect(leadSchema.safeParse({ ...valid, locale }).success).toBe(true);
+    }
+    expect([...locales]).toEqual(["uk", "en", "he", "ro"]);
   });
 
   it("allows locale to be omitted", () => {

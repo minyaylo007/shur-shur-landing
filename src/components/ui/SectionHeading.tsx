@@ -20,7 +20,7 @@ export function SectionHeading({
 }: SectionHeadingProps) {
   const headingColor = tone === "dark" ? "text-cherry-900" : "text-cream-type";
   const subColor = tone === "dark" ? "text-ink-700" : "text-cream-type/85";
-  const alignment = align === "center" ? "items-center text-center" : "items-start text-left";
+  const alignment = align === "center" ? "items-center text-center" : "items-start text-start";
 
   return (
     <div className={`flex flex-col gap-5 ${alignment}`}>

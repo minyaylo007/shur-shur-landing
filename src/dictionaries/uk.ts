@@ -23,6 +23,8 @@ const dict = {
     label: "Мова сайту",
     uk: "Укр",
     en: "Eng",
+    he: "עב",
+    ro: "Rom",
   },
   hero: {
     badge: "SMM-агенція • Чернівці",

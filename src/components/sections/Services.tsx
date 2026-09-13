@@ -32,9 +32,14 @@ export function Services({ dict }: { dict: Dictionary["services"] }) {
     const mm = gsap.matchMedia();
     mm.add("(min-width: 1024px) and (prefers-reduced-motion: no-preference)", () => {
       const getDistance = () => Math.max(0, track.scrollWidth - window.innerWidth + 96);
+      /* Under dir="rtl" the flex track starts at the right edge and overflows
+         leftwards, so the cards have to travel the other way: +x instead of
+         -x. Read once per matchMedia context — `dir` comes from the locale and
+         cannot change without a navigation. */
+      const rtl = document.documentElement.dir === "rtl";
 
       gsap.to(track, {
-        x: () => -getDistance(),
+        x: () => (rtl ? getDistance() : -getDistance()),
         ease: "none",
         scrollTrigger: {
           trigger: section,
@@ -90,13 +95,16 @@ export function Services({ dict }: { dict: Dictionary["services"] }) {
           tone="dark"
         />
         <p className="mt-3 hidden font-display text-[11px] font-bold tracking-[0.25em] text-ink-500 uppercase lg:block">
-          → {dict.scrollNote}
+          <span aria-hidden="true" className="inline-block rtl:scale-x-[-1]">
+            →
+          </span>{" "}
+          {dict.scrollNote}
         </p>
       </div>
 
       <div
         ref={trackRef}
-        className="services-track mt-12 grid gap-8 px-4 sm:px-6 lg:flex lg:w-max lg:items-stretch lg:gap-10 lg:pr-24 lg:pl-[max(1rem,calc((100vw-80rem)/2+1.5rem))]"
+        className="services-track mt-12 grid gap-8 px-4 sm:px-6 lg:flex lg:w-max lg:items-stretch lg:gap-10 lg:pe-24 lg:ps-[max(1rem,calc((100vw-80rem)/2+1.5rem))]"
       >
         {dict.items.map((service, index) => {
           const rotate = index % 2 === 0 ? -1.6 : 2;

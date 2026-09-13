@@ -24,7 +24,7 @@ export function WallOfLove({ dict }: { dict: Dictionary["socials"]["wallOfLove"]
           >
             <PaperCard
               rotate={index % 2 === 0 ? -2.2 : 1.8}
-              className="flex h-full flex-col gap-3 p-5 text-left"
+              className="flex h-full flex-col gap-3 p-5 text-start"
             >
               <blockquote className="display-type text-base leading-snug font-extrabold text-cherry-900 md:text-lg">
                 «{quote.text}»

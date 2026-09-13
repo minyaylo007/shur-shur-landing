@@ -40,7 +40,10 @@ export function Contact({ locale, dict }: ContactProps) {
               className="inline-flex cursor-pointer items-center gap-2.5 text-lg font-semibold text-cream-type transition-colors hover:text-paper-200"
             >
               <InstagramIcon className="size-5" />
-              {site.socials.instagramHandle}
+              {/* dir="ltr": the leading "@" is bidi-neutral, so in an RTL
+                  paragraph it drifts to the other end of the handle
+                  ("shur.shur.agency@"). An LTR document is unaffected. */}
+              <span dir="ltr">{site.socials.instagramHandle}</span>
             </a>
             <a
               href={site.socials.telegram}
@@ -49,7 +52,7 @@ export function Contact({ locale, dict }: ContactProps) {
               className="inline-flex cursor-pointer items-center gap-2.5 text-lg font-semibold text-cream-type transition-colors hover:text-paper-200"
             >
               <TelegramIcon className="size-5" />
-              {site.socials.telegramHandle}
+              <span dir="ltr">{site.socials.telegramHandle}</span>
             </a>
             <p className="mt-2 text-sm text-cream-type/75">{dict.cityLine}</p>
           </Reveal>
@@ -57,7 +60,7 @@ export function Contact({ locale, dict }: ContactProps) {
           {/* Cycle-4 honest scarcity (brief §7 / §9): capacity positioning,
               never a fake timer. */}
           <Reveal delay={0.3}>
-            <p className="max-w-md border-l-4 border-juice-300 pl-4 text-base font-semibold text-cream-type/90">
+            <p className="max-w-md border-s-4 border-juice-300 ps-4 text-base font-semibold text-cream-type/90">
               {dict.scarcity}
             </p>
           </Reveal>

@@ -128,6 +128,9 @@ export function AuditForm({ locale, dict }: AuditFormProps) {
             id={`${id}-handle`}
             name="igHandle"
             type="text"
+            /* An @handle is always Latin: typed into an RTL field it would
+               otherwise be laid out from the right and drag its "@" along. */
+            dir="ltr"
             autoComplete="off"
             spellCheck={false}
             placeholder={dict.placeholder}

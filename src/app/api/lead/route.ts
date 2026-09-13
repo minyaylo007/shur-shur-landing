@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { leadSchema, isSpam } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { sendLeadToTelegram } from "@/lib/telegram";
+import { defaultLocale } from "@/lib/i18n";
 
 export const runtime = "nodejs";
 
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
       contact: parsed.data.contact,
       message: parsed.data.message,
       igHandle: parsed.data.igHandle,
-      locale: parsed.data.locale ?? "uk",
+      locale: parsed.data.locale ?? defaultLocale,
     });
   } catch (error) {
     // Log without ever exposing the bot token; include the request kind so

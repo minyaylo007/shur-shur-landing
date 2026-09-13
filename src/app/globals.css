@@ -54,6 +54,19 @@
     }
   }
 
+  /* Same loop for RTL. The track is `w-max` inside an overflow-hidden band, so
+     under dir="rtl" it hangs off the LEFT edge and the duplicate row sits to
+     the left of the first one — scrolling must therefore run the other way, or
+     the band would drift into blank space. */
+  @keyframes marquee-rtl {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(50%);
+    }
+  }
+
   @keyframes float-slow {
     0%,
     100% {
@@ -103,6 +116,18 @@ body {
   color: var(--color-cream-type);
   font-family: var(--font-body), system-ui, sans-serif;
   overflow-x: clip;
+}
+
+/* Display tracking. Unbounded/Rubik are set tight (-0.02em) for Latin and
+   Cyrillic caps; Hebrew letterforms are wide, square and non-connecting, and
+   the same negative tracking visibly crowds them. RTL therefore gets neutral
+   tracking — one variable, so nothing in an LTR locale changes. */
+:root {
+  --display-tracking: -0.02em;
+}
+
+[dir="rtl"] {
+  --display-tracking: 0em;
 }
 
 ::selection {
@@ -164,7 +189,7 @@ body {
 .display-type {
   font-family: var(--font-display), var(--font-body), sans-serif;
   text-transform: uppercase;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--display-tracking);
   line-height: 0.96;
   text-wrap: balance;
 }
@@ -210,6 +235,10 @@ body {
 .marquee-track {
   animation: var(--animate-marquee);
   will-change: transform;
+}
+
+[dir="rtl"] .marquee-track {
+  animation-name: marquee-rtl;
 }
 
 /* Hero rotating sub-headline word (§3): each swap re-mounts the span
@@ -293,7 +322,7 @@ body {
   .kinetic,
   .kinetic.is-inview {
     transition: none;
-    letter-spacing: -0.02em;
+    letter-spacing: var(--display-tracking);
   }
 
   .animate-float-slow,
