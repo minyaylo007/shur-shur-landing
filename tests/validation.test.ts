@@ -72,10 +72,16 @@ describe("leadSchema", () => {
   });
 });
 
-describe("leadSchema — cycle 4 (kind + igHandle)", () => {
+describe("leadSchema — audit requests (kind + igHandle + contact)", () => {
+  /* Redesign v2, brief §20: the audit asks for the Instagram nickname AND a
+     Telegram handle or phone number, and BOTH are required. v1 collected the
+     nickname alone, so a request arrived with no channel to send the review
+     back through. The tests below that asserted a handle-only payload was
+     valid were rewritten for that rule rather than deleted. */
   const audit = {
     kind: "audit" as const,
     igHandle: "@shur.shur.agency",
+    contact: "@shur_client",
     extra_field: "",
     elapsedMs: 9000,
     locale: "uk" as const,
@@ -89,11 +95,12 @@ describe("leadSchema — cycle 4 (kind + igHandle)", () => {
     }
   });
 
-  it("audit: accepts a handle-only payload (no name/contact)", () => {
+  it("audit: accepts handle + contact, with no name or message", () => {
     const result = leadSchema.safeParse(audit);
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.igHandle).toBe("@shur.shur.agency");
+      expect(result.data.contact).toBe("@shur_client");
     }
   });
 
@@ -101,6 +108,25 @@ describe("leadSchema — cycle 4 (kind + igHandle)", () => {
     const rest: Partial<typeof audit> = { ...audit };
     delete rest.igHandle;
     expect(leadSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it("audit: rejects when contact is missing — nowhere to send the review", () => {
+    const rest: Partial<typeof audit> = { ...audit };
+    delete rest.contact;
+    const result = leadSchema.safeParse(rest);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.contact).toBeDefined();
+    }
+  });
+
+  it("audit: accepts a phone number as the contact, not only a handle", () => {
+    expect(leadSchema.safeParse({ ...audit, contact: "+380 97 249 91 07" }).success).toBe(true);
+  });
+
+  it("audit: the contact field keeps the shared length rules", () => {
+    expect(leadSchema.safeParse({ ...audit, contact: "ab" }).success).toBe(false);
+    expect(leadSchema.safeParse({ ...audit, contact: "a".repeat(101) }).success).toBe(false);
   });
 
   it("audit: trims whitespace and accepts handles without the @", () => {
@@ -127,13 +153,14 @@ describe("leadSchema — cycle 4 (kind + igHandle)", () => {
     }
   });
 
-  it("lead: still requires name and contact (audit relaxation must not leak)", () => {
+  it("lead: still requires name and contact (audit rules must not leak)", () => {
     expect(leadSchema.safeParse({ kind: "lead", extra_field: "", elapsedMs: 9000 }).success).toBe(false);
     expect(leadSchema.safeParse({ extra_field: "", elapsedMs: 9000 }).success).toBe(false);
   });
 
-  it("lead: tolerates an optional igHandle alongside the classic fields", () => {
+  it("lead: does NOT require igHandle, but tolerates one", () => {
     expect(leadSchema.safeParse({ ...valid, igHandle: "@some_brand" }).success).toBe(true);
+    expect(leadSchema.safeParse(valid).success).toBe(true);
   });
 
   it("rejects an unknown kind", () => {
@@ -167,7 +194,7 @@ describe("isSpam — per-kind elapsed thresholds (REM-FIX-C4)", () => {
     expect(isSpam({ ...lead, elapsedMs: 2000 })).toBe(true);
   });
 
-  it("audit: one-field form uses the lower 1200ms floor — a 1.5s submit is legit", () => {
+  it("audit: the short form keeps the lower 1200ms floor — a 1.5s submit is legit", () => {
     expect(isSpam({ kind: "audit", extra_field: "", elapsedMs: 1500 })).toBe(false);
     expect(isSpam({ kind: "audit", extra_field: "", elapsedMs: 1200 })).toBe(false);
   });

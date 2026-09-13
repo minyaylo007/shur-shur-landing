@@ -34,27 +34,17 @@ export function AuditCta({
   dict: Dictionary["audit"];
 }) {
   const channels = [
-    {
-      href: site.phone.tel,
-      icon: PhoneIcon,
-      label: site.phone.display,
-      /* Bidi-neutral: a "+380 97…" string inside an RTL paragraph is laid
-         out right-to-left by the algorithm and the "+" jumps to the end. */
-      pin: true,
-      external: false,
-    },
+    { href: site.phone.tel, icon: PhoneIcon, label: site.phone.display, external: false },
     {
       href: site.socials.telegram,
       icon: TelegramIcon,
       label: site.socials.telegramHandle,
-      pin: true,
       external: true,
     },
     {
       href: site.socials.instagram,
       icon: InstagramIcon,
       label: site.socials.instagramHandle,
-      pin: true,
       external: true,
     },
   ];
@@ -81,7 +71,7 @@ export function AuditCta({
                 {dict.channelsLabel}
               </h3>
               <ul className="flex flex-col gap-3">
-                {channels.map(({ href, icon: Icon, label, pin, external }) => (
+                {channels.map(({ href, icon: Icon, label, external }) => (
                   <li key={href}>
                     <a
                       href={href}
@@ -91,8 +81,11 @@ export function AuditCta({
                       className="group flex items-center gap-3.5 rounded-md border-2 border-cherry-900/15 bg-paper-100 px-4 py-3.5 transition-colors duration-200 hover:border-juice-500 hover:bg-paper-200"
                     >
                       <Icon className="size-5 shrink-0 text-juice-500" />
+                      {/* Every label here is Latin or digits. Without the
+                          pin, the bidi algorithm reverses "+380 97…" and
+                          drags the "@" of a handle to the far end. */}
                       <span
-                        {...(pin ? { dir: "ltr" as const } : {})}
+                        dir="ltr"
                         className="text-base font-semibold text-cherry-900 group-hover:text-juice-500"
                       >
                         {label}
