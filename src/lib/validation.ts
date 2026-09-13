@@ -16,9 +16,10 @@ export const IG_HANDLE_RE = /^@?[a-zA-Z0-9._]{2,60}$/;
 export const leadSchema = z
   .object({
     /**
-     * Request type (cycle 4): "lead" = classic contact form,
-     * "audit" = one-field free Instagram audit from the hero card.
-     * Same endpoint, same honeypot/rate-limit/elapsedMs pipeline.
+     * Request type: "lead" = classic contact form, "audit" = the free
+     * Instagram audit. Same endpoint, same honeypot/rate-limit/elapsedMs
+     * pipeline. Redesign v2 gave the audit a second required field —
+     * see the superRefine below.
      */
     kind: z.enum(["lead", "audit"]).default("lead"),
     name: z.string().trim().min(2).max(100).optional(),
@@ -43,8 +44,18 @@ export const leadSchema = z
       if (data.contact === undefined) {
         ctx.addIssue({ code: "custom", path: ["contact"], message: "Required for lead requests" });
       }
-    } else if (data.igHandle === undefined) {
-      ctx.addIssue({ code: "custom", path: ["igHandle"], message: "Required for audit requests" });
+    } else {
+      if (data.igHandle === undefined) {
+        ctx.addIssue({ code: "custom", path: ["igHandle"], message: "Required for audit requests" });
+      }
+      /* Redesign v2, brief §20: the audit form now also asks for a Telegram
+         handle or a phone number, and it is REQUIRED. v1 collected only the
+         Instagram nickname, so a request arrived with no channel to send the
+         review back through — the agency could look at the profile but had
+         no way to reach the person who asked. */
+      if (data.contact === undefined) {
+        ctx.addIssue({ code: "custom", path: ["contact"], message: "Required for audit requests" });
+      }
     }
   });
 
@@ -53,9 +64,11 @@ export type Lead = z.output<typeof leadSchema>;
 
 /**
  * Minimum believable fill time (ms), per request kind. The classic lead form
- * has three fields (3000ms floor); the hero audit form is ONE paste-able
- * field — holding it to the same floor silently killed legit fast
- * submissions, so it gets a much lower 1200ms floor (REM-FIX-C4).
+ * has three fields (3000ms floor); the audit form has two short, largely
+ * paste-able ones — holding it to the same floor silently killed legit fast
+ * submissions, so it keeps the lower 1200ms floor (REM-FIX-C4). The second
+ * field added in v2 does not change that: pasting a handle and a phone is
+ * still comfortably under three seconds.
  */
 export const MIN_ELAPSED_MS: Record<Lead["kind"], number> = {
   lead: 3000,

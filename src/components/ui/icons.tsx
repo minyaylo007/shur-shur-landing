@@ -136,3 +136,17 @@ export function JuiceDrop(props: IconProps) {
     </svg>
   );
 }
+
+/* Handset. Used by the tel: links the redesign surfaces (brief §5) — the
+   glyph is symmetric enough to read correctly in both directions. */
+export function PhoneIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
+      <path
+        d="M6.2 3.5h3l1.5 3.8-2 1.3a12.5 12.5 0 0 0 6.7 6.7l1.3-2 3.8 1.5v3a2 2 0 0 1-2.2 2A17.5 17.5 0 0 1 4.2 5.7a2 2 0 0 1 2-2.2Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

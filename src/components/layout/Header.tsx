@@ -6,6 +6,8 @@ import type { Dictionary } from "@/dictionaries";
 import { scrollToAnchor } from "@/components/motion/SmoothScroll";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { Logo } from "@/components/ui/Logo";
+import { PhoneIcon } from "@/components/ui/icons";
+import { site } from "@/lib/site";
 
 interface HeaderProps {
   locale: Locale;
@@ -13,11 +15,13 @@ interface HeaderProps {
   langSwitcher: Dictionary["langSwitcher"];
 }
 
+/* Redesign v2 IA: four destinations instead of five, in scroll order. The
+   old #cases and #team sections are gone — their surviving content lives in
+   #work and #about respectively. */
 const anchors = [
+  { id: "#work", key: "work" },
   { id: "#services", key: "services" },
-  { id: "#cases", key: "cases" },
   { id: "#about", key: "about" },
-  { id: "#team", key: "team" },
   { id: "#contact", key: "contact" },
 ] as const;
 
@@ -79,7 +83,22 @@ export function Header({ locale, nav, langSwitcher }: HeaderProps) {
           ))}
         </nav>
 
-        <div className="flex items-center gap-3 text-cream-type">
+        <div className="flex items-center gap-2 text-cream-type sm:gap-3">
+          {/* Brief §5: the phone must be reachable from the top of the page,
+              not only from the footer. Icon-only until there is room for the
+              number — on a 320px screen the four language pills and the CTA
+              already fill the bar. */}
+          <a
+            href={site.phone.tel}
+            aria-label={nav.callLabel}
+            className="hidden cursor-pointer items-center gap-2 rounded-full px-2 py-2 text-cream-type transition-colors duration-200 hover:text-juice-300 sm:inline-flex lg:px-3"
+          >
+            <PhoneIcon className="size-4" />
+            {/* Bidi-neutral: pinned LTR so "+380…" keeps its shape in Hebrew. */}
+            <span dir="ltr" className="hidden text-sm font-semibold lg:inline">
+              {site.phone.display}
+            </span>
+          </a>
           <LanguageSwitcher locale={locale} dict={langSwitcher} />
           <a
             href="#contact"

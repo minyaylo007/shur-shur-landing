@@ -3,6 +3,7 @@ import { CherryIcon, PaperClipIcon } from "@/components/ui/icons";
 const colors = {
   /* Cycle-1 palette */
   paper: "bg-paper",
+  paper1: "bg-paper-100",
   paper2: "bg-paper-200",
   deep: "bg-cherry-deep",
   black: "bg-cherry-black",

@@ -5,6 +5,17 @@ export const site = {
   // `||` (not `??`): an env var set to "" must also fall back to the default.
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://shur-shur.agency",
   city: { uk: "Чернівці", en: "Chernivtsi" },
+  /**
+   * The agency's single phone number. It already lived inside the wa.me and
+   * viber deep-links below; redesign v2 surfaces it as a real `tel:` link
+   * (brief §5 — the number must be visible on the page, not buried in a
+   * messenger URL). `display` carries NBSPs so the groups never wrap.
+   */
+  phone: {
+    e164: "+380972499107",
+    tel: "tel:+380972499107",
+    display: "+380\u00a097\u00a0249\u00a091\u00a007",
+  },
   socials: {
     instagram: "https://www.instagram.com/shur.shur.agency",
     instagramHandle: "@shur.shur.agency",

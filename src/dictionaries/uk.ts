@@ -1,23 +1,33 @@
 /**
  * Ukrainian dictionary — SOURCE OF TRUTH for the Dictionary type.
- * en.ts must satisfy `Dictionary`, so key parity is compiler-enforced.
+ * en.ts / he.ts / ro.ts must satisfy `Dictionary`, so key parity is
+ * compiler-enforced: a new string here fails the build until all four
+ * locales carry it.
+ *
+ * Redesign v2 (brief §3): visible copy is roughly half of what v1 shipped.
+ * Nothing factual was invented — every figure below already existed in the
+ * project and is self-reported by the agency (team size, number of service
+ * directions, countries). The v1 «кейси» figures and aggregate counters were
+ * removed rather than restated: they were marked in code as an illustrative
+ * placeholder set, and brief §16/§28 forbid presenting unverified numbers as
+ * client results.
  */
 const dict = {
   meta: {
-    title: "SHUR-SHUR — соковита SMM-агенція з Чернівців",
+    title: "SHUR-SHUR — контент-агенція з Чернівців",
     description:
-      "SMM-агенція повного циклу: контент, таргетована реклама, монтаж, motion design та AI-рішення. Команда з 11 людей у Чернівцях. Працюємо з Україною та світом.",
-    ogAlt: "SHUR-SHUR — SMM-агенція. Соковиті вишні та великий заголовок «Наші послуги».",
+      "Знімаємо, монтуємо й просуваємо контент для соцмереж: зйомка, Reels, таргетована реклама, motion та AI-рішення. Команда з 11 людей у Чернівцях.",
+    ogAlt: "SHUR-SHUR — контент-агенція з Чернівців.",
   },
   nav: {
+    work: "Роботи",
     services: "Послуги",
-    cases: "Кейси",
     about: "Про нас",
-    team: "Команда",
     contact: "Контакти",
     cta: "Обговорити проєкт",
     menuLabel: "Навігація по сторінці",
     skipToContent: "Перейти до контенту",
+    callLabel: "Зателефонувати",
   },
   langSwitcher: {
     label: "Мова сайту",
@@ -26,178 +36,113 @@ const dict = {
     he: "עב",
     ro: "Rom",
   },
+  /* Brief §5: one statement, one supporting line, ONE primary CTA, and
+     direct contact within reach. The audit form moved to its own section. */
   hero: {
-    badge: "SMM-агенція • Чернівці",
-    titleLines: ["СОКОВИТИЙ", "SMM ТА", "КОНТЕНТ"],
+    badge: "Контент-агенція • Чернівці",
+    titleLines: ["ЗНІМАЄМО", "КОНТЕНТ,", "ЯКИЙ ПРОДАЄ"],
     subtitle:
-      "Перетворюємо соцмережі на джерело клієнтів: стратегія, контент, таргет, motion та AI — все в одному пакеті.",
-    rotatingWords: ["SMM", "REELS", "ТАРГЕТ", "КОНТЕНТ"],
-    cta: "Хочу соковитий контент",
-    secondaryCta: "Наші послуги",
-    scrollHint: "Гортайте",
-    posterAlt: "Глянцева стигла вишня — фірмовий символ SHUR-SHUR",
-    stats: [
-      { value: "11", label: "людей у команді" },
-      { value: "7", label: "напрямів послуг" },
-      { value: "3+", label: "країни клієнтів" },
-    ],
-    /* Cycle 4 (brief §7.3): one-field free Instagram audit in the hero card.
-       Same lead pipeline, kind="audit". */
-    audit: {
-      title: "Безкоштовний аудит Instagram",
-      label: "Ваш нікнейм в Instagram",
-      placeholder: "@vash_biznes",
-      submit: "Отримати аудит",
-      submitting: "Надсилаємо…",
-      note: "розбір за 24 год",
-      successTitle: "Прийнято!",
-      successText: "Розбір буде в Direct протягом 24 год.",
-      errorText: "Не надіслалося. Спробуйте ще раз або напишіть нам у Direct.",
-      retry: "Спробувати ще раз",
-      errorHandle: "Вкажіть нікнейм: 2–60 символів, можна з @",
+      "Повний цикл: зйомка, монтаж, ведення соцмереж і таргетована реклама. Україна, Румунія, Ізраїль.",
+    cta: "Обговорити проєкт",
+    contactLabel: "Або одразу:",
+    scrollHint: "Наші роботи",
+  },
+  /* Brief §7: the portfolio sits immediately after the hero. */
+  work: {
+    kicker: "Портфоліо",
+    heading: "НАШІ РОБОТИ",
+    sub: "Знято, змонтовано й опубліковано командою SHUR-SHUR.",
+    groups: {
+      beauty: { label: "Б’ЮТІ ТА ПРЕДМЕТКА", note: "Студійна зйомка косметики й догляду" },
+      food: { label: "ЇЖА ТА ЗАКЛАДИ", note: "Кав’ярні, ресторани, пекарні" },
+      bridal: { label: "FASHION І ВЕСІЛЛЯ", note: "Виїзні зйомки на локаціях" },
+      /* Framing required for §12: these are finished creatives the agency
+         produced FOR clients, so client branding inside the frame reads as
+         a work sample rather than as the site's own copy. */
+      stories: { label: "STORIES ТА REELS", note: "Готові креативи, які ми зробили для клієнтів" },
     },
+    playLabel: "Відео відтворюється без звуку",
   },
-  marquee: {
-    items: ["SMM", "REELS", "ТАРГЕТ", "КОНТЕНТ", "MOTION", "AI"],
+  /* Brief §8: behind the scenes → finished frame, one shoot, one product. */
+  process: {
+    kicker: "Як це виглядає",
+    heading: "ВІД БЕКСТЕЙДЖУ ДО КАДРУ",
+    sub: "Одна зйомка косметики: спершу процес у студії, потім готовий кадр для клієнта.",
+    btsLabel: "Бекстейдж",
+    resultLabel: "Результат",
   },
-  /* Cycle 4 (brief §7 copy layer): pain block right after the hero chapter —
-     the Sociallyin pattern, brand «ти/ви» voice, funnels into Services. */
-  pain: {
-    kicker: "Знайомо?",
-    heading: "ВЕДЕТЕ INSTAGRAM, А ЗАЯВОК НЕМАЄ?",
-    pains: [
-      "Пости виходять регулярно, а продажів з них — нуль",
-      "Конкуренти забирають ваших клієнтів з таргета",
-      "Контент зʼїдає весь час, який мав іти на бізнес",
-    ],
-    cta: "Ось що з цим робити",
-  },
+  /* Brief §15: the same seven real services, grouped into four. Nothing was
+     invented and nothing was dropped — the detail lists below hold every
+     bullet the v1 cards carried, just collapsed by default. */
   services: {
     kicker: "Що ми робимо",
-    heading: "НАШІ ПОСЛУГИ",
-    sub: "Сім напрямів — від першої ідеї до заявок у вашому Direct.",
-    scrollNote: "Гортайте, щоб переглянути всі послуги",
+    heading: "ПОСЛУГИ",
+    sub: "Чотири напрями. Розгорніть будь-який, щоб побачити деталі.",
+    expand: "Детальніше",
+    collapse: "Згорнути",
     items: [
       {
-        title: "Комплексне SMM-ведення",
-        badge: "комплексне",
-        tagline: "Усе необхідне для просування бізнесу в одному пакеті",
-        points: [
-          "Контент-стратегія",
-          "Reels, сторіс та пости",
-          "Фото- та відеозйомка",
-          "Монтаж контенту",
-          "Таргетована реклама",
-          "Контент-план",
-          "Аналітика та звітність",
-        ],
-        outcome: "Працюємо комплексно, щоб контент приносив не лише охоплення, а й продажі.",
-      },
-      {
-        title: "Таргетована реклама",
-        badge: "результат",
-        tagline: "Заявки, продажі та нові клієнти — а не просто покази",
-        points: [
-          "Аналіз ніші та конкурентів",
-          "Рекламна стратегія",
-          "Креативи для кампаній",
-          "Запуск та оптимізація",
-          "Звітність і прозорі результати",
-        ],
-        outcome: "Платформи: Meta, Google, TikTok, Telegram Ads, X.",
-      },
-      {
-        title: "Контент під ключ",
-        badge: "під ключ",
-        tagline: "Готовий контент для соцмереж, реклами та сайту",
+        title: "Контент і продакшн",
+        tagline: "Зйомка, монтаж і готові Reels — від ідеї до публікації",
         points: [
           "Професійна фото- та відеозйомка",
           "Мобільна зйомка",
           "Сценарії для Reels та TikTok",
           "Підбір моделей та локацій",
-          "Монтаж та обробка",
+          "Монтаж, субтитри, звуковий дизайн",
+          "Адаптація під кожну платформу",
         ],
-        outcome: "Від ідеї до публікації — повний продакшн на нашому боці.",
       },
       {
-        title: "Монтаж відео",
-        badge: "динаміка",
-        tagline: "Відео, які зупиняють скрол",
+        title: "Ведення соцмереж",
+        tagline: "Профіль під ключ: стратегія, контент-план, щоденні сторіс",
         points: [
-          "Reels та TikTok",
-          "Субтитри",
-          "Звуковий дизайн",
-          "Графіка й анімації",
-          "Адаптація під соцмережі",
-        ],
-        outcome: "Швидкий ритм, чистий звук і формат під кожну платформу.",
-      },
-      {
-        title: "Motion Design",
-        badge: "wow-ефект",
-        tagline: "Анімація, що робить бренд живим",
-        points: [
-          "Анімовані афіші",
-          "Рекламні ролики",
-          "Анімація логотипів",
-          "Motion-креативи для реклами",
-        ],
-        outcome: "Рух привертає увагу — ми робимо його фірмовим.",
-      },
-      {
-        title: "Маркетингова консультація",
-        badge: "стратегія",
-        tagline: "Чіткий план розвитку замість здогадок",
-        points: [
-          "Аналіз бізнесу й соцмереж",
           "Контент-стратегія",
-          "План розвитку",
+          "Reels, сторіс та пости",
+          "Контент-план",
+          "Оформлення стрічки",
+          "Аналітика та звітність",
         ],
-        outcome: "Ви отримуєте конкретні кроки, а не загальні поради.",
       },
       {
-        title: "IT-рішення та AI-автоматизація",
-        badge: "майбутнє",
-        tagline: "Від простого лендингу до повноцінної цифрової екосистеми",
+        title: "Реклама і стратегія",
+        tagline: "Заявки та продажі, а не просто покази",
         points: [
-          "Розробка сайтів та лендингів",
-          "Інтернет-магазини",
-          "CRM та бек-офіс системи",
-          "AI-агенти для бізнесу",
-          "Автоматизація процесів",
-          "Чат-боти та інтеграції",
-          "Веб- та мобільні додатки",
+          "Аналіз ніші та конкурентів",
+          "Рекламна стратегія",
+          "Креативи для кампаній",
+          "Запуск та оптимізація",
+          "Meta, Google, TikTok, Telegram Ads, X",
+          "Маркетингова консультація й план розвитку",
         ],
-        outcome: "Технології, які працюють на ваш бізнес 24/7.",
+      },
+      {
+        title: "Motion, IT та AI",
+        tagline: "Анімація, сайти й автоматизація під ваш бізнес",
+        points: [
+          "Анімовані афіші та рекламні ролики",
+          "Анімація логотипів, motion-креативи",
+          "Сайти, лендинги, інтернет-магазини",
+          "CRM та бек-офіс системи",
+          "AI-агенти, чат-боти, інтеграції",
+        ],
       },
     ],
   },
-  /* Cycle 3 (brief §5) + REM-FIX-C3: the cards use the brief's ILLUSTRATIVE
-     placeholder set — niches deliberately do NOT overlap with the verified
-     «Нас знають» handles (no deanonymization), and the sub honestly frames
-     the figures as typical format results (§9: never fake social proof).
-     Spaced figures carry the NBSP group separator. */
-  cases: {
-    kicker: "Кейси",
-    heading: "ЦИФРИ, А НЕ ОБІЦЯНКИ",
-    sub: "Типові результати наших форматів — повні кейси з іменами покажемо на дзвінку.",
-    micro: "Хочу так само",
-    items: [
-      { num: "01", niche: "Кав’ярня, Чернівці", value: "+4 180", context: "підписників за 6 місяців" },
-      { num: "02", niche: "Салон краси", value: "×3.2", context: "охоплення за 90 днів" },
-      { num: "03", niche: "Магазин товарів для дому", value: "215", context: "заявок з reels щомісяця" },
-      { num: "04", niche: "Ресторан", value: "4.7%", context: "залученість зросла з 1.1%" },
+  /* Brief §17: one consolidated proof block instead of the four separate
+     «trust us» sections v1 shipped (about + team + numbers + wall of love). */
+  trust: {
+    kicker: "Про нас",
+    heading: "КОМАНДА З ЧЕРНІВЦІВ",
+    paragraphs: [
+      "SHUR-SHUR — команда з 11 людей, яка живе контентом: знімає, монтує, анімує, запускає рекламу та будує AI-рішення. Кожен напрям закриває окремий спеціаліст.",
+      "Працюємо з бізнесами по всій Україні й виходимо на міжнародні ринки — серед клієнтів уже є проєкти з Румунії та Ізраїлю.",
     ],
-    reels: {
-      kicker: "Кадри з наших reels",
-      /* Order matches the 4 phone mockups in PhoneReels.tsx. */
-      alts: [
-        "Кадр із reels: бекстейдж контент-зйомки для клієнта",
-        "Кадр із reels: моушн-дизайн у роботі",
-        "Кадр із reels: запуск таргетованої реклами",
-        "Кадр із reels: розбір стратегії на консультації",
-      ],
-    },
+    facts: [
+      { value: "11", label: "людей у команді" },
+      { value: "7", label: "напрямів послуг" },
+      { value: "3", label: "країни присутності" },
+    ],
     knownBy: {
       label: "Нас знають:",
       /* Order matches knownHandles in src/lib/posts.ts (verified accounts). */
@@ -208,121 +153,69 @@ const dict = {
         "бренд одягу IRONY",
       ],
     },
-  },
-  /* Cycle 3 (brief §5 pattern 6+11): aggregate counters. The HTML ships the
-     FINAL values (SEO/no-js); count-up is a visual-only enhancement. */
-  numbers: {
-    heading: "Агенція в цифрах",
-    items: [
-      { value: 27, decimals: 0, suffix: "", label: "акаунтів під веденням" },
-      { value: 4.2, decimals: 1, suffix: "млн", label: "охоплень за рік" },
-      { value: 850, decimals: 0, suffix: "+", label: "reels знято" },
-      { value: 11, decimals: 0, suffix: "", label: "людей у команді" },
-    ],
-  },
-  about: {
-    kicker: "Хто ми",
-    heading: "АГЕНЦІЯ З ЧЕРНІВЦІВ",
-    paragraphs: [
-      "SHUR-SHUR — це команда з 11 людей, яка живе контентом: знімає, монтує, анімує, запускає рекламу та будує AI-рішення.",
-      "Ми працюємо з бізнесами по всій Україні та виходимо на міжнародні ринки — серед наших клієнтів уже є проєкти з Румунії та Ізраїлю.",
-    ],
-    geoLabel: "Працюємо з",
-    geo: ["Україна", "Румунія", "Ізраїль", "Весь світ"],
-    highlight: "Соковито. Сміливо. Системно.",
-  },
-  team: {
-    kicker: "Команда",
-    heading: "11 ЛЮДЕЙ, ЯКІ РОБЛЯТЬ СОКОВИТО",
-    sub: "Кожен напрям закриває окремий спеціаліст — без фрилансу навмання.",
-    roles: [
-      { title: "SMM-спеціалісти", desc: "Стратегія, контент-плани, ведення профілів" },
-      { title: "Сторісмейкери", desc: "Щоденні сторіс, які тримають аудиторію" },
-      { title: "Графічні дизайнери", desc: "Айдентика, банери, оформлення стрічки" },
-      { title: "Моушн-дизайнер", desc: "Анімація, рекламні ролики, лого-анімації" },
-      { title: "Таргетолог", desc: "Реклама в Meta, Google, TikTok, Telegram" },
-      { title: "Web/IT-розробники", desc: "Сайти, магазини, CRM, інтеграції" },
-      { title: "AI-напрям", desc: "AI-контент, агенти та автоматизація" },
-    ],
-  },
-  socials: {
-    kicker: "Ми в соцмережах",
-    /* Curated framing (brief §6): «найсоковитіше», not «останні пости». */
-    heading: "Найсоковитіше з @shur.shur.agency",
-    sub: "Найкраще портфоліо — наш власний Instagram. Шість постів, які ми любимо найбільше.",
-    gridLabel: "Добірка постів з нашого Instagram",
-    ctaInstagram: "Підписатися",
-    ctaTelegram: "Telegram",
-    /* Brief §9: НЕ фейкувати social proof. Тексти нижче — дослівні реальні
-       коментарі/підписи з верифікованих постів (APPENDIX research). */
-    wallOfLove: {
+    /* Brief §28: never fake social proof. These are verbatim real comments
+       and post excerpts from verified Instagram posts. */
+    quotes: {
       caption: "З коментарів та дописів про нас в Instagram — дослівно.",
-      quotes: [
+      items: [
         { text: "Дай Боже", source: "коментар під постом-знайомством" },
         { text: "Горжусь!!", source: "коментар під постом-знайомством" },
         {
-          /* Trailing «…» = honest truncation marker: the caption promises
-             «дослівно», and this is an excerpt of a longer post (REM-FIX-C4). */
+          /* Trailing «…» = honest truncation marker: an excerpt of a longer post. */
           text: "Навчання з @lexi.brzvsk Кольорокорекція, робота зі стабілізатором, правильні налаштування камери…",
           source: "@pafos.art — допис про навчання з нашою командою",
         },
       ],
     },
   },
-  contact: {
-    kicker: "Контакти",
-    heading: "ДАВАЙТЕ ПРАЦЮВАТИ",
-    sub: "Залиште заявку — відповімо протягом робочого дня та запропонуємо перші ідеї для вашого проєкту.",
-    /* Cycle 4 (brief §7): honest capacity positioning, NOT a fake timer (§9). */
-    scarcity: "Беремо 3 нові бренди на місяць — щоб кожному вистачило уваги.",
+  /* Brief §20: two fields, clear delivery, no «за 24 години» promise — that
+     was a guarantee the business never actually made. */
+  audit: {
+    kicker: "Безкоштовно",
+    heading: "РОЗБІР ВАШОГО INSTAGRAM",
+    sub: "Подивимось ваш профіль і скажемо, що змінити в контенті, щоб він приносив заявки.",
+    delivery: "Відповідь надішлемо в Telegram або зателефонуємо — як вам зручніше.",
     channelsLabel: "Або напишіть напряму",
     cityLine: "Чернівці, Україна",
     form: {
-      name: "Ваше імʼя",
-      namePlaceholder: "Як до вас звертатися?",
-      contact: "Контакт для звʼязку",
-      contactPlaceholder: "Telegram, Instagram, телефон або email",
-      message: "Про ваш проєкт",
-      messagePlaceholder: "Розкажіть коротко: бізнес, цілі, що болить (необовʼязково)",
-      messageOptional: "необовʼязково",
-      submit: "Надіслати заявку",
+      igLabel: "Нікнейм в Instagram",
+      igPlaceholder: "@vash_biznes",
+      contactLabel: "Telegram або номер телефону",
+      contactPlaceholder: "@nickname або +380…",
+      submit: "Отримати розбір",
       submitting: "Надсилаємо…",
-      successTitle: "Заявку отримано!",
-      successText: "Дякуємо! Ми звʼяжемося з вами протягом робочого дня.",
-      successAgain: "Надіслати ще одну",
+      successTitle: "Прийнято!",
+      successText: "Ми подивимось профіль і звʼяжемося з вами вказаним контактом.",
+      successAgain: "Надіслати ще один",
       errorTitle: "Щось пішло не так",
-      errorText: "Заявка не надіслалася. Спробуйте ще раз або напишіть нам напряму:",
+      errorText: "Не надіслалося. Спробуйте ще раз або напишіть нам напряму:",
       retry: "Спробувати ще раз",
       errors: {
-        name: "Вкажіть імʼя (від 2 символів)",
-        contact: "Вкажіть контакт (від 3 символів)",
-        message: "Повідомлення задовге (до 1000 символів)",
+        igHandle: "Вкажіть нікнейм: 2–60 символів, можна з @",
+        contact: "Вкажіть Telegram або телефон (від 3 символів)",
       },
     },
   },
   footer: {
-    tagline: "Соковитий SMM та контент",
+    tagline: "Контент-агенція з Чернівців",
     nav: "Навігація",
     socials: "Соцмережі",
+    contacts: "Контакти",
+    city: "Чернівці, Україна",
     rights: "Всі права захищено",
     madeIn: "Зроблено з вишнями у Чернівцях",
   },
-  /* Cycle 4 (brief §7.1): floating multi-messenger button. */
-  fab: {
-    open: "Написати нам у месенджер",
-    close: "Закрити список месенджерів",
-    label: "Месенджери для звʼязку",
+  /* Brief §19: ONE contact control, not three or four floating circles. */
+  contactBar: {
+    open: "Звʼязатися з нами",
+    close: "Закрити",
+    label: "Способи звʼязку",
     channels: {
       telegram: "Telegram",
       whatsapp: "WhatsApp",
       viber: "Viber",
       instagram: "Instagram Direct",
     },
-  },
-  /* Cycle 4 (brief §7.5): mobile sticky CTA bar, brand voice. */
-  stickyCta: {
-    cta: "Хочу соковито",
-    telegramLabel: "Написати нам у Telegram",
   },
 };
 

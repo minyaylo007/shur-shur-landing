@@ -113,7 +113,7 @@ export async function generateMetadata({ params }: LayoutParams): Promise<Metada
 export const viewport: Viewport = {
   themeColor: "#4a0d14",
   /* env(safe-area-inset-*) stays 0 unless the page opts into the full iOS
-     screen — StickyCta/MessengerFab bottom offsets rely on it (REM-FIX-C4). */
+     screen — the ContactBar's bottom offset relies on it (REM-FIX-C4). */
   viewportFit: "cover",
 };
 
@@ -127,10 +127,12 @@ export default async function RootLayout({
   return (
     /* `no-js` is removed synchronously by the inline script below before the
        page paints; while it stays (JS disabled/failed) CSS keeps `.reveal`
-       content visible and the Services track stacked. The class mismatch on
-       purpose → suppressHydrationWarning (scoped to this element only).
-       `dir` comes from the locale: it drives the logical Tailwind utilities,
-       the `[dir="rtl"]` rules in globals.css and the Services scrub sign. */
+       content visible. The class mismatch is on purpose →
+       suppressHydrationWarning (scoped to this element only).
+       `dir` comes from the locale: it drives the logical Tailwind utilities
+       and the `[dir="rtl"]` rules in globals.css. Redesign v2 removed the
+       pinned Services track, so nothing left on the page depends on GSAP for
+       readable layout — every section is static HTML first. */
     <html
       lang={locale}
       dir={getDirection(locale)}
