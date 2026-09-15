@@ -99,13 +99,19 @@ export async function generateMetadata({ params }: LayoutParams): Promise<Metada
       description: dict.meta.description,
       locale: ogLocales[locale],
       alternateLocale: locales.filter((code) => code !== locale).map((code) => ogLocales[code]),
-      images: [{ url: "/og.png", width: 1080, height: 1350, alt: dict.meta.ogAlt }],
+      /* The link card is 1.91:1 (1200x630) and the logotype sits in its
+         middle third ON PURPOSE: messengers crop a card to a square, and the
+         previous 1080x1350 artwork lost the word «shur-shur» — it stood at
+         the bottom edge — in every such crop. width/height below are the
+         file's REAL dimensions; tests/og-card asserts that by measuring the
+         file, so a replacement asset of another shape cannot slip in. */
+      images: [{ url: "/og-card.jpg", width: 1200, height: 630, alt: dict.meta.ogAlt }],
     },
     twitter: {
       card: "summary_large_image",
       title: dict.meta.title,
       description: dict.meta.description,
-      images: ["/og.png"],
+      images: ["/og-card.jpg"],
     },
   };
 }
