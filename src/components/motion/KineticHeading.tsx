@@ -4,6 +4,16 @@ import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
+/** Reveal timing — shared with the moment the mask slack reopens. */
+const REVEAL_DURATION = 0.9;
+const REVEAL_STAGGER = 0.026;
+
+/** Progress of the LAST letter's tween at which the masks reopen. `power4.out`
+ *  has covered ~94% of the travel by then, so the diacritics ride the final
+ *  few pixels into place with their letter instead of popping in at the end —
+ *  and the letters are far too close to home to leak out of the slack. */
+const MASK_OPEN_AT = 0.5;
+
 interface KineticHeadingProps {
   /** Each entry renders as its own masked line. */
   lines: string[];
@@ -49,26 +59,47 @@ export function KineticHeading({
     mm.add("(prefers-reduced-motion: no-preference)", () => {
       const chars = element.querySelectorAll<HTMLElement>(".char");
 
-      gsap.fromTo(
+      const masks = element.querySelectorAll<HTMLElement>(".char-mask");
+
+      /* Close the mask slack (see `.char-mask` in globals.css) for the reveal:
+         while the letters sit below the line the mask has to clip exactly at
+         the box edge, or their tops show through the slack. `fromTo` parks
+         them down there on mount, so this happens now — not when the timeline
+         starts, which for a scrolled-to heading can be minutes later. */
+      gsap.set(masks, { "--char-mask-slack": "0px" });
+
+      const timeline = gsap.timeline(
+        immediate
+          ? { delay: 0.15 }
+          : { scrollTrigger: { trigger: element, start: "top 85%", once: true } },
+      );
+
+      timeline.fromTo(
         chars,
         { yPercent: 112, rotate: 4 },
         {
           yPercent: 0,
           rotate: 0,
-          duration: 0.9,
+          duration: REVEAL_DURATION,
           ease: "power4.out",
-          stagger: 0.026,
-          ...(immediate
-            ? { delay: 0.15 }
-            : {
-                scrollTrigger: {
-                  trigger: element,
-                  start: "top 85%",
-                  once: true,
-                },
-              }),
+          stagger: REVEAL_STAGGER,
         },
+        0,
       );
+
+      /* Each word reopens its own slack the moment ITS last letter is all but
+         home, so the ascenders and descenders the mask was hiding rejoin the
+         letter mid-flight. The stagger runs in document order, so counting
+         chars word by word gives each mask its own moment. */
+      let charIndex = 0;
+      for (const mask of masks) {
+        charIndex += mask.querySelectorAll(".char").length;
+        timeline.call(
+          () => mask.style.removeProperty("--char-mask-slack"),
+          undefined,
+          (charIndex - 1) * REVEAL_STAGGER + MASK_OPEN_AT * REVEAL_DURATION,
+        );
+      }
     });
 
     return () => {
@@ -93,7 +124,7 @@ export function KineticHeading({
               <span
                 key={wordIndex}
                 dir="auto"
-                className="inline-block overflow-hidden align-bottom whitespace-nowrap"
+                className="char-mask inline-block align-bottom whitespace-nowrap"
               >
                 {word.split("").map((char, charIndex) => (
                   <span key={charIndex} className="char">
