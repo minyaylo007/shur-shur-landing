@@ -18,12 +18,15 @@ export function LanguageSwitcher({ locale, dict }: LanguageSwitcherProps) {
   const rest = pathname.replace(localeSegmentPattern, "");
 
   return (
-    /* Four pills instead of two: on a 320px header they ran past the edge, so
-       below `sm` the pills lose the gap, a little padding and a pixel of type.
-       From `sm` up the switcher is exactly the size it always was. */
+    /* Four pills instead of two: at 215px the full-size switcher is the widest
+       thing in the bar after the CTA, and on a 320px header it ran past the
+       edge. So it keeps its compact size — no gap, a little less padding, a
+       pixel less type, 168px in all — everywhere below `xl`, and takes its full
+       size only on the wide bar that has room for it. The two sizes differ by
+       47px; that is what buys the Romanian menu its place at 1024. */
     <nav
       aria-label={dict.label}
-      className="flex items-center gap-0 rounded-full border-2 border-current p-0.5 text-[11px] font-bold sm:gap-0.5 sm:text-xs"
+      className="flex items-center gap-0 rounded-full border-2 border-current p-0.5 text-[11px] font-bold xl:gap-0.5 xl:text-xs"
     >
       {locales.map((code) => {
         const isActive = code === locale;
@@ -33,7 +36,7 @@ export function LanguageSwitcher({ locale, dict }: LanguageSwitcherProps) {
             href={`/${code}${rest}`}
             scroll={false}
             aria-current={isActive ? "page" : undefined}
-            className={`cursor-pointer rounded-full px-1.5 py-1 font-display uppercase tracking-wide transition-colors duration-200 sm:px-2.5 ${
+            className={`cursor-pointer rounded-full px-1.5 py-1 font-display uppercase tracking-wide whitespace-nowrap transition-colors duration-200 xl:px-2.5 ${
               isActive
                 ? "bg-juice-500 text-paper-50"
                 : "opacity-70 hover:opacity-100"
