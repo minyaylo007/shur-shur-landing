@@ -228,25 +228,36 @@ describe("routing — all four locales are prerendered", () => {
    ============================================================ */
 
 describe("RTL — Hebrew typography", () => {
-  const src = () => read("../src/app/[locale]/layout.tsx");
+  /* The pairs live in `src/app/fonts.ts` since the 404 page became a document
+     of its own: two <html> in the app, one place that decides their fonts.
+     A 404 in a system font is the same «forgotten place» defect as a 404 with
+     no `lang`, so the rule is asserted where both documents read it. */
+  const src = () => read("../src/app/fonts.ts");
 
   it("loads a Hebrew-capable pair through the SAME css variables", () => {
-    const layout = src();
-    expect(layout).toMatch(/Rubik\(\{[\s\S]*?subsets: \["latin", "hebrew"\][\s\S]*?--font-unbounded/);
-    expect(layout).toMatch(/Assistant\(\{[\s\S]*?subsets: \["latin", "hebrew"\][\s\S]*?--font-manrope/);
+    const fonts = src();
+    expect(fonts).toMatch(/Rubik\(\{[\s\S]*?subsets: \["latin", "hebrew"\][\s\S]*?--font-unbounded/);
+    expect(fonts).toMatch(/Assistant\(\{[\s\S]*?subsets: \["latin", "hebrew"\][\s\S]*?--font-manrope/);
   });
 
   it("only `he` gets that pair — uk/en/ro keep Unbounded + Manrope", () => {
-    const fonts = src().match(/function fontClasses[\s\S]*?\n\}/)?.[0] ?? "";
-    expect(fonts).toMatch(/locale === "he"/);
-    expect(fonts).toContain("rubik.variable");
-    expect(fonts).toContain("unbounded.variable");
+    const fonts = src();
+    expect(fonts).toMatch(/hebrewFontClass = `\$\{rubik\.variable\} \$\{assistant\.variable\}`/);
+    expect(fonts).toMatch(/latinFontClass = `\$\{unbounded\.variable\} \$\{manrope\.variable\}`/);
+    const rule = fonts.match(/function fontClasses[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(rule).toMatch(/locale === "he" \? hebrewFontClass : latinFontClass/);
   });
 
   it("keeps the Cyrillic subset on the Latin pair (uk must not fall back)", () => {
-    const layout = src();
-    expect(layout).toMatch(/Unbounded\(\{[\s\S]*?subsets: \["latin", "cyrillic"\]/);
-    expect(layout).toMatch(/Manrope\(\{[\s\S]*?subsets: \["latin", "cyrillic"\]/);
+    const fonts = src();
+    expect(fonts).toMatch(/Unbounded\(\{[\s\S]*?subsets: \["latin", "cyrillic"\]/);
+    expect(fonts).toMatch(/Manrope\(\{[\s\S]*?subsets: \["latin", "cyrillic"\]/);
+  });
+
+  it("the locale layout takes its fonts from that one rule", () => {
+    const layout = read("../src/app/[locale]/layout.tsx");
+    expect(layout).toMatch(/import \{ fontClasses \} from "\.\.\/fonts"/);
+    expect(layout).toContain("${fontClasses(locale)}");
   });
 });
 

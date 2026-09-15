@@ -46,3 +46,26 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
           # Для проверки сборки достаточно заглушки; настоящий адрес задаётся в Vercel.
           NEXT_PUBLIC_SITE_URL: https://example.invalid
+
+      # Несуществующий адрес обязан отвечать 404 и показывать нашу страницу.
+      # Код ответа нельзя проверить вёрсткой: страница с кодом 200 выглядит
+      # так же, а сайт с неё выпадает из поиска. Поэтому шаг идёт ПОСЛЕ сборки
+      # и поднимает настоящий прод-сервер: dev-сервер обрабатывает непойманные
+      # маршруты иначе, и его ответ ничего не доказывает.
+      - name: 404 на несуществующих адресах
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_SITE_URL: https://example.invalid
+        run: |
+          set -uo pipefail
+          npm start -- -H 127.0.0.1 -p 3000 &
+          server=$!
+          for _ in $(seq 1 30); do
+            curl -sSf -o /dev/null http://127.0.0.1:3000/uk && break
+            sleep 1
+          done
+          ./scripts/check-404.sh http://127.0.0.1:3000
+          status=$?
+          # Строго по PID: по имени в раннере тоже нельзя — привычка одна на все машины.
+          kill -TERM "$server" 2>/dev/null || true
+          exit "$status"

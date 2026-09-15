@@ -214,4 +214,11 @@ export const en: Dictionary = {
       instagram: "Instagram Direct",
     },
   },
+  notFound: {
+    metaTitle: "Page not found — SHUR-SHUR",
+    heading: "NO SUCH PAGE",
+    text: "The address may have a typo, or the page is gone. Everything we do is gathered on the main page.",
+    home: "Back to the site",
+    chooseLanguage: "Choose a language",
+  },
 };
