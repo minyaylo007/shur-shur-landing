@@ -150,3 +150,16 @@ export function PhoneIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * One icon per messenger key from `lib/channels`, so every place that renders
+ * a channel list — the contact bar and the form's error state — draws the same
+ * mark and a new channel cannot be added with an icon in one list and a blank
+ * in the other.
+ */
+export const CHANNEL_ICONS = {
+  telegram: TelegramIcon,
+  whatsapp: WhatsAppIcon,
+  instagram: InstagramIcon,
+  viber: ViberIcon,
+} as const;

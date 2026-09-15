@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { uk } from "../src/dictionaries/uk";
@@ -7,6 +7,7 @@ import { he } from "../src/dictionaries/he";
 import { ro } from "../src/dictionaries/ro";
 import { locales } from "../src/lib/i18n";
 import { site, messengers } from "../src/lib/site";
+import { MESSENGER_ORDER, isChannelReady, localeChannels, readyChannel } from "../src/lib/channels";
 
 /*
  * Conversion path — one contact interaction, one form, one endpoint.
@@ -26,6 +27,54 @@ const srcPath = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 const read = (rel: string) => readFileSync(srcPath(rel), "utf8");
 
 const allDicts = [uk, en, he, ro];
+
+/**
+ * Every source file under `src/`, as repo-relative paths. Walked, not listed:
+ * the first version of the readiness test named the four components it knew
+ * about, so the fifth render site — the hero — sailed straight past it and
+ * kept a dead t.me link on the first screen of all four locales.
+ */
+function sourceFiles(dir = "../src"): string[] {
+  return readdirSync(srcPath(dir), { withFileTypes: true }).flatMap((entry) => {
+    const child = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return sourceFiles(child);
+    return /\.tsx?$/.test(entry.name) ? [child.replace("../", "")] : [];
+  });
+}
+
+/**
+ * The file with comments removed, so «this block used to read site.socials.*»
+ * in a comment is not mistaken for code. Quote-aware on purpose: the thing
+ * being searched for is a URL, and a naive strip of `//` would cut every
+ * `https://` in half.
+ */
+function stripComments(src: string): { code: string; balanced: boolean } {
+  let out = "";
+  let quote: string | null = null;
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    const next = src[i + 1];
+    if (quote !== null) {
+      if (ch === "\\") { out += ch + (next ?? ""); i += 2; continue; }
+      if (ch === quote) quote = null;
+      out += ch; i += 1; continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") { quote = ch; out += ch; i += 1; continue; }
+    if (ch === "/" && next === "/") { while (i < src.length && src[i] !== "\n") i += 1; continue; }
+    if (ch === "/" && next === "*") {
+      i += 2;
+      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i += 1;
+      i += 2; continue;
+    }
+    out += ch; i += 1;
+  }
+  return { code: out, balanced: quote === null };
+}
+
+const codeOf = (repoPath: string) => stripComments(read(`../${repoPath}`)).code;
+
+
 
 /** Every visible string under a dictionary branch, flattened. */
 function strings(value: unknown): string[] {
@@ -53,9 +102,106 @@ describe("lib/site — the one real phone number (brief §5)", () => {
     expect(read("../src/lib/site.ts")).not.toContain("380000000000");
   });
 
-  it("every channel is launch-ready, so no dead deep-link renders", () => {
-    for (const channel of Object.values(messengers)) expect(channel.ready).toBe(true);
+  it("the Instagram DM deep-link is the official ig.me form", () => {
     expect(site.socials.instagramDm).toBe("https://ig.me/m/shur.shur.agency");
+  });
+});
+
+/*
+ * The readiness contract, and why it is tested by walking the tree rather
+ * than by naming files. `ready: false` means «this account is not real yet,
+ * render it nowhere». Before 15.09.2026 exactly one of the FIVE places that
+ * print a messenger link honoured it. The first fix listed the three it knew
+ * about and checked those three — and the hero, which nobody had listed, went
+ * on printing a Telegram username that was never registered on the first
+ * screen of every locale. A test that enumerates render sites can only ever
+ * find the render sites someone remembered.
+ *
+ * So the rule is structural and the check is exhaustive: outside `src/lib`
+ * the raw constants are unreachable — no `site.socials`, no `messengers`, no
+ * deep-link literal — and the only way to a channel's link OR its visible
+ * @name is `lib/channels`, which hands out neither until the flag is true.
+ * Add a sixth render site tomorrow and it is covered the moment it is saved.
+ */
+describe("readiness contract — a channel that is not ready renders NOWHERE", () => {
+
+  it("lib/channels drops every not-ready channel, in every locale", () => {
+    for (const locale of locales) {
+      const rendered = localeChannels(locale).map((channel) => channel.key);
+      const expected = MESSENGER_ORDER[locale].filter((key) => messengers[key].ready);
+      // Same members, same order — the gate filters, it does not reshuffle.
+      expect(rendered).toEqual(expected);
+      for (const key of rendered) expect(messengers[key].ready).toBe(true);
+    }
+  });
+
+  it("isChannelReady is the flag itself, not a copy that can drift", () => {
+    for (const key of Object.keys(messengers) as (keyof typeof messengers)[]) {
+      expect(isChannelReady(key)).toBe(messengers[key].ready);
+    }
+  });
+
+  it("a channel that is not ready leaks no href into any locale's list", () => {
+    const notReady = (Object.keys(messengers) as (keyof typeof messengers)[]).filter(
+      (key) => !messengers[key].ready,
+    );
+    for (const locale of locales) {
+      const hrefs = localeChannels(locale).map((channel) => channel.href);
+      for (const key of notReady) expect(hrefs).not.toContain(messengers[key].href);
+    }
+  });
+
+  it("readyChannel hands out nothing at all for a channel that is not ready", () => {
+    for (const key of Object.keys(messengers) as (keyof typeof messengers)[]) {
+      const channel = readyChannel(key);
+      if (messengers[key].ready) {
+        expect(channel).not.toBeNull();
+        expect(channel?.href).toBe(messengers[key].href);
+      } else {
+        // Not «an object with the link and a false flag» — nothing. The link
+        // and the @name are equally unavailable, so a caller cannot print the
+        // name of an account it was not allowed to link to.
+        expect(channel).toBeNull();
+      }
+    }
+  });
+
+  // --- the exhaustive part: every file under src/, derived by walking ------
+
+  it("the scan really covers the tree it claims to cover", () => {
+    const files = sourceFiles();
+    // A vacuous pass is the one failure mode a scan like this can hide.
+    expect(files.length).toBeGreaterThan(20);
+    expect(files).toContain("src/components/sections/Hero.tsx");
+    expect(files).toContain("src/components/layout/Footer.tsx");
+    for (const file of files) expect(stripComments(read(`../${file}`)).balanced).toBe(true);
+  });
+
+  it("NO file outside src/lib reads site.socials or messengers directly", () => {
+    const offenders = sourceFiles()
+      .filter((file) => !file.startsWith("src/lib/"))
+      .filter((file) => /\bsite\.socials\b|\bmessengers\b/.test(codeOf(file)));
+    // Empty array, not a boolean: a failure has to name the file.
+    expect(offenders).toEqual([]);
+  });
+
+  it("a messenger deep-link exists as a literal in exactly ONE file", () => {
+    const deepLink = /https:\/\/t\.me\/|https:\/\/wa\.me\/|https:\/\/ig\.me\/|viber:\/\//;
+    const carriers = sourceFiles().filter((file) => deepLink.test(codeOf(file)));
+    expect(carriers).toEqual(["src/lib/site.ts"]);
+  });
+
+  it("anything that draws a messenger icon got the channel from the gate", () => {
+    const drawing = sourceFiles().filter((file) => /CHANNEL_ICONS\[/.test(codeOf(file)));
+    expect(drawing.length).toBeGreaterThan(0);
+    for (const file of drawing) {
+      expect(codeOf(file)).toMatch(/localeChannels|readyChannel|isChannelReady/);
+    }
+  });
+
+  it("telegram specifically: the username is unregistered, so it is not ready", () => {
+    // Flip this the day the client names a real channel — and only then.
+    expect(messengers.telegram.ready).toBe(false);
   });
 });
 
@@ -88,21 +234,30 @@ describe("ContactBar — ONE persistent control (brief §19)", () => {
   });
 
   it("orders channels by locale: uk → Telegram first, everyone else → WhatsApp first", () => {
-    const order = src.match(/const MESSENGER_ORDER[\s\S]*?\n\};/)?.[0] ?? "";
+    // The order moved to lib/channels when the footer, the contact section and
+    // the form's error state had to obey the same list. Wish order, before the
+    // readiness gate — hence the source of the table, not localeChannels().
+    const order = read("../src/lib/channels.ts").match(/const MESSENGER_ORDER[\s\S]*?\n\};/)?.[0] ?? "";
     expect(order).toMatch(/uk:\s*\["telegram"/);
     // Every non-Ukrainian locale must be listed explicitly and lead with WhatsApp.
     for (const code of locales.filter((l) => l !== "uk")) {
       expect(order).toMatch(new RegExp(`${code}:\\s*\\["whatsapp"`));
     }
-    expect(src).toMatch(/MESSENGER_ORDER\[locale\]/);
+    expect(read("../src/lib/channels.ts")).toMatch(/MESSENGER_ORDER\[locale\]/);
+    expect(src).toMatch(/localeChannels\(locale\)/);
   });
 
   it("the phone sits above the messengers — it is the channel v1 never showed", () => {
     expect(src.indexOf("site.phone.tel")).toBeLessThan(src.indexOf("order.map"));
   });
 
-  it("filters channels by the ready flag (code guard, not a comment)", () => {
-    expect(src).toMatch(/\.filter\(\(channel\) => channel\.ready\)/);
+  it("filters channels by the ready flag (behaviour, not a comment)", () => {
+    // Asserted by what comes out, not by the shape of the line that does it.
+    for (const locale of locales) {
+      for (const channel of localeChannels(locale)) {
+        expect(isChannelReady(channel.key)).toBe(true);
+      }
+    }
     expect(src).not.toContain("wa.me");
   });
 
@@ -213,7 +368,58 @@ describe("AuditForm — two fields, same pipeline (brief §20)", () => {
   });
 
   it("both inputs are pinned LTR — an @handle and a +380… are never RTL", () => {
-    expect(src.match(/dir="ltr"/g)?.length).toBe(2);
+    // Counted per input, not over the whole file: the error state pins the
+    // phone number LTR too, and that is a third legitimate dir="ltr".
+    const inputs = src.match(/<input[^>]*name="(?:igHandle|contact)"[\s\S]*?\/>/g) ?? [];
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) expect(input).toContain('dir="ltr"');
+  });
+
+  /*
+   * The error state. Every translation of `errorText` ends in a colon and
+   * promises a channel; until 15.09.2026 nothing was printed after it, and
+   * `errorTitle` existed in all four dictionaries but was rendered nowhere.
+   * With TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID still unset in production this
+   * is not a rare branch — it is the one every visitor reaches.
+   */
+  describe("failed delivery leaves a way out", () => {
+    const errorBranch = src.match(/status === "error" \? \([\s\S]*?\n      \) : null/)?.[0] ?? "";
+
+    it("the branch exists and shows the title that used to be dead copy", () => {
+      expect(errorBranch).not.toBe("");
+      expect(errorBranch).toContain("dict.errorTitle");
+      expect(errorBranch).toContain("dict.errorText");
+    });
+
+    it("something real follows the colon: the phone and the ready messengers", () => {
+      expect(errorBranch).toContain("site.phone.tel");
+      expect(errorBranch).toContain("fallbackChannels.map");
+      expect(src).toContain("localeChannels(locale)");
+      // Announced as one alert, not a lone red line.
+      expect(errorBranch).toContain('role="alert"');
+    });
+
+    it("there is always at least one live messenger to offer, in every locale", () => {
+      for (const locale of locales) {
+        expect(localeChannels(locale).length).toBeGreaterThan(0);
+      }
+      expect(site.phone.tel).toContain("tel:");
+    });
+
+    it("what the visitor typed survives the failure — only success clears it", () => {
+      // The error state renders INSIDE the form, so the inputs keep their
+      // values; the single reset lives in the success branch.
+      expect(src.match(/setIgHandle\(""\)/g)).toHaveLength(1);
+      expect(src.match(/setContact\(""\)/g)).toHaveLength(1);
+      expect(src).toContain("dict.retry");
+    });
+
+    it("every locale's error copy promises a channel and names the failure", () => {
+      for (const dict of allDicts) {
+        expect(dict.audit.form.errorText.trim().endsWith(":")).toBe(true);
+        expect(dict.audit.form.errorTitle.length).toBeGreaterThan(5);
+      }
+    });
   });
 });
 
@@ -242,8 +448,10 @@ describe("wiring — one conversion destination", () => {
   });
 
   it("the contact section lists the phone, Telegram and Instagram — not four near-identical rows", () => {
-    const src = read("../src/components/sections/AuditCta.tsx");
-    expect(src.match(/icon: \w+Icon/g)).toHaveLength(3);
+    const src = codeOf("src/components/sections/AuditCta.tsx");
+    expect(src).toContain("site.phone.tel");
+    expect(src).toContain('"telegram"');
+    expect(src).toContain('"instagram"');
     // WhatsApp and Viber reach the same number and live in the ContactBar.
     expect(src).not.toContain("whatsapp");
     expect(src).not.toContain("viber");
@@ -253,5 +461,15 @@ describe("wiring — one conversion destination", () => {
     expect(read("../src/app/api/lead/route.ts")).toContain(
       '"[lead] silent drop:", reason, "kind:", parsed.data.kind',
     );
+  });
+
+  it("the route tells «bot not configured» apart from «Telegram failed»", () => {
+    const route = read("../src/app/api/lead/route.ts");
+    expect(route).toContain("TelegramNotConfiguredError");
+    expect(route).toContain("NOT CONFIGURED");
+    expect(route).toContain("Telegram delivery failed");
+    // Names of the env vars are printed by the error object; no value of
+    // either variable may appear in the route at all.
+    expect(route).not.toMatch(/process\.env\.TELEGRAM/);
   });
 });

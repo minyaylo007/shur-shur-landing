@@ -4,7 +4,9 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
 import { leadSchema } from "@/lib/validation";
-import { CherryIcon } from "@/components/ui/icons";
+import { site } from "@/lib/site";
+import { localeChannels } from "@/lib/channels";
+import { CHANNEL_ICONS, CherryIcon, PhoneIcon } from "@/components/ui/icons";
 
 type Status = "idle" | "submitting" | "success" | "error";
 type FieldErrors = { igHandle?: boolean; contact?: boolean };
@@ -14,6 +16,10 @@ interface AuditFormProps {
   dict: Dictionary["audit"]["form"];
   /** Rendered under the fields — how and where the answer arrives. */
   delivery: string;
+  /** Names of the messengers, for the channels offered when sending fails. */
+  channelLabels: Dictionary["contactBar"]["channels"];
+  /** Accessible name for the phone link — the visible label is the number. */
+  callLabel: string;
 }
 
 /**
@@ -28,7 +34,13 @@ interface AuditFormProps {
  * honeypot, the elapsedMs floor and the shared rate limit all continue to
  * apply; only the schema gained one required field.
  */
-export function AuditForm({ locale, dict, delivery }: AuditFormProps) {
+export function AuditForm({
+  locale,
+  dict,
+  delivery,
+  channelLabels,
+  callLabel,
+}: AuditFormProps) {
   const [status, setStatus] = useState<Status>("idle");
   const [igHandle, setIgHandle] = useState("");
   const [contact, setContact] = useState("");
@@ -125,6 +137,14 @@ export function AuditForm({ locale, dict, delivery }: AuditFormProps) {
   const fieldClass =
     "w-full rounded-sm border-2 border-cherry-900/25 bg-paper-50 px-3.5 py-3 text-sm text-ink-900 placeholder:text-ink-500/60 focus:border-juice-500 focus:outline-none";
 
+  const chipClass =
+    "inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-cherry-900/15 bg-paper-100 px-3.5 py-2 text-sm font-semibold text-cherry-900 transition-colors duration-200 hover:border-juice-500 hover:bg-paper-200";
+
+  // Same readiness gate and same locale order as the contact bar: a channel
+  // that is not launch-ready must not be offered to someone whose request has
+  // just failed — that would be the second dead end in a row.
+  const fallbackChannels = localeChannels(locale);
+
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
       {/* Honeypot: visually hidden, NOT display:none — bots skip those. */}
@@ -215,10 +235,52 @@ export function AuditForm({ locale, dict, delivery }: AuditFormProps) {
         {status === "submitting" ? dict.submitting : status === "error" ? dict.retry : dict.submit}
       </button>
 
+      {/*
+        A failed submission used to print `errorText` and stop — and every
+        translation of that line ends in a colon and promises a channel
+        («…або напишіть нам напряму:»). Under the colon was nothing: the one
+        visitor we already know we are losing got a dead end. Since delivery
+        rides a Telegram bot whose credentials are not set in production yet,
+        this is not a rare branch — it is currently the only one people see.
+
+        So the branch names the channels itself. The phone first: it is the
+        shortest path and the one contact that cannot be a stale deep-link,
+        then the ready messengers in this locale's order — the same gate as
+        everywhere else, so nothing dead is offered to someone who has just
+        been failed once. The fields keep their values and the button reads
+        «try again», so retrying costs nothing.
+      */}
       {status === "error" ? (
-        <p role="alert" className="text-sm font-semibold text-cherry-700">
-          {dict.errorText}
-        </p>
+        <div
+          role="alert"
+          className="flex flex-col gap-2.5 rounded-md border-2 border-cherry-700/30 bg-paper-50 p-4"
+        >
+          <p className="display-type text-base font-extrabold text-cherry-900">
+            {dict.errorTitle}
+          </p>
+          <p className="text-sm font-semibold text-cherry-700">{dict.errorText}</p>
+          <ul className="flex flex-wrap gap-2">
+            <li>
+              <a href={site.phone.tel} aria-label={callLabel} className={chipClass}>
+                <PhoneIcon className="size-4 shrink-0 text-juice-500" />
+                {/* Bidi-neutral number: without the pin the "+" jumps to the
+                    far end of the line in Hebrew. */}
+                <span dir="ltr">{site.phone.display}</span>
+              </a>
+            </li>
+            {fallbackChannels.map(({ key, href }) => {
+              const Icon = CHANNEL_ICONS[key];
+              return (
+                <li key={key}>
+                  <a href={href} target="_blank" rel="noopener noreferrer" className={chipClass}>
+                    <Icon className="size-4 shrink-0 text-juice-500" />
+                    {channelLabels[key]}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       ) : null}
 
       {/* Brief §20: say plainly how the answer arrives. No time guarantee —

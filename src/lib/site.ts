@@ -21,7 +21,13 @@ export const site = {
     instagramHandle: "@shur.shur.agency",
     /** Official Instagram DM deep-link (ig.me). */
     instagramDm: "https://ig.me/m/shur.shur.agency",
-    // Placeholder until the client provides the real channel/username.
+    /**
+     * PLACEHOLDER, and a checked one: `t.me/shur_shur_agency` answers 200
+     * (Telegram does that for free usernames too) but its markup has no
+     * `tgme_page_title` block, which every live account has — the name is
+     * simply unregistered. Nothing renders it while `messengers.telegram`
+     * is not ready; the real channel is still a question for the client.
+     */
     telegram: "https://t.me/shur_shur_agency",
     telegramHandle: "@shur_shur_agency",
     whatsapp: "https://wa.me/380972499107",
@@ -31,14 +37,39 @@ export const site = {
 
 /**
  * Messenger channels with launch readiness (REM-FIX-C4). `ready: false`
- * means the contact detail above is still a placeholder number and the UI
- * must NOT render the link — a dead wa.me/viber deep-link silently swallows
- * real enquiries. Flip the flag to `true` once the real number is wired;
- * no other code changes are needed.
+ * means the contact detail above is still a placeholder — a dead deep-link
+ * silently swallows real enquiries, so the UI must NOT render the channel
+ * ANYWHERE. Flip the flag to `true` once the real account is wired; no other
+ * code changes are needed.
+ *
+ * The flag is enforced in `lib/channels` (`isChannelReady`, `readyChannel`,
+ * `localeChannels`), and nothing outside `lib/` may read `site.socials.*` or
+ * import `messengers`: the href AND the visible @handle are only reachable
+ * through the gate, so a render site cannot print a name whose link it was
+ * not allowed to draw. Naming the components here was not enough — the first
+ * fix listed ContactBar, Footer and AuditCta and missed the hero, which kept
+ * the dead t.me link on the first screen of all four locales. The rule is now
+ * checked by walking `src/**` instead of by listing files (tests/conversion).
  */
 export const messengers = {
-  telegram: { href: site.socials.telegram, ready: true },
-  instagram: { href: site.socials.instagramDm, ready: true },
-  whatsapp: { href: site.socials.whatsapp, ready: true },
-  viber: { href: site.socials.viber, ready: true },
-} as const satisfies Record<string, { href: string; ready: boolean }>;
+  // 15.09.2026: the username is not registered — see socials.telegram above.
+  telegram: {
+    href: site.socials.telegram,
+    handle: site.socials.telegramHandle,
+    profile: site.socials.telegram,
+    ready: false,
+  },
+  instagram: {
+    href: site.socials.instagramDm,
+    handle: site.socials.instagramHandle,
+    profile: site.socials.instagram,
+    ready: true,
+  },
+  // WhatsApp and Viber have no @name of their own: they are the phone number,
+  // which the page already shows as a `tel:` link of its own.
+  whatsapp: { href: site.socials.whatsapp, handle: null, profile: null, ready: true },
+  viber: { href: site.socials.viber, handle: null, profile: null, ready: true },
+} as const satisfies Record<
+  string,
+  { href: string; handle: string | null; profile: string | null; ready: boolean }
+>;

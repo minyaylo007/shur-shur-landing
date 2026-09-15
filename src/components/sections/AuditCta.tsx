@@ -1,10 +1,11 @@
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
+import { readyChannel } from "@/lib/channels";
 import { AuditForm } from "@/components/forms/AuditForm";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Reveal } from "@/components/motion/Reveal";
-import { InstagramIcon, PhoneIcon, TelegramIcon } from "@/components/ui/icons";
+import { CHANNEL_ICONS, PhoneIcon } from "@/components/ui/icons";
 
 /**
  * Conversion section (brief §4, §19, §20): the free Instagram audit and the
@@ -22,31 +23,44 @@ import { InstagramIcon, PhoneIcon, TelegramIcon } from "@/components/ui/icons";
  *    channels below, one persistent control (ContactBar), and the footer.
  *
  * The channel list is deliberately short. Phone first, because it was the one
- * thing the old site never showed; then the two the agency actually watches.
+ * thing the old site never showed; then the accounts the agency actually
+ * watches — each of them only while `messengers[key].ready` says it exists.
  * WhatsApp and Viber reach the same number and live in the ContactBar, so
  * repeating them here would just be four near-identical rows.
  */
 export function AuditCta({
   locale,
   dict,
+  channelLabels,
+  callLabel,
 }: {
   locale: Locale;
   dict: Dictionary["audit"];
+  /** Passed through to the form: the channels it offers when sending fails. */
+  channelLabels: Dictionary["contactBar"]["channels"];
+  callLabel: string;
 }) {
+  // The phone is always real; the two accounts are only listed while the gate
+  // in lib/channels says they answer. This list used to read site.socials.*
+  // straight through, so it kept printing a Telegram handle that the
+  // ContactBar had already filtered out as dead.
   const channels = [
-    { href: site.phone.tel, icon: PhoneIcon, label: site.phone.display, external: false },
-    {
-      href: site.socials.telegram,
-      icon: TelegramIcon,
-      label: site.socials.telegramHandle,
-      external: true,
-    },
-    {
-      href: site.socials.instagram,
-      icon: InstagramIcon,
-      label: site.socials.instagramHandle,
-      external: true,
-    },
+    { key: "phone", href: site.phone.tel, icon: PhoneIcon, label: site.phone.display, external: false },
+    ...(["telegram", "instagram"] as const)
+      .map(readyChannel)
+      .flatMap((channel) =>
+        channel && channel.handle !== null
+          ? [
+              {
+                key: channel.key,
+                href: channel.profile ?? channel.href,
+                icon: CHANNEL_ICONS[channel.key],
+                label: channel.handle,
+                external: true,
+              },
+            ]
+          : [],
+      ),
   ];
 
   return (
@@ -61,6 +75,8 @@ export function AuditCta({
                 locale={locale}
                 dict={dict.form}
                 delivery={dict.delivery}
+                channelLabels={channelLabels}
+                callLabel={callLabel}
               />
             </div>
           </Reveal>
@@ -71,8 +87,8 @@ export function AuditCta({
                 {dict.channelsLabel}
               </h3>
               <ul className="flex flex-col gap-3">
-                {channels.map(({ href, icon: Icon, label, external }) => (
-                  <li key={href}>
+                {channels.map(({ key, href, icon: Icon, label, external }) => (
+                  <li key={key}>
                     <a
                       href={href}
                       {...(external
