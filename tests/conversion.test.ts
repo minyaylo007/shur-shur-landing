@@ -117,13 +117,29 @@ describe("lib/site — the one real phone number (brief §5)", () => {
  * screen of every locale. A test that enumerates render sites can only ever
  * find the render sites someone remembered.
  *
- * So the rule is structural and the check is exhaustive: outside `src/lib`
- * the raw constants are unreachable — no `site.socials`, no `messengers`, no
- * deep-link literal — and the only way to a channel's link OR its visible
- * @name is `lib/channels`, which hands out neither until the flag is true.
- * Add a sixth render site tomorrow and it is covered the moment it is saved.
+ * So the rule is structural and the check is exhaustive: outside the TWO files
+ * that are the gate itself the raw constants are unreachable — no
+ * `site.socials`, no `messengers`, no deep-link literal — and the only way to
+ * a channel's link OR its visible @name is `lib/channels`, which hands out
+ * neither until the flag is true. Add a sixth render site tomorrow and it is
+ * covered the moment it is saved.
+ *
+ * The allowlist used to be the whole of `src/lib`, and that was a hole with a
+ * body in it. `src/lib` is not only the gate: it is also where the page's data
+ * lives (`work.ts`, `known.ts`), and a data module is a render site wearing a
+ * different hat. `lib/posts.ts` proved it — three tiles of its Instagram grid
+ * took `site.socials.instagram` straight, past `isChannelReady`, and this scan
+ * waved them through by address. The exemption is now the two files that ARE
+ * the contract, named one by one.
  */
 describe("readiness contract — a channel that is not ready renders NOWHERE", () => {
+  /**
+   * The only two files allowed to touch the raw constants: the constants
+   * themselves, and the accessor that guards them. Everything else in `src/**`
+   * — components and the rest of `src/lib` alike — goes through `lib/channels`.
+   */
+  const GATE_FILES = ["src/lib/site.ts", "src/lib/channels.ts"];
+
 
   it("lib/channels drops every not-ready channel, in every locale", () => {
     for (const locale of locales) {
@@ -177,9 +193,16 @@ describe("readiness contract — a channel that is not ready renders NOWHERE", (
     for (const file of files) expect(stripComments(read(`../${file}`)).balanced).toBe(true);
   });
 
-  it("NO file outside src/lib reads site.socials or messengers directly", () => {
+  it("the gate allowlist names files that exist — a rename cannot widen it", () => {
+    // An exemption for a path that is no longer there would silently start
+    // exempting nothing, or worse, keep exempting a file someone recreated.
+    const files = sourceFiles();
+    for (const file of GATE_FILES) expect(files).toContain(file);
+  });
+
+  it("NO file but the gate itself reads site.socials or messengers directly", () => {
     const offenders = sourceFiles()
-      .filter((file) => !file.startsWith("src/lib/"))
+      .filter((file) => !GATE_FILES.includes(file))
       .filter((file) => /\bsite\.socials\b|\bmessengers\b/.test(codeOf(file)));
     // Empty array, not a boolean: a failure has to name the file.
     expect(offenders).toEqual([]);

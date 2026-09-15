@@ -13,9 +13,10 @@ export type ChannelKey = keyof typeof messengers;
  * down a list of known places instead of asking who reads the constant.
  *
  * So this module hands out the whole channel — link, public profile and the
- * visible @handle — and only while it is ready. Outside `lib/` there is no
- * other way to reach any of the three, which is what the source scan in
- * tests/conversion.test.ts checks, file by file, over all of `src/**`.
+ * visible @handle — and only while it is ready. Outside this file and
+ * `lib/site.ts` there is no other way to reach any of the three, which is what
+ * the source scan in tests/conversion.test.ts checks, file by file, over all
+ * of `src/**` — the rest of `lib` included, since 15.09.2026.
  */
 
 /**
