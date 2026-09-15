@@ -145,7 +145,7 @@ const dict = {
     ],
     knownBy: {
       label: "Нас знають:",
-      /* Order matches knownHandles in src/lib/posts.ts (verified accounts). */
+      /* Order matches knownHandles in src/lib/known.ts (verified accounts). */
       names: [
         "радіо «Буковинська Хвиля»",
         "салон текстилю «Тюльпан»",

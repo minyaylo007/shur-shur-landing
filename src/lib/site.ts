@@ -43,13 +43,19 @@ export const site = {
  * code changes are needed.
  *
  * The flag is enforced in `lib/channels` (`isChannelReady`, `readyChannel`,
- * `localeChannels`), and nothing outside `lib/` may read `site.socials.*` or
- * import `messengers`: the href AND the visible @handle are only reachable
- * through the gate, so a render site cannot print a name whose link it was
- * not allowed to draw. Naming the components here was not enough — the first
- * fix listed ContactBar, Footer and AuditCta and missed the hero, which kept
- * the dead t.me link on the first screen of all four locales. The rule is now
- * checked by walking `src/**` instead of by listing files (tests/conversion).
+ * `localeChannels`), and NO file but this one and `lib/channels.ts` may read
+ * `site.socials.*` or import `messengers`: the href AND the visible @handle
+ * are only reachable through the gate, so a render site cannot print a name
+ * whose link it was not allowed to draw. Naming the components here was not
+ * enough — the first fix listed ContactBar, Footer and AuditCta and missed the
+ * hero, which kept the dead t.me link on the first screen of all four locales.
+ * The rule is now checked by walking `src/**` instead of by listing files
+ * (tests/conversion).
+ *
+ * 15.09.2026: the exemption used to read «outside `lib/`», and `lib` holds
+ * data as well as the gate. `lib/posts.ts` — a grid nothing rendered any more
+ * — reached `site.socials.instagram` on three of its tiles and the scan let it
+ * through by address. Two files are exempt now, by name, and both are here.
  */
 export const messengers = {
   // 15.09.2026: the username is not registered — see socials.telegram above.

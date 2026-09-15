@@ -1,5 +1,5 @@
 import type { Dictionary } from "@/dictionaries";
-import { knownHandles } from "@/lib/posts";
+import { knownHandles } from "@/lib/known";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Reveal } from "@/components/motion/Reveal";
 import { ArrowUpRightIcon } from "@/components/ui/icons";
