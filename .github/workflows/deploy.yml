@@ -119,9 +119,59 @@ jobs:
         if: steps.creds.outputs.ready == 'true'
         run: npx --yes vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
+      # Отпечаток сборки: в HTML каждой локали уезжает SHA коммита выката.
+      # Только по нему смока может ИЗМЕРИТЬ, что край отдаёт нашу сборку,
+      # а не пережившую выкат копию предыдущей (см. src/lib/build.ts).
+      # Значение кладётся и в окружение, и в файл, который читает `vercel build`:
+      # что именно CLI пробрасывает в сборку фреймворка — его внутреннее дело,
+      # а отпечаток обязан быть, иначе следующий шаг не пустит выкат дальше.
       - name: Build
         if: steps.creds.outputs.ready == 'true'
-        run: npx --yes vercel build --prod --token="$VERCEL_TOKEN"
+        env:
+          NEXT_PUBLIC_BUILD_SHA: ${{ steps.target.outputs.sha }}
+          VERCEL_ENV_FILE: .vercel/.env.production.local
+        run: |
+          set -euo pipefail
+          printf 'NEXT_PUBLIC_BUILD_SHA="%s"\n' "$NEXT_PUBLIC_BUILD_SHA" >> "$VERCEL_ENV_FILE"
+          npx --yes vercel build --prod --token="$VERCEL_TOKEN"
+
+      # Ворота перед выкатом: отпечаток обязан лежать в предсобранной странице
+      # КАЖДОЙ локали. Если переменная не доехала до сборки, смока после выката
+      # прождала бы весь бюджет и покраснела на исправном коде — а так мы этого
+      # просто не выкатываем и падаем за секунду, до всякого трафика.
+      - name: Отпечаток сборки на месте
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          BUILD_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -uo pipefail
+          tag='<meta name="x-build-sha" content="'"$BUILD_SHA"'"'
+          missing=""; seen=0
+          for loc in uk en he ro; do
+            file=$(find .next .vercel/output -name "$loc.html" 2>/dev/null \
+                   | xargs -r grep -lF "$tag" 2>/dev/null | head -n1)
+            if [ -n "$file" ]; then
+              seen=$((seen + 1))
+              echo "  ✓ /$loc: отпечаток $BUILD_SHA в $file"
+            else
+              missing="$missing /$loc"
+            fi
+          done
+          if [ -z "$missing" ]; then
+            echo "Отпечаток $BUILD_SHA на месте во всех четырёх локалях"
+            exit 0
+          fi
+          # Имена файлов в сборке — внутреннее дело Next и Vercel, и однажды они
+          # поменяются. Ворота стоят не ради имён, а ради одной поломки: отпечатка
+          # нет вовсе. Не нашли ни одной предсобранной страницы — ищем тег по всей
+          # сборке и, если он там есть, выкат не держим, но говорим об этом вслух.
+          hits=$(grep -rlF "$tag" .next .vercel/output 2>/dev/null | wc -l)
+          if [ "$seen" -eq 0 ] && [ "$hits" -gt 0 ]; then
+            echo "::warning::Предсобранных uk/en/he/ro.html не нашлось — раскладка сборки изменилась. Отпечаток $BUILD_SHA найден в $hits файл(ах), выкат продолжаем, а эту проверку пора поправить"
+            exit 0
+          fi
+          echo "::error::В собранных страницах${missing} нет отпечатка $BUILD_SHA — смоке будет нечего проверять, выкат остановлен"
+          exit 1
 
       - name: Deploy
         if: steps.creds.outputs.ready == 'true'
@@ -140,9 +190,11 @@ jobs:
       # 34973869698 (15.09.2026) «прошли смоку», не прочитав ни строки нашей
       # страницы. Зелёный шаг, который ничего не проверяет, хуже отсутствующего.
       #
-      # Теперь проверяется то, что видит человек: боевой домен из настроек
-      # Vercel, все четыре локали ровно по 200, апекс — 308 на /uk без петли,
-      # и в теле каждой страницы — наш canonical. Любое отличие валит выкат.
+      # Сама проверка живёт в scripts/smoke-production.sh — рядом с
+      # scripts/check-404.sh и по той же причине: тело шага в YAML нельзя
+      # прогнать по подделке боевого сайта, а файл можно, и проверяется тогда
+      # ровно тот код, который поедет в бой. Что именно он требует и почему
+      # ждёт — в шапке скрипта.
       - name: Smoke check
         if: steps.creds.outputs.ready == 'true'
         env:
@@ -150,11 +202,7 @@ jobs:
           # Адрес берём отсюда, а не константой в сценарии: константу забудут
           # поменять при смене домена, и смока начнёт проверять чужой сайт.
           VERCEL_ENV_FILE: .vercel/.env.production.local
-          # Признак свежести. После выката Vercel сбрасывает кеш CDN, и age
-          # начинает считаться заново, поэтому у только что выкаченной страницы
-          # он единицы секунд. Большой age — ответ, переживший выкат: показывают
-          # старое. Порог с запасом на прогрев и на повторные попытки curl.
-          MAX_AGE_SECONDS: "120"
+          BUILD_SHA: ${{ steps.target.outputs.sha }}
         run: |
           set -euo pipefail
 
@@ -169,57 +217,5 @@ jobs:
             echo "::error::В $VERCEL_ENV_FILE нет NEXT_PUBLIC_SITE_URL — проверять смоку не по чему"
             exit 1
           fi
-          echo "Боевой адрес: $base"
 
-          fail=0
-          note() { echo "  ✗ $*"; fail=1; }
-          # `|| true` обязателен: при set -o pipefail отсутствующий заголовок
-          # делает grep неуспешным, а set -e убивает шаг молча — без единой
-          # строки о причине. Ровно это и ловили на прогоне против чужого адреса.
-          hdr() { grep -i "^$2:" "$1" | tail -n1 | sed 's/^[^:]*:[ \t]*//' | tr -d '\r' || true; }
-
-          # 1. Четыре локали: ровно 200, наша страница, свежий ответ.
-          for loc in uk en he ro; do
-            url="$base/$loc"
-            head=$(mktemp); body=$(mktemp)
-            code=$(curl -sS -o "$body" -D "$head" -w '%{http_code}' \
-                   --max-time 30 --retry 2 --retry-delay 5 "$url" || true)
-            code=${code:-000}
-            age=$(hdr "$head" age); cache=$(hdr "$head" x-vercel-cache); vid=$(hdr "$head" x-vercel-id)
-            echo "GET $url -> $code (x-vercel-cache: ${cache:-—}, age: ${age:-0}, x-vercel-id: ${vid:-—})"
-
-            [ "$code" = "200" ] || note "$url: ждали 200, получили $code"
-
-            # Маркер нашей страницы: canonical с нашим доменом И этой локалью.
-            # Ни заглушка хостинга, ни страница ошибки Vercel такого не отдадут.
-            marker="rel=\"canonical\" href=\"$base/$loc\""
-            grep -qF "$marker" "$body" \
-              || note "$url: в теле нет маркера [$marker] — это не наша страница"
-
-            case "${age:-0}" in ''|*[!0-9]*) age=0 ;; esac
-            [ "${age:-0}" -le "$MAX_AGE_SECONDS" ] \
-              || note "$url: age=${age}s — ответ пережил выкат (порог ${MAX_AGE_SECONDS}s), показывают не свежее"
-          done
-
-          # 2. Апекс: 308 на /uk и не больше двух переходов до 200.
-          #    Петля редиректов на домене — самая дорогая поломка: сайта нет,
-          #    а все четыре локали по отдельности при этом живые.
-          apex_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$base/" || true)
-          apex_to=$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 30 "$base/" || true)
-          echo "GET $base/ -> ${apex_code:-000} -> ${apex_to:-—}"
-          [ "${apex_code:-000}" = "308" ] || note "$base/: ждали 308, получили ${apex_code:-000}"
-          [ "$apex_to" = "$base/uk" ] || note "$base/: ждали переход на $base/uk, получили '${apex_to:-—}'"
-
-          chain=$(curl -sS -L -o /dev/null --max-redirs 5 \
-                  -w '%{num_redirects} %{http_code} %{url_effective}' --max-time 30 "$base/" || true)
-          set -- ${chain:-9 000 —}
-          echo "Цепочка апекса: переходов=$1, итог=$2 ($3)"
-          [ "$1" -le 2 ] || note "$base/: $1 переходов до конца — похоже на петлю редиректов"
-          [ "$2" = "200" ] || note "$base/: цепочка закончилась кодом $2, а не 200"
-          [ "$3" = "$base/uk" ] || note "$base/: цепочка привела на '$3', а не на $base/uk"
-
-          if [ "$fail" -ne 0 ]; then
-            echo "::error::Смока не прошла: боевой сайт отдаёт не то, что мы выкатили (подробности выше)"
-            exit 1
-          fi
-          echo "Смока прошла: $base — 4 локали по 200 с нашим canonical, апекс 308 на /uk"
+          ./scripts/smoke-production.sh "$base" "$BUILD_SHA"
