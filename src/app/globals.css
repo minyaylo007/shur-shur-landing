@@ -161,9 +161,23 @@ body {
    off nothing would ever add `.is-revealed`, and an unguarded rule
    would leave every heading permanently pushed out of its mask.
    ------------------------------------------------------------ */
+/* Both boxes below are MASKS for the reveal, and both are line-height boxes:
+   line-height 0.96 makes the box shorter than the type. In Unbounded at 83px
+   the ink of Й/Ă reaches 10px ABOVE the box top and the comma under Ț/Ș 19px
+   BELOW its bottom, so clipping at the box edge beheads the breve and cuts the
+   comma off. The masks therefore clip with slack, closed only while letters
+   travel. `overflow-clip-margin` costs no layout — nothing moves. */
 .char-line {
   display: block;
-  overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: 0.28em;
+}
+
+/* The per-word mask is the one the reveal rides on, so it is the one whose
+   slack closes and reopens. Open is the DEFAULT, so no-JS needs no rule. */
+.char-mask {
+  overflow: clip;
+  overflow-clip-margin: var(--char-mask-slack, 0.28em);
 }
 
 .char {
@@ -175,9 +189,29 @@ html:not(.no-js) .char {
   will-change: transform;
 }
 
+/* Letters wait below the line, so the mask has to clip exactly at the box
+   edge until they arrive — otherwise their tops show through the slack. */
+html:not(.no-js) .char-mask {
+  --char-mask-slack: 0px;
+}
+
 html:not(.no-js) .is-revealed .char {
   animation: char-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   animation-delay: calc(var(--char-index, 0) * 26ms + var(--char-lead, 0ms));
+}
+
+/* Each word reopens its own slack when ITS last letter is all but home (450ms
+   into a 900ms rise, where the ease has covered ~94%), so the diacritics
+   rejoin the letter mid-flight. `--mask-index` is that letter's index. */
+html:not(.no-js) .is-revealed .char-mask {
+  animation: mask-open 1ms linear forwards;
+  animation-delay: calc(var(--mask-index, 0) * 26ms + var(--char-lead, 0ms) + 450ms);
+}
+
+@keyframes mask-open {
+  to {
+    --char-mask-slack: 0.28em;
+  }
 }
 
 /* The hero plays on mount rather than on scroll, so it waits out the
@@ -259,6 +293,14 @@ h1.kinetic {
   html:not(.no-js) .char,
   html:not(.no-js) .is-revealed .char {
     transform: none;
+    animation: none;
+  }
+
+  /* Nothing ever travels, so the mask has nothing to hide: full slack, and
+     the diacritics are visible from the first frame. */
+  html:not(.no-js) .char-mask,
+  html:not(.no-js) .is-revealed .char-mask {
+    --char-mask-slack: 0.28em;
     animation: none;
   }
 

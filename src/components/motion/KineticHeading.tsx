@@ -90,37 +90,46 @@ export function KineticHeading({
         <span key={lineIndex} className="char-line">
           <span className="sr-only">{line}</span>
           <span aria-hidden="true">
-            {line.split(" ").map((word, wordIndex, words) => (
+            {line.split(" ").map((word, wordIndex, words) => {
+              const trailingSpace = wordIndex < words.length - 1;
+              /* The word's own characters plus the space that follows it: the
+                 LAST of them decides when this word's mask reopens its slack
+                 (see `mask-open` in globals.css). */
+              const maskIndex = charIndex + word.length + (trailingSpace ? 1 : 0) - 1;
+
               /* Every char is its own inline-block, so the WORD decides their
                  order: under dir="rtl" a Latin word would come out mirrored
                  ("SMM" → "MMS"). `dir="auto"` resolves each word from its own
                  first strong character — Hebrew words stay RTL, Latin and
                  numeric ones go LTR. In an LTR document it resolves to the
                  direction those words already had, so uk/en/ro are untouched. */
-              <span
-                key={wordIndex}
-                dir="auto"
-                className="inline-block overflow-hidden align-bottom whitespace-nowrap"
-              >
-                {word.split("").map((char) => (
-                  <span
-                    key={charIndex}
-                    className="char"
-                    style={{ "--char-index": charIndex++ } as React.CSSProperties}
-                  >
-                    {char}
-                  </span>
-                ))}
-                {wordIndex < words.length - 1 ? (
-                  <span
-                    className="char"
-                    style={{ "--char-index": charIndex++ } as React.CSSProperties}
-                  >
-                    &nbsp;
-                  </span>
-                ) : null}
-              </span>
-            ))}
+              return (
+                <span
+                  key={wordIndex}
+                  dir="auto"
+                  className="char-mask inline-block align-bottom whitespace-nowrap"
+                  style={{ "--mask-index": maskIndex } as React.CSSProperties}
+                >
+                  {word.split("").map((char) => (
+                    <span
+                      key={charIndex}
+                      className="char"
+                      style={{ "--char-index": charIndex++ } as React.CSSProperties}
+                    >
+                      {char}
+                    </span>
+                  ))}
+                  {trailingSpace ? (
+                    <span
+                      className="char"
+                      style={{ "--char-index": charIndex++ } as React.CSSProperties}
+                    >
+                      &nbsp;
+                    </span>
+                  ) : null}
+                </span>
+              );
+            })}
           </span>
         </span>
       ))}
