@@ -136,7 +136,11 @@ body {
   font-family: var(--font-display), var(--font-body), sans-serif;
   text-transform: uppercase;
   letter-spacing: var(--display-tracking);
-  line-height: 0.96;
+  /* Not 0.96: with the diacritics whole (see `.char-line`), 0.96 left them
+     nowhere to go — the comma under Ț in CONȚINUT landed inside CARE below it.
+     1.12 is the tightest value at which no two glyphs of neighbouring lines
+     share ink in any of the four locales (worst pair left: ro at 390px, +1px). */
+  line-height: 1.12;
   text-wrap: balance;
 }
 
@@ -154,10 +158,11 @@ body {
 /* Per-char reveal scaffolding (GSAP animates .char).
 
    Both boxes below are MASKS for the reveal, and both are line-height boxes:
-   `.display-type` sets line-height 0.96, so the box is shorter than the type
-   it holds. In Unbounded at 83px the ink of Й/Ă reaches 10px ABOVE the box
-   top and the comma under Ț/Ș 19px BELOW the box bottom — clipping at the box
-   edge beheads the breve and cuts the comma off.
+   `.display-type` sets line-height 1.12, which is still shorter than the type
+   it holds (93px of box against 103px of ascent+descent). In Unbounded at 83px
+   the ink of Й/Ă reaches 4px ABOVE the box top and the comma under Ț/Ș 12px
+   BELOW the box bottom — clipping at the box edge beheads the breve and cuts
+   the comma off.
 
    So the masks clip with slack (`--char-mask-slack`), and KineticHeading
    closes that slack to 0 for exactly as long as the letters are travelling.
