@@ -1,6 +1,7 @@
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
-import { site } from "@/lib/site";
+import { messengers, site } from "@/lib/site";
+import { isChannelReady } from "@/lib/channels";
 import { AuditForm } from "@/components/forms/AuditForm";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Reveal } from "@/components/motion/Reveal";
@@ -22,7 +23,8 @@ import { InstagramIcon, PhoneIcon, TelegramIcon } from "@/components/ui/icons";
  *    channels below, one persistent control (ContactBar), and the footer.
  *
  * The channel list is deliberately short. Phone first, because it was the one
- * thing the old site never showed; then the two the agency actually watches.
+ * thing the old site never showed; then the accounts the agency actually
+ * watches — each of them only while `messengers[key].ready` says it exists.
  * WhatsApp and Viber reach the same number and live in the ContactBar, so
  * repeating them here would just be four near-identical rows.
  */
@@ -33,21 +35,27 @@ export function AuditCta({
   locale: Locale;
   dict: Dictionary["audit"];
 }) {
+  // The phone is always real; the two accounts are only listed while the
+  // readiness flag in lib/site says they answer. This list used to read
+  // site.socials.* straight through, so it kept printing a Telegram handle
+  // that the ContactBar had already filtered out as dead.
   const channels = [
-    { href: site.phone.tel, icon: PhoneIcon, label: site.phone.display, external: false },
+    { href: site.phone.tel, icon: PhoneIcon, label: site.phone.display, external: false, ready: true },
     {
-      href: site.socials.telegram,
+      href: messengers.telegram.href,
       icon: TelegramIcon,
       label: site.socials.telegramHandle,
       external: true,
+      ready: isChannelReady("telegram"),
     },
     {
       href: site.socials.instagram,
       icon: InstagramIcon,
       label: site.socials.instagramHandle,
       external: true,
+      ready: isChannelReady("instagram"),
     },
-  ];
+  ].filter((channel) => channel.ready);
 
   return (
     <section id="contact" className="scroll-mt-24 bg-paper-50 py-20 md:py-28">

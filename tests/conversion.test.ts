@@ -7,6 +7,7 @@ import { he } from "../src/dictionaries/he";
 import { ro } from "../src/dictionaries/ro";
 import { locales } from "../src/lib/i18n";
 import { site, messengers } from "../src/lib/site";
+import { MESSENGER_ORDER, isChannelReady, localeChannels } from "../src/lib/channels";
 
 /*
  * Conversion path — one contact interaction, one form, one endpoint.
@@ -53,9 +54,69 @@ describe("lib/site — the one real phone number (brief §5)", () => {
     expect(read("../src/lib/site.ts")).not.toContain("380000000000");
   });
 
-  it("every channel is launch-ready, so no dead deep-link renders", () => {
-    for (const channel of Object.values(messengers)) expect(channel.ready).toBe(true);
+  it("the Instagram DM deep-link is the official ig.me form", () => {
     expect(site.socials.instagramDm).toBe("https://ig.me/m/shur.shur.agency");
+  });
+});
+
+/*
+ * The readiness contract, and why it is tested by behaviour and not by a
+ * comment. `ready: false` means «this account is not real yet, render it
+ * nowhere». Before 15.09.2026 exactly one of the three components that print a
+ * messenger link honoured it: the footer and the contact section read
+ * `site.socials.*` directly, so a Telegram username that was never registered
+ * sat on the live page in two places — and first in line for a Ukrainian
+ * visitor in the third. These tests fail if any render site starts reaching
+ * around the gate again.
+ */
+describe("readiness contract — a channel that is not ready renders NOWHERE", () => {
+  const renderSites = [
+    ["contact bar", "../src/components/conversion/ContactBar.tsx"],
+    ["footer", "../src/components/layout/Footer.tsx"],
+    ["contact section", "../src/components/sections/AuditCta.tsx"],
+  ] as const;
+
+  it("lib/channels drops every not-ready channel, in every locale", () => {
+    for (const locale of locales) {
+      const rendered = localeChannels(locale).map((channel) => channel.key);
+      const expected = MESSENGER_ORDER[locale].filter((key) => messengers[key].ready);
+      // Same members, same order — the gate filters, it does not reshuffle.
+      expect(rendered).toEqual(expected);
+      for (const key of rendered) expect(messengers[key].ready).toBe(true);
+    }
+  });
+
+  it("isChannelReady is the flag itself, not a copy that can drift", () => {
+    for (const key of Object.keys(messengers) as (keyof typeof messengers)[]) {
+      expect(isChannelReady(key)).toBe(messengers[key].ready);
+    }
+  });
+
+  it("a channel that is not ready leaks no href into any locale's list", () => {
+    const notReady = (Object.keys(messengers) as (keyof typeof messengers)[]).filter(
+      (key) => !messengers[key].ready,
+    );
+    for (const locale of locales) {
+      const hrefs = localeChannels(locale).map((channel) => channel.href);
+      for (const key of notReady) expect(hrefs).not.toContain(messengers[key].href);
+    }
+  });
+
+  it.each(renderSites)("%s takes hrefs through the gate, never site.socials", (_where, path) => {
+    const src = read(path);
+    expect(src).toMatch(/isChannelReady|localeChannels/);
+    // The raw constants are what the footer and the contact section used to
+    // print past the flag. `telegramHandle` (a label, inside a gated row) is
+    // deliberately still allowed — the \b stops it matching here.
+    expect(src).not.toMatch(/site\.socials\.telegram\b/);
+    expect(src).not.toMatch(/site\.socials\.whatsapp\b/);
+    expect(src).not.toMatch(/site\.socials\.viber\b/);
+    expect(src).not.toMatch(/https:\/\/t\.me\//);
+  });
+
+  it("telegram specifically: the username is unregistered, so it is not ready", () => {
+    // Flip this the day the client names a real channel — and only then.
+    expect(messengers.telegram.ready).toBe(false);
   });
 });
 
@@ -88,13 +149,17 @@ describe("ContactBar — ONE persistent control (brief §19)", () => {
   });
 
   it("orders channels by locale: uk → Telegram first, everyone else → WhatsApp first", () => {
-    const order = src.match(/const MESSENGER_ORDER[\s\S]*?\n\};/)?.[0] ?? "";
+    // The order moved to lib/channels when the footer, the contact section and
+    // the form's error state had to obey the same list. Wish order, before the
+    // readiness gate — hence the source of the table, not localeChannels().
+    const order = read("../src/lib/channels.ts").match(/const MESSENGER_ORDER[\s\S]*?\n\};/)?.[0] ?? "";
     expect(order).toMatch(/uk:\s*\["telegram"/);
     // Every non-Ukrainian locale must be listed explicitly and lead with WhatsApp.
     for (const code of locales.filter((l) => l !== "uk")) {
       expect(order).toMatch(new RegExp(`${code}:\\s*\\["whatsapp"`));
     }
-    expect(src).toMatch(/MESSENGER_ORDER\[locale\]/);
+    expect(read("../src/lib/channels.ts")).toMatch(/MESSENGER_ORDER\[locale\]/);
+    expect(src).toMatch(/localeChannels\(locale\)/);
   });
 
   it("the phone sits above the messengers — it is the channel v1 never showed", () => {
@@ -102,7 +167,7 @@ describe("ContactBar — ONE persistent control (brief §19)", () => {
   });
 
   it("filters channels by the ready flag (code guard, not a comment)", () => {
-    expect(src).toMatch(/\.filter\(\(channel\) => channel\.ready\)/);
+    expect(read("../src/lib/channels.ts")).toMatch(/\.filter\(isChannelReady\)/);
     expect(src).not.toContain("wa.me");
   });
 

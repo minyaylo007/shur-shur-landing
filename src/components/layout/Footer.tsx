@@ -1,5 +1,6 @@
 import type { Dictionary } from "@/dictionaries";
-import { site } from "@/lib/site";
+import { messengers, site } from "@/lib/site";
+import { isChannelReady } from "@/lib/channels";
 import { Logo } from "@/components/ui/Logo";
 import { FooterYear } from "./FooterYear";
 import { CherryIcon, InstagramIcon, PhoneIcon, TelegramIcon } from "@/components/ui/icons";
@@ -37,25 +38,33 @@ export function Footer({ nav, footer }: FooterProps) {
             <span className="font-display text-xs font-bold tracking-[0.18em] text-juice-300 uppercase">
               {footer.socials}
             </span>
-            <a
-              href={site.socials.instagram}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
-            >
-              <InstagramIcon className="size-4" />
-              {/* dir="ltr": keeps the "@" in front of the handle under RTL. */}
-              <span dir="ltr">{site.socials.instagramHandle}</span>
-            </a>
-            <a
-              href={site.socials.telegram}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
-            >
-              <TelegramIcon className="size-4" />
-              <span dir="ltr">{site.socials.telegramHandle}</span>
-            </a>
+            {/* Readiness is per account, so the same flag that gates the DM
+                deep-link gates the profile link: if the account is not real,
+                neither row may render. This block used to read site.socials.*
+                directly and shipped a dead t.me link past the flag. */}
+            {isChannelReady("instagram") ? (
+              <a
+                href={site.socials.instagram}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
+              >
+                <InstagramIcon className="size-4" />
+                {/* dir="ltr": keeps the "@" in front of the handle under RTL. */}
+                <span dir="ltr">{site.socials.instagramHandle}</span>
+              </a>
+            ) : null}
+            {isChannelReady("telegram") ? (
+              <a
+                href={messengers.telegram.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
+              >
+                <TelegramIcon className="size-4" />
+                <span dir="ltr">{site.socials.telegramHandle}</span>
+              </a>
+            ) : null}
           </div>
 
           {/* Brief §19: contacts repeated at the bottom, phone included. v1

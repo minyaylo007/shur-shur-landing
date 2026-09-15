@@ -3,16 +3,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
-import { messengers, site } from "@/lib/site";
-import {
-  ChatIcon,
-  CloseIcon,
-  InstagramIcon,
-  PhoneIcon,
-  TelegramIcon,
-  ViberIcon,
-  WhatsAppIcon,
-} from "@/components/ui/icons";
+import { site } from "@/lib/site";
+import { localeChannels } from "@/lib/channels";
+import { CHANNEL_ICONS, ChatIcon, CloseIcon, PhoneIcon } from "@/components/ui/icons";
 
 interface ContactBarProps {
   locale: Locale;
@@ -20,23 +13,6 @@ interface ContactBarProps {
   /** Accessible name for the phone row — the visible label is the number. */
   callLabel: string;
 }
-
-type ChannelKey = "telegram" | "whatsapp" | "instagram" | "viber";
-
-/**
- * Which messenger sits closest to the thumb, per locale. There is no geo-IP
- * here, so the page language stands in for the region: Ukrainian visitors get
- * Telegram first (≈92% weekly usage in Ukraine), everyone else — English,
- * Hebrew, Romanian — gets WhatsApp first, which dominates in Israel, Romania
- * and most of the rest of our market. Spelled out per locale on purpose: a new
- * language must state its own preference instead of inheriting a `!== "uk"`.
- */
-const MESSENGER_ORDER: Record<Locale, readonly ChannelKey[]> = {
-  uk: ["telegram", "instagram", "whatsapp", "viber"],
-  en: ["whatsapp", "telegram", "instagram", "viber"],
-  he: ["whatsapp", "telegram", "instagram", "viber"],
-  ro: ["whatsapp", "telegram", "instagram", "viber"],
-};
 
 /**
  * ONE persistent contact control (brief §19).
@@ -72,17 +48,10 @@ export function ContactBar({ locale, dict, callLabel }: ContactBarProps) {
   const firstLinkRef = useRef<HTMLAnchorElement>(null);
   const panelId = useId();
 
-  const channels = {
-    telegram: { ...messengers.telegram, label: dict.channels.telegram, Icon: TelegramIcon },
-    whatsapp: { ...messengers.whatsapp, label: dict.channels.whatsapp, Icon: WhatsAppIcon },
-    instagram: { ...messengers.instagram, label: dict.channels.instagram, Icon: InstagramIcon },
-    viber: { ...messengers.viber, label: dict.channels.viber, Icon: ViberIcon },
-  };
-  // Only launch-ready channels render — placeholder-numbered deep-links
-  // (ready:false in lib/site) would silently swallow real enquiries.
-  const order = MESSENGER_ORDER[locale]
-    .map((key) => channels[key])
-    .filter((channel) => channel.ready);
+  // Locale order minus every channel that is not launch-ready: the ordering
+  // and the readiness gate both live in lib/channels, so the footer, the
+  // contact section and the form's error state cannot drift away from them.
+  const order = localeChannels(locale);
 
   // Scroll gate: reveal only after the hero (#top) fully leaves the viewport.
   useEffect(() => {
@@ -170,14 +139,17 @@ export function ContactBar({ locale, dict, callLabel }: ContactBarProps) {
                 <span dir="ltr">{site.phone.display}</span>
               </a>
             </li>
-            {order.map(({ href, label, Icon }) => (
-              <li key={label}>
-                <a href={href} target="_blank" rel="noopener noreferrer" className={rowClass}>
-                  <Icon className="size-4 shrink-0 text-juice-500" />
-                  {label}
-                </a>
-              </li>
-            ))}
+            {order.map(({ key, href }) => {
+              const Icon = CHANNEL_ICONS[key];
+              return (
+                <li key={key}>
+                  <a href={href} target="_blank" rel="noopener noreferrer" className={rowClass}>
+                    <Icon className="size-4 shrink-0 text-juice-500" />
+                    {dict.channels[key]}
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
