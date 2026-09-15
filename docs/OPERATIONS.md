@@ -227,8 +227,19 @@ git clone (или session.sh clone)
   коммит, который проверил CI. На pull request и форках деплой не запускается.
 - **Вручную:** GitHub → Actions → Deploy → Run workflow, поле `ref` — коммит, тег или
   ветка. Этим же способом делается откат.
-- Шаги: `vercel pull` → `vercel build --prod` → `vercel deploy --prebuilt --prod` →
-  проверка ответа `/uk` (падает только на 5xx или отсутствии ответа).
+- Шаги: `vercel pull` → `vercel build --prod` (в страницы вшивается отпечаток сборки —
+  meta `x-build-sha` с SHA коммита, см. `src/lib/build.ts`) → проверка, что отпечаток
+  попал во все четыре предсобранные локали → `vercel deploy --prebuilt --prod` →
+  смока боевого домена `scripts/smoke-production.sh`.
+- **Смока выката** (`scripts/smoke-production.sh <адрес> <SHA>`) требует от боевого
+  домена: четыре локали ровно по 200, в теле каждой наш `canonical`, на каждой
+  отпечаток ИМЕННО выкаченного коммита, апекс — 308 на `/uk` без петли.
+  Ответ «страница наша, но сборка предыдущая» — переходное состояние края Vercel
+  (кеш PoP сбрасывается не одномоментно): такой адрес перепрашивается раз в 15 с,
+  суммарно не дольше 4 минут, и только потом краснеет. Ответ «не 200» или «не наша
+  страница» ожиданием не лечится и валит выкат сразу. Обе ручки — `SETTLE_BUDGET_SECONDS`
+  и `SETTLE_DELAY_SECONDS`; сама смока проверяется на подделке края:
+  `FAKE_SCENARIO=converge|stuck|foreign|old-build node scripts/fake-edge.mjs`.
 - Работает в окружении GitHub `production` — в Settings → Environments туда можно
   добавить обязательное подтверждение перед выкатом.
 - Нужны секрет `VERCEL_TOKEN` и переменные `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`

@@ -11,6 +11,7 @@ import {
 import { fontClasses } from "../fonts";
 import { getDictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
+import { buildSha, BUILD_SHA_META } from "@/lib/build";
 import { SmoothScroll } from "@/components/motion/SmoothScroll";
 import "../globals.css";
 
@@ -64,6 +65,13 @@ export async function generateMetadata({ params }: LayoutParams): Promise<Metada
       description: dict.meta.description,
       images: ["/og-card.jpg"],
     },
+    /* Отпечаток сборки — единственное, по чему смока выката может ИЗМЕРИТЬ,
+       что край отдаёт именно тот коммит, который мы только что выкатили, а не
+       пережившую выкат копию предыдущего (см. lib/build). Живёт в общем
+       layout, значит одинаково стоит во всех четырёх локалях; человеку не
+       виден — это meta в <head>. Пустой объект, когда переменной сборки нет:
+       вне боевого выката отпечатывать нечего. */
+    other: buildSha ? { [BUILD_SHA_META]: buildSha } : {},
   };
 }
 
