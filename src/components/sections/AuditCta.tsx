@@ -31,9 +31,14 @@ import { InstagramIcon, PhoneIcon, TelegramIcon } from "@/components/ui/icons";
 export function AuditCta({
   locale,
   dict,
+  channelLabels,
+  callLabel,
 }: {
   locale: Locale;
   dict: Dictionary["audit"];
+  /** Passed through to the form: the channels it offers when sending fails. */
+  channelLabels: Dictionary["contactBar"]["channels"];
+  callLabel: string;
 }) {
   // The phone is always real; the two accounts are only listed while the
   // readiness flag in lib/site says they answer. This list used to read
@@ -69,6 +74,8 @@ export function AuditCta({
                 locale={locale}
                 dict={dict.form}
                 delivery={dict.delivery}
+                channelLabels={channelLabels}
+                callLabel={callLabel}
               />
             </div>
           </Reveal>

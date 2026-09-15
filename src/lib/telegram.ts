@@ -45,12 +45,33 @@ export function formatLeadMessage(lead: LeadMessage): string {
   return lines.join("\n");
 }
 
+/**
+ * The bot was never wired up in this environment — a different thing from
+ * Telegram being down, and the only one of the two an operator can fix. Both
+ * used to reach the log as «delivery failed», so an environment with no
+ * credentials at all read like an outage. Carries the NAMES of the missing
+ * variables and nothing else: no value, no prefix, no length.
+ */
+export class TelegramNotConfiguredError extends Error {
+  readonly missing: readonly string[];
+
+  constructor(missing: readonly string[]) {
+    super(`Telegram bot is not configured: missing ${missing.join(", ")}`);
+    this.name = "TelegramNotConfiguredError";
+    this.missing = missing;
+  }
+}
+
 export async function sendLeadToTelegram(lead: LeadMessage): Promise<void> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
-  if (!token || !chatId) {
-    throw new Error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars are required");
+  const missing = [
+    token ? null : "TELEGRAM_BOT_TOKEN",
+    chatId ? null : "TELEGRAM_CHAT_ID",
+  ].filter((name): name is string => name !== null);
+  if (missing.length > 0) {
+    throw new TelegramNotConfiguredError(missing);
   }
 
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {

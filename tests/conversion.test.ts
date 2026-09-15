@@ -74,6 +74,7 @@ describe("readiness contract — a channel that is not ready renders NOWHERE", (
     ["contact bar", "../src/components/conversion/ContactBar.tsx"],
     ["footer", "../src/components/layout/Footer.tsx"],
     ["contact section", "../src/components/sections/AuditCta.tsx"],
+    ["audit form error state", "../src/components/forms/AuditForm.tsx"],
   ] as const;
 
   it("lib/channels drops every not-ready channel, in every locale", () => {
@@ -278,7 +279,58 @@ describe("AuditForm — two fields, same pipeline (brief §20)", () => {
   });
 
   it("both inputs are pinned LTR — an @handle and a +380… are never RTL", () => {
-    expect(src.match(/dir="ltr"/g)?.length).toBe(2);
+    // Counted per input, not over the whole file: the error state pins the
+    // phone number LTR too, and that is a third legitimate dir="ltr".
+    const inputs = src.match(/<input[^>]*name="(?:igHandle|contact)"[\s\S]*?\/>/g) ?? [];
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) expect(input).toContain('dir="ltr"');
+  });
+
+  /*
+   * The error state. Every translation of `errorText` ends in a colon and
+   * promises a channel; until 15.09.2026 nothing was printed after it, and
+   * `errorTitle` existed in all four dictionaries but was rendered nowhere.
+   * With TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID still unset in production this
+   * is not a rare branch — it is the one every visitor reaches.
+   */
+  describe("failed delivery leaves a way out", () => {
+    const errorBranch = src.match(/status === "error" \? \([\s\S]*?\n      \) : null/)?.[0] ?? "";
+
+    it("the branch exists and shows the title that used to be dead copy", () => {
+      expect(errorBranch).not.toBe("");
+      expect(errorBranch).toContain("dict.errorTitle");
+      expect(errorBranch).toContain("dict.errorText");
+    });
+
+    it("something real follows the colon: the phone and the ready messengers", () => {
+      expect(errorBranch).toContain("site.phone.tel");
+      expect(errorBranch).toContain("fallbackChannels.map");
+      expect(src).toContain("localeChannels(locale)");
+      // Announced as one alert, not a lone red line.
+      expect(errorBranch).toContain('role="alert"');
+    });
+
+    it("there is always at least one live messenger to offer, in every locale", () => {
+      for (const locale of locales) {
+        expect(localeChannels(locale).length).toBeGreaterThan(0);
+      }
+      expect(site.phone.tel).toContain("tel:");
+    });
+
+    it("what the visitor typed survives the failure — only success clears it", () => {
+      // The error state renders INSIDE the form, so the inputs keep their
+      // values; the single reset lives in the success branch.
+      expect(src.match(/setIgHandle\(""\)/g)).toHaveLength(1);
+      expect(src.match(/setContact\(""\)/g)).toHaveLength(1);
+      expect(src).toContain("dict.retry");
+    });
+
+    it("every locale's error copy promises a channel and names the failure", () => {
+      for (const dict of allDicts) {
+        expect(dict.audit.form.errorText.trim().endsWith(":")).toBe(true);
+        expect(dict.audit.form.errorTitle.length).toBeGreaterThan(5);
+      }
+    });
   });
 });
 
@@ -318,5 +370,15 @@ describe("wiring — one conversion destination", () => {
     expect(read("../src/app/api/lead/route.ts")).toContain(
       '"[lead] silent drop:", reason, "kind:", parsed.data.kind',
     );
+  });
+
+  it("the route tells «bot not configured» apart from «Telegram failed»", () => {
+    const route = read("../src/app/api/lead/route.ts");
+    expect(route).toContain("TelegramNotConfiguredError");
+    expect(route).toContain("NOT CONFIGURED");
+    expect(route).toContain("Telegram delivery failed");
+    // Names of the env vars are printed by the error object; no value of
+    // either variable may appear in the route at all.
+    expect(route).not.toMatch(/process\.env\.TELEGRAM/);
   });
 });

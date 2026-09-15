@@ -51,7 +51,12 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         <ProcessResult locale={locale} dict={dict.process} />
         <Services dict={dict.services} />
         <Trust dict={dict.trust} />
-        <AuditCta locale={locale} dict={dict.audit} />
+        <AuditCta
+          locale={locale}
+          dict={dict.audit}
+          channelLabels={dict.contactBar.channels}
+          callLabel={dict.nav.callLabel}
+        />
       </main>
       <TapeDivider color="black" decor="clip" flip />
       <Footer nav={dict.nav} footer={dict.footer} />
