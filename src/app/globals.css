@@ -151,7 +151,16 @@ body {
   letter-spacing: 0.005em;
 }
 
-/* Per-char reveal scaffolding (GSAP animates .char) */
+/* ------------------------------------------------------------
+   Per-char reveal. v3 (§11): this was a GSAP timeline; it is now a
+   CSS keyframe, and KineticHeading only adds `.is-revealed` from an
+   IntersectionObserver. The stagger is --char-index * 26ms, matching
+   the old `stagger: 0.026`.
+
+   The hidden start state is guarded by `html:not(.no-js)`: with JS
+   off nothing would ever add `.is-revealed`, and an unguarded rule
+   would leave every heading permanently pushed out of its mask.
+   ------------------------------------------------------------ */
 .char-line {
   display: block;
   overflow: hidden;
@@ -159,7 +168,32 @@ body {
 
 .char {
   display: inline-block;
+}
+
+html:not(.no-js) .char {
+  transform: translateY(112%) rotate(4deg);
   will-change: transform;
+}
+
+html:not(.no-js) .is-revealed .char {
+  animation: char-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--char-index, 0) * 26ms + var(--char-lead, 0ms));
+}
+
+/* The hero plays on mount rather than on scroll, so it waits out the
+   same 0.15s the GSAP version used before the first character moves. */
+.kinetic h1,
+h1.kinetic {
+  --char-lead: 150ms;
+}
+
+@keyframes char-rise {
+  from {
+    transform: translateY(112%) rotate(4deg);
+  }
+  to {
+    transform: translateY(0) rotate(0deg);
+  }
 }
 
 /* Reveal-on-scroll (IO toggles .is-inview) */
@@ -183,7 +217,8 @@ body {
    JS-driven choreography must degrade to readable static layout.
    ============================================================ */
 
-/* Reveal-on-scroll baseline hides content → force it visible. */
+/* Reveal-on-scroll baseline hides content → force it visible. The
+   per-char rule above is already scoped to html:not(.no-js). */
 .no-js .reveal {
   opacity: 1 !important;
   transform: none !important;
@@ -216,6 +251,15 @@ body {
   .kinetic.is-inview {
     transition: none;
     letter-spacing: var(--display-tracking);
+  }
+
+  /* Reduced motion: the characters are simply THERE. This replaces the
+     `gsap.matchMedia("(prefers-reduced-motion: no-preference)")` gate,
+     and like it, it is live — flipping the OS setting needs no reload. */
+  html:not(.no-js) .char,
+  html:not(.no-js) .is-revealed .char {
+    transform: none;
+    animation: none;
   }
 
   *,

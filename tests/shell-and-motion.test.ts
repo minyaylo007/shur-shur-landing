@@ -75,6 +75,60 @@ describe("shell — layout", () => {
   });
 });
 
+describe("shell — language switcher (v3 §2)", () => {
+  const src = read("../src/components/layout/LanguageSwitcher.tsx");
+
+  it("is a disclosure, not a permanent row of four", () => {
+    expect(src).toContain("aria-expanded");
+    expect(src).toContain("aria-controls");
+    expect(src).toContain('aria-haspopup="listbox"');
+    expect(src).toContain('role="listbox"');
+    expect(src).toContain('role="option"');
+    expect(src).toContain("aria-selected");
+  });
+
+  it("names languages in their own language and shows no flag", () => {
+    expect(src).toContain("localeNames");
+    const i18n = read("../src/lib/i18n.ts");
+    for (const autonym of ["Українська", "English", "עברית", "Română"]) {
+      expect(i18n).toContain(autonym);
+    }
+    // A flag is a country, not a language — and Hebrew, English and Romanian
+    // are each spoken in more than one of them.
+    expect(src).not.toMatch(/[\u{1F1E6}-\u{1F1FF}]/u);
+  });
+
+  it("keeps the path AND the query string — a campaign UTM survives the switch", () => {
+    expect(src).toContain("useSearchParams");
+    expect(src).toMatch(/searchParams\?\.toString\(\)/);
+    expect(src).toMatch(/`\/\$\{code\}\$\{rest\}/);
+  });
+
+  it("remembers a manual choice in both a cookie and localStorage", () => {
+    expect(src).toContain("localeStorageKey");
+    expect(src).toContain("localStorage.setItem");
+    expect(src).toContain("document.cookie");
+  });
+
+  it("works from the keyboard: roving focus, Escape, outside click, focus return", () => {
+    expect(src).toContain('"ArrowDown"');
+    expect(src).toContain('"ArrowUp"');
+    expect(src).toContain('"Home"');
+    expect(src).toContain('"End"');
+    expect(src).toContain('"Escape"');
+    expect(src).toContain("pointerdown");
+    expect(src).toContain("focusin");
+  });
+
+  it("the trigger clears the 44px touch floor", () => {
+    expect(src).toContain("min-h-11");
+  });
+
+  it("a modified click still opens in a new tab instead of being swallowed", () => {
+    expect(src).toMatch(/metaKey|ctrlKey/);
+  });
+});
+
 describe("motion discipline (brief §14)", () => {
   const motionDir = srcDir("../src/components/motion");
   const motionFiles = readdirSync(motionDir);
@@ -119,26 +173,49 @@ describe("motion discipline (brief §14)", () => {
 
   it("KineticHeading plays once and is gated on a LIVE reduced-motion query", () => {
     const src = read("../src/components/motion/KineticHeading.tsx");
-    expect(src).toContain("gsap.matchMedia()");
-    expect(src).toContain('mm.add("(prefers-reduced-motion: no-preference)"');
-    expect(src).toContain("once: true");
+    // v3 §11: the same behaviour, without the 124 KB. Two IntersectionObservers
+    // replace the GSAP timeline; the reveal one unobserves after it fires, which
+    // is what `once: true` used to mean.
+    expect(src).toContain("IntersectionObserver");
+    expect(src).toContain("unobserve");
+    /* The reduced-motion gate moved from JS into the stylesheet, where it is
+       live for free: flipping the OS setting needs no reload and no listener,
+       which is exactly what `gsap.matchMedia()` was paying bytes for. */
+    const css = read("../src/app/globals.css");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(css).toMatch(/html:not\(\.no-js\) \.is-revealed \.char[\s\S]{0,80}animation: none/);
     // dir="auto" per word: without it a Latin word renders mirrored in Hebrew.
     expect(src).toContain('dir="auto"');
   });
 
-  it("Lenis starts only when motion is welcome and hands focus to anchor targets", () => {
+  it("§11: smooth scroll is the browser's own, and anchors still take focus", () => {
     const src = read("../src/components/motion/SmoothScroll.tsx");
-    expect(src).toContain('mm.add("(prefers-reduced-motion: no-preference)"');
+    // Lenis was itself a mild form of the scroll hijacking §14 rules out: it
+    // replaced the wheel with a lerp. The CSS property does the same job.
+    expect(src).toContain("scrollIntoView");
     expect(src).toContain("focus({ preventScroll: true })");
+    expect(read("../src/app/globals.css")).toContain("scroll-behavior: smooth");
   });
 
-  it("no dependency was added for visual effects — gsap + lenis only", () => {
+  it("§11: neither GSAP nor Lenis is imported anywhere, in any casing", () => {
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+        entry.isDirectory()
+          ? walk(`${dir}/${entry.name}`)
+          : [readFileSync(`${dir}/${entry.name}`, "utf8")],
+      );
+    for (const file of walk(srcDir("../src"))) {
+      // Comments explaining what was removed are fine; imports are not.
+      expect(file).not.toMatch(/from\s+["'](gsap|lenis)/i);
+      expect(file).not.toMatch(/require\(["'](gsap|lenis)/i);
+    }
+  });
+
+  it("no dependency ships for visual effects at all", () => {
     const pkg = JSON.parse(read("../package.json")) as {
       dependencies: Record<string, string>;
     };
     expect(Object.keys(pkg.dependencies).sort()).toEqual([
-      "gsap",
-      "lenis",
       "next",
       "react",
       "react-dom",

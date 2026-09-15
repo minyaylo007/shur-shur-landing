@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
 import { leadSchema } from "@/lib/validation";
+import { track } from "@/lib/analytics";
 import { CherryIcon } from "@/components/ui/icons";
 
 type Status = "idle" | "submitting" | "success" | "error";
@@ -92,7 +93,11 @@ export function AuditForm({ locale, dict, delivery }: AuditFormProps) {
         signal: AbortSignal.timeout(15000),
       });
       const data = (await response.json().catch(() => null)) as { ok?: boolean } | null;
-      setStatus(response.ok && data?.ok ? "success" : "error");
+      const ok = response.ok && data?.ok === true;
+      /* §12: the page's second conversion. Fired on the ACCEPTED submission,
+         not on the click — a rejected or timed-out request is not a lead. */
+      if (ok) track({ name: "audit_submit", locale, placement: "contact_section" });
+      setStatus(ok ? "success" : "error");
     } catch {
       setStatus("error");
     }

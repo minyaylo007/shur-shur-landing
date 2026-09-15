@@ -121,8 +121,13 @@ describe("v2 pruning — removed sections took their CSS with them", () => {
     }
   });
 
-  it("stays under 250 lines — v1 shipped 342 (brief §26: less CSS to parse)", () => {
-    expect(css.split("\n").length).toBeLessThan(250);
+  it("stays under 280 lines — v1 shipped 342 (brief §26: less CSS to parse)", () => {
+    /* The v2 budget was 250. v3 §11 deliberately spent ~25 lines of it: the
+       per-char reveal that used to be a GSAP timeline is now a keyframe, and
+       its reduced-motion gate a media query. The trade is ~25 lines of CSS
+       against ~124 KB gzip of JavaScript, which is why the ceiling moved
+       instead of the feature. */
+    expect(css.split("\n").length).toBeLessThan(280);
   });
 });
 

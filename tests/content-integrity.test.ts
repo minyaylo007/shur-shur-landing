@@ -138,32 +138,42 @@ describe("social proof is verbatim, not manufactured (brief §28)", () => {
 });
 
 describe("portfolio data (brief §7–§13)", () => {
-  it("curates four groups, each with something in it", () => {
-    expect(workGroupOrder).toEqual(["beauty", "food", "bridal", "stories"]);
+  /* v3 §9: the re-synced Drive folder added whole industries the site could
+     not show before, so the clusters are now by INDUSTRY rather than by
+     format. A visitor recognises their own business in a row of tiles. */
+  it("curates five industry groups, each with something in it", () => {
+    expect(workGroupOrder).toEqual(["beauty", "food", "fashion", "interior", "estate"]);
     for (const group of workGroupOrder) {
       expect(itemsInGroup(group).length).toBeGreaterThan(0);
     }
-    // §9: curated, not an archive dump.
-    expect(workItems.length).toBeLessThanOrEqual(20);
+    // §9: curated, not an archive dump — 30 of the 43 shared files.
+    expect(workItems.length).toBeLessThanOrEqual(32);
   });
 
-  it("every group key has a label and a note in every locale", () => {
+  it("every group key is a short one-word chip in every locale", () => {
     for (const dict of allDicts) {
       for (const group of workGroupOrder) {
-        expect(dict.work.groups[group].label.length).toBeGreaterThan(2);
-        expect(dict.work.groups[group].note.length).toBeGreaterThan(5);
+        const label = dict.work.groups[group].label;
+        expect(label.length).toBeGreaterThan(2);
+        /* §8: a chip, not a sentence. Two words is the ceiling — English
+           «REAL ESTATE» has no shorter honest form — and there is no
+           punctuation, which is what turns a label into prose. */
+        expect(label.trim().split(/\s+/).length).toBeLessThanOrEqual(2);
+        expect(label.length).toBeLessThanOrEqual(16);
+        expect(label).not.toMatch(/[.,;:!?]/);
       }
     }
   });
 
-  it("§12: the STORIES cluster is framed as work made FOR clients, in every locale", () => {
+  it("§12: the portfolio is framed as work made FOR clients — once, in every locale", () => {
     /* These are finished client creatives with client branding inside the
-       frame. Without the framing they read as the agency's own promo. */
-    expect(uk.work.groups.stories.note).toContain("клієнт");
-    expect(en.work.groups.stories.note.toLowerCase()).toContain("client");
-    expect(he.work.groups.stories.note).toContain("לקוח");
+       frame. Without the framing they read as the agency's own promo. v3
+       says it ONE time for the whole section instead of under every row. */
+    expect(uk.work.note).toContain("клієнт");
+    expect(en.work.note.toLowerCase()).toContain("client");
+    expect(he.work.note).toContain("לקוח");
     // «clienți», not «clients» — match the stem, not an English spelling.
-    expect(ro.work.groups.stories.note.toLowerCase()).toContain("clien");
+    expect(ro.work.note.toLowerCase()).toContain("clien");
   });
 
   it("every tile is localized — alt text in all four locales, no placeholders", () => {
@@ -220,20 +230,39 @@ describe("services (brief §15) — grouped, nothing invented, nothing dropped",
       for (const item of dict.services.items) {
         expect(item.title.length).toBeGreaterThan(3);
         expect(item.tagline.length).toBeGreaterThan(10);
-        expect(item.points.length).toBeGreaterThanOrEqual(5);
+        expect(item.points.length).toBe(3);
       }
     }
   });
 
   it("the seven real v1 service lines all survive inside the four groups", () => {
     /* v1 shipped seven cards; §15 asked for 3–5 categories WITHOUT inventing
-       or deleting services. The bullet count is the proof that nothing was
-       quietly dropped on the way. */
+       or deleting services. v3 §8 then MERGED the 22 bullets into 12 — the
+       micro-services that used to be ranked alongside whole directions now
+       sit inside the line they belong to, so the proof that nothing was
+       dropped is no longer the count but the keywords below. */
     for (const dict of allDicts) {
       const points = dict.services.items.flatMap((i) => i.points);
-      expect(points.length).toBeGreaterThanOrEqual(20);
+      expect(points).toHaveLength(12);
       expect(new Set(points).size).toBe(points.length);
     }
+    const ukPoints = uk.services.items.flatMap((i) => i.points).join(" | ").toLowerCase();
+    for (const line of [
+      "мобільна", // mobile shoot — was its own v1 card
+      "модел", // model casting
+      "монтаж", // editing
+      "reels",
+      "стратегі", // strategy / consulting
+      "telegram ads",
+      "motion",
+      "сайт", // websites & shops
+      "бот", // chat-bots
+      "crm",
+    ]) {
+      expect(ukPoints).toContain(line);
+    }
+    // trust.facts still says «7 напрямів послуг» — that claim must stay true.
+    expect(uk.trust.facts[1]).toEqual({ value: "7", label: "напрямів послуг" });
   });
 
   it("the disclosure is HTML, not a scroll-jacking track (brief §14)", () => {

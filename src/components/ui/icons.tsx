@@ -109,22 +109,6 @@ export function WhatsAppIcon(props: IconProps) {
   );
 }
 
-export function ViberIcon(props: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <path
-        d="M12 2.5c5.5 0 9.5 2.4 9.5 8.6 0 5.3-2.8 7.9-6.8 8.5l-3.1 3.1v-3.1c-4.3-.5-9.1-2.6-9.1-8.5C2.5 4.9 6.5 2.5 12 2.5Z"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M9.1 7.3c.3-.1.6 0 .8.3l1 1.4c.2.3.2.6-.1.9l-.6.5c.5 1 1.4 1.9 2.4 2.4l.5-.6c.3-.3.6-.3.9-.1l1.4 1c.3.2.4.5.3.8-.3.9-1.2 1.5-2.1 1.3-2.8-.7-5-2.9-5.7-5.7-.2-.9.4-1.8 1.2-2.2Z"
-        fill="currentColor"
-        stroke="none"
-      />
-    </svg>
-  );
-}
-
 export function JuiceDrop(props: IconProps) {
   return (
     <svg viewBox="0 0 20 28" fill="none" aria-hidden="true" {...props}>
@@ -147,6 +131,37 @@ export function PhoneIcon(props: IconProps) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+/* Globe — the language switcher's affordance. A globe is understood without
+   translation and, unlike a flag, does not claim that a language belongs to
+   one country (Hebrew, Romanian and English each span several). */
+export function GlobeIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18Z" />
+    </svg>
+  );
+}
+
+/* Chevron. Rotation only, no direction — safe under RTL as-is. */
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true" {...props}>
+      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/* Tick — marks the language currently in use inside the switcher list. */
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true" {...props}>
+      <path d="m5 12.5 4.5 4.5L19 7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

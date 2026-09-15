@@ -1,10 +1,13 @@
+import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
-import { site } from "@/lib/site";
+import { messengers, site } from "@/lib/site";
+import { ContactLink } from "@/components/conversion/ContactLink";
 import { Logo } from "@/components/ui/Logo";
 import { FooterYear } from "./FooterYear";
 import { CherryIcon, InstagramIcon, PhoneIcon, TelegramIcon } from "@/components/ui/icons";
 
 interface FooterProps {
+  locale: Locale;
   nav: Dictionary["nav"];
   footer: Dictionary["footer"];
 }
@@ -12,7 +15,7 @@ interface FooterProps {
 /* Build-time year = server-rendered initial; FooterYear updates it client-side. */
 const buildYear = new Date().getFullYear();
 
-export function Footer({ nav, footer }: FooterProps) {
+export function Footer({ locale, nav, footer }: FooterProps) {
   return (
     <footer className="bg-cherry-black text-paper-100">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6">
@@ -37,42 +40,55 @@ export function Footer({ nav, footer }: FooterProps) {
             <span className="font-display text-xs font-bold tracking-[0.18em] text-juice-300 uppercase">
               {footer.socials}
             </span>
-            <a
+            <ContactLink
               href={site.socials.instagram}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
+              channel="instagram"
+              locale={locale}
+              placement="footer"
+              className="inline-flex min-h-11 cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
             >
-              <InstagramIcon className="size-4" />
+              <InstagramIcon className="size-4" aria-hidden="true" />
               {/* dir="ltr": keeps the "@" in front of the handle under RTL. */}
               <span dir="ltr">{site.socials.instagramHandle}</span>
-            </a>
-            <a
-              href={site.socials.telegram}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
-            >
-              <TelegramIcon className="size-4" />
-              <span dir="ltr">{site.socials.telegramHandle}</span>
-            </a>
+            </ContactLink>
+            {/* §7: absent while the address is an unconfirmed placeholder. */}
+            {messengers.telegram.ready ? (
+              <ContactLink
+                href={messengers.telegram.href}
+                channel="telegram"
+                locale={locale}
+                placement="footer"
+                className="inline-flex min-h-11 cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
+              >
+                <TelegramIcon className="size-4" aria-hidden="true" />
+                <span dir="ltr">{site.socials.telegramHandle}</span>
+              </ContactLink>
+            ) : null}
           </div>
 
-          {/* Brief §19: contacts repeated at the bottom, phone included. v1
-              had the number only inside wa.me/viber deep-links, so a visitor
-              who wanted to simply call had nothing to click. */}
+          {/* v3 §4: the ONLY place on the page where the phone appears. It is
+              no longer a conversion path — not in the header, not on the first
+              screen, not in the sticky control — but a business that hides its
+              number entirely reads as unreachable, so it stays here, once, as
+              a detail. `tel:` is still a real link: a visitor who wants to
+              call should not have to retype digits. */}
           <div className="flex flex-col gap-2 text-sm">
             <span className="font-display text-xs font-bold tracking-[0.18em] text-juice-300 uppercase">
               {footer.contacts}
             </span>
-            <a
+            <ContactLink
               href={site.phone.tel}
-              className="inline-flex cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
+              channel="phone"
+              locale={locale}
+              placement="footer"
+              target={undefined}
+              rel={undefined}
+              className="inline-flex min-h-11 cursor-pointer items-center gap-2 transition-colors hover:text-juice-300"
             >
-              <PhoneIcon className="size-4" />
+              <PhoneIcon className="size-4" aria-hidden="true" />
               {/* dir="ltr": without it the leading "+" is re-ordered in Hebrew. */}
               <span dir="ltr">{site.phone.display}</span>
-            </a>
+            </ContactLink>
             <p className="text-paper-200/70">{footer.city}</p>
           </div>
         </div>

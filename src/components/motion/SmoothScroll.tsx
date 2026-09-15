@@ -1,61 +1,59 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import Lenis from "lenis";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import type { MouseEvent, ReactNode } from "react";
 
-let activeLenis: Lenis | null = null;
+/**
+ * In-page navigation helpers.
+ *
+ * v3, discrepancy §11: this file used to import Lenis, GSAP and ScrollTrigger
+ * to run an inertial-scroll loop. Both are gone.
+ *
+ *  - Lenis hijacked the wheel: it replaced the browser's own scrolling with a
+ *    1.15s eased animation. Brief §14 rules out scroll hijacking, and the
+ *    platform already offers the tame version — `html { scroll-behavior:
+ *    smooth }`, which globals.css sets, and which the browser itself disables
+ *    under `prefers-reduced-motion`.
+ *  - With Lenis gone, nothing needed GSAP's ticker, so ScrollTrigger went too.
+ *
+ * What remains is `scrollIntoView` plus the focus move, which is the part that
+ * actually mattered for accessibility.
+ */
 
-/** Smooth-scroll to an in-page anchor, falling back gracefully. */
+/** Scroll to an in-page anchor and move keyboard focus with it. */
 export function scrollToAnchor(hash: string) {
   const element = document.querySelector(hash);
   if (!element) return;
 
+  /* `behavior: "smooth"` is already reduced-motion-aware in every current
+     browser, but the explicit check keeps the promise if that ever regresses. */
   const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (activeLenis && !prefersReduced) {
-    activeLenis.scrollTo(hash, { offset: -72, duration: 1.4 });
-  } else {
-    element.scrollIntoView({ behavior: prefersReduced ? "auto" : "smooth" });
-  }
+  element.scrollIntoView({ behavior: prefersReduced ? "auto" : "smooth", block: "start" });
 
-  // Move keyboard focus with the scroll (WCAG 2.4.1 — skip link must work).
-  // No-op for non-focusable targets; <main id="main"> carries tabIndex={-1}.
+  /* WCAG 2.4.1 — the skip link must actually move focus, not just the
+     viewport. No-op for non-focusable targets; <main id="main"> carries
+     tabIndex={-1}. */
   (element as HTMLElement).focus({ preventScroll: true });
 }
 
+interface AnchorLinkProps {
+  hash: string;
+  className?: string;
+  children: ReactNode;
+}
+
 /**
- * Lenis inertial scrolling synced to GSAP's ticker, so ScrollTrigger and
- * Lenis share one rAF loop. Gated by a LIVE reduced-motion query: flipping
- * the OS setting mid-session starts/stops Lenis without a reload.
+ * A real `<a href="#...">` that also moves focus. Server components cannot
+ * carry an onClick, so section markup renders this instead; with JS off it
+ * degrades to the browser's own anchor jump.
  */
-export function SmoothScroll({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    gsap.registerPlugin(ScrollTrigger);
-
-    const mm = gsap.matchMedia();
-    mm.add("(prefers-reduced-motion: no-preference)", () => {
-      const lenis = new Lenis({
-        duration: 1.15,
-        smoothWheel: true,
-      });
-      activeLenis = lenis;
-
-      lenis.on("scroll", ScrollTrigger.update);
-
-      const tick = (time: number) => lenis.raf(time * 1000);
-      gsap.ticker.add(tick);
-      gsap.ticker.lagSmoothing(0);
-
-      return () => {
-        gsap.ticker.remove(tick);
-        lenis.destroy();
-        activeLenis = null;
-      };
-    });
-
-    return () => mm.revert();
-  }, []);
-
-  return <>{children}</>;
+export function AnchorLink({ hash, className, children }: AnchorLinkProps) {
+  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    scrollToAnchor(hash);
+  };
+  return (
+    <a href={hash} onClick={onClick} className={className}>
+      {children}
+    </a>
+  );
 }

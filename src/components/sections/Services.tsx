@@ -12,9 +12,11 @@ interface ServicesProps {
  * v1 showed seven cards holding forty-nine equal-weight bullets, pinned
  * inside a horizontal GSAP scrub that took the scroll away from the visitor
  * on desktop — the exact behaviour brief §14 rules out. v2 groups the same
- * seven real services into four categories and leads with the tagline; the
- * bullets are all still here, one <details> away, and none were invented or
- * dropped.
+ * seven real services into four categories and leads with the tagline. v3
+ * merges the 22 bullets into 12: every one of the seven real directions is
+ * still named, but micro-services that used to be ranked alongside whole
+ * directions now sit inside the line they belong to (§8). Nothing invented,
+ * nothing silently dropped.
  *
  * <details>/<summary> rather than a custom disclosure: it is keyboard
  * accessible and correctly announced with no JavaScript at all, it survives
@@ -28,7 +30,9 @@ export function Services({ dict }: ServicesProps) {
       className="scroll-mt-20 bg-paper-50 py-20 md:py-28"
     >
       <div className="mx-auto flex max-w-6xl flex-col gap-12 px-4 sm:px-6">
-        <SectionHeading kicker={dict.kicker} heading={dict.heading} sub={dict.sub} />
+        {/* §8: no section sub here. The four taglines below already say what
+            the agency does; a paragraph above them only said it again. */}
+        <SectionHeading kicker={dict.kicker} heading={dict.heading} />
 
         <ul className="grid gap-4 md:grid-cols-2">
           {dict.items.map((item, index) => (

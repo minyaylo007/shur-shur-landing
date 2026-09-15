@@ -22,6 +22,12 @@ const base =
 
 type Variant = keyof typeof variants;
 
+/** The button look as a class string — for links that are not <ButtonLink>,
+    e.g. the tracked contact anchors in components/conversion. */
+export function buttonClass(variant: Variant = "juice", className = ""): string {
+  return `${base} ${variants[variant]} ${className}`;
+}
+
 export function Button({
   variant = "juice",
   className = "",

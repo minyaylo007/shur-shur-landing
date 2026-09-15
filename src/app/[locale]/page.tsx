@@ -45,19 +45,19 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
       <Header locale={locale} nav={dict.nav} langSwitcher={dict.langSwitcher} />
       {/* tabIndex={-1}: the skip-link must be able to MOVE focus here (WCAG 2.4.1). */}
       <main id="main" tabIndex={-1} className="scroll-mt-20">
-        <Hero locale={locale} dict={dict.hero} contactLabels={{ call: dict.nav.callLabel }} />
+        <Hero locale={locale} dict={dict.hero} />
         <SelectedWork locale={locale} dict={dict.work} />
         <TapeDivider color="paper1" decor="cherry" />
         <ProcessResult locale={locale} dict={dict.process} />
         <Services dict={dict.services} />
         <Trust dict={dict.trust} />
-        <AuditCta locale={locale} dict={dict.audit} />
+        <AuditCta locale={locale} dict={dict.audit} ctaLabel={dict.nav.cta} />
       </main>
       <TapeDivider color="black" decor="clip" flip />
-      <Footer nav={dict.nav} footer={dict.footer} />
+      <Footer locale={locale} nav={dict.nav} footer={dict.footer} />
       {/* Brief §19: ONE persistent contact control, scroll-gated past the
           hero so it never covers the hero's own CTA. z-40, under the header. */}
-      <ContactBar locale={locale} dict={dict.contactBar} callLabel={dict.nav.callLabel} />
+      <ContactBar locale={locale} dict={dict.contactBar} />
     </>
   );
 }

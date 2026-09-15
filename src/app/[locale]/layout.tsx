@@ -11,7 +11,6 @@ import {
 } from "@/lib/i18n";
 import { getDictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
-import { SmoothScroll } from "@/components/motion/SmoothScroll";
 import "../globals.css";
 
 /* Cyrillic subset is REQUIRED — without it Ukrainian text silently
@@ -99,13 +98,19 @@ export async function generateMetadata({ params }: LayoutParams): Promise<Metada
       description: dict.meta.description,
       locale: ogLocales[locale],
       alternateLocale: locales.filter((code) => code !== locale).map((code) => ogLocales[code]),
-      images: [{ url: "/og.png", width: 1080, height: 1350, alt: dict.meta.ogAlt }],
+      /* v3 §10: this was a 2.75 MB PNG — a photographic cover stored
+         losslessly. Re-encoded to JPEG q82 it is 444 KB, 84% smaller, with no
+         visible difference at the size a share card is ever rendered. JPEG
+         rather than WebP on purpose: at this quality WebP came out slightly
+         LARGER here (461 KB), and every crawler that matters — Facebook, X,
+         Telegram, WhatsApp, LinkedIn — has always understood JPEG. */
+      images: [{ url: "/og.jpg", width: 1080, height: 1350, alt: dict.meta.ogAlt }],
     },
     twitter: {
       card: "summary_large_image",
       title: dict.meta.title,
       description: dict.meta.description,
-      images: ["/og.png"],
+      images: ["/og.jpg"],
     },
   };
 }
@@ -131,8 +136,8 @@ export default async function RootLayout({
        suppressHydrationWarning (scoped to this element only).
        `dir` comes from the locale: it drives the logical Tailwind utilities
        and the `[dir="rtl"]` rules in globals.css. Redesign v2 removed the
-       pinned Services track, so nothing left on the page depends on GSAP for
-       readable layout — every section is static HTML first. */
+       pinned Services track, and v3 removed GSAP and Lenis entirely — every
+       section is static HTML first, and the only motion left is CSS. */
     <html
       lang={locale}
       dir={getDirection(locale)}
@@ -145,7 +150,7 @@ export default async function RootLayout({
             __html: "document.documentElement.classList.remove('no-js')",
           }}
         />
-        <SmoothScroll>{children}</SmoothScroll>
+        {children}
       </body>
     </html>
   );
