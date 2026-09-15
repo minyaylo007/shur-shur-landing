@@ -123,10 +123,47 @@ jobs:
           # Сводка прогона — единственное место, откуда дирижёр возьмёт ссылку.
           echo "Превью: $url (коммит ${{ steps.target.outputs.short }})" >> "$GITHUB_STEP_SUMMARY"
 
+      # Смока превью: здесь 302 — законный ответ, поэтому его и требуем.
+      #
+      # Адрес превью закрыт защитой Vercel по замыслу: неслитая ветка не должна
+      # быть публичной. Значит проверка обратная прод-смоке — не «хоть что-то
+      # ответило», а «ответило ровно то, что мы ждём»: либо наша страница (200,
+      # если защиту однажды снимут), либо перевод на вход Vercel
+      # (3xx на vercel.com/sso-api). Всё прочее — поломка сборки или день, когда
+      # превью внезапно оказалось открыто миру; и то и другое должно валить шаг.
       - name: Smoke check
         if: steps.creds.outputs.ready == 'true'
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.deploy.outputs.url }}/uk")
-          echo "GET /uk -> $code"
-          # 401/403 — это защита превью Vercel, не поломка; падаем только на 5xx и отсутствии ответа.
-          case "$code" in 5*|000) exit 1 ;; esac
+          set -euo pipefail
+          url="${DEPLOY_URL%/}/uk"
+          head=$(mktemp)
+          code=$(curl -sS -o /dev/null -D "$head" -w '%{http_code}' \
+                 --max-time 30 --retry 2 --retry-delay 5 "$url" || true)
+          code=${code:-000}
+          # `|| true`: у ответа 200 заголовка Location нет, grep неуспешен, а с
+          # set -o pipefail и set -e шаг умер бы молча, не напечатав ни строки.
+          location=$(grep -i '^location:' "$head" | tail -n1 | sed 's/^[^:]*:[ \t]*//' | tr -d '\r' || true)
+          echo "GET $url -> $code${location:+ -> $location}"
+
+          case "$code" in
+            200)
+              echo "Превью отдало страницу целиком — защиты Vercel на нём нет."
+              ;;
+            3??)
+              case "$location" in
+                *vercel.com/sso-api*)
+                  echo "Превью за защитой Vercel: нас увели на вход — так и задумано."
+                  ;;
+                *)
+                  echo "::error::Ждали вход Vercel (vercel.com/sso-api), а увели на '${location:-—}'"
+                  exit 1
+                  ;;
+              esac
+              ;;
+            *)
+              echo "::error::Превью ответило $code: это ни наша страница (200), ни вход Vercel (3xx на vercel.com/sso-api)"
+              exit 1
+              ;;
+          esac

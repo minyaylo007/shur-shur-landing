@@ -131,10 +131,95 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Выкачено: $url (коммит ${{ steps.target.outputs.short }})" >> "$GITHUB_STEP_SUMMARY"
 
+      # Смока проверяет БОЕВОЙ домен, а не адрес выката.
+      #
+      # `vercel deploy` печатает адрес самого выката вида
+      # shur-shur-<хеш>-<команда>.vercel.app — он закрыт защитой Vercel и
+      # отвечает 302 на vercel.com/sso-api. Прежний шаг падал только на 5xx,
+      # поэтому такой 302 считался успехом: выкаты 34973713713, 34971977825 и
+      # 34973869698 (15.09.2026) «прошли смоку», не прочитав ни строки нашей
+      # страницы. Зелёный шаг, который ничего не проверяет, хуже отсутствующего.
+      #
+      # Теперь проверяется то, что видит человек: боевой домен из настроек
+      # Vercel, все четыре локали ровно по 200, апекс — 308 на /uk без петли,
+      # и в теле каждой страницы — наш canonical. Любое отличие валит выкат.
       - name: Smoke check
         if: steps.creds.outputs.ready == 'true'
+        env:
+          # Сюда `vercel pull` (шаг выше) кладёт боевые переменные проекта.
+          # Адрес берём отсюда, а не константой в сценарии: константу забудут
+          # поменять при смене домена, и смока начнёт проверять чужой сайт.
+          VERCEL_ENV_FILE: .vercel/.env.production.local
+          # Признак свежести. После выката Vercel сбрасывает кеш CDN, и age
+          # начинает считаться заново, поэтому у только что выкаченной страницы
+          # он единицы секунд. Большой age — ответ, переживший выкат: показывают
+          # старое. Порог с запасом на прогрев и на повторные попытки curl.
+          MAX_AGE_SECONDS: "120"
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.deploy.outputs.url }}/uk")
-          echo "GET /uk -> $code"
-          # 401/403 — это защита превью Vercel, не поломка; падаем только на 5xx и отсутствии ответа.
-          case "$code" in 5*|000) exit 1 ;; esac
+          set -euo pipefail
+
+          if [ ! -f "$VERCEL_ENV_FILE" ]; then
+            echo "::error::Нет файла $VERCEL_ENV_FILE — vercel pull не отработал, боевой адрес неизвестен"
+            exit 1
+          fi
+          # Значение приходит в кавычках: NEXT_PUBLIC_SITE_URL="https://example.com".
+          base=$(sed -n 's/^NEXT_PUBLIC_SITE_URL=//p' "$VERCEL_ENV_FILE" \
+                 | tail -n1 | tr -d '"'\''\r' | sed 's:/*$::')
+          if [ -z "$base" ]; then
+            echo "::error::В $VERCEL_ENV_FILE нет NEXT_PUBLIC_SITE_URL — проверять смоку не по чему"
+            exit 1
+          fi
+          echo "Боевой адрес: $base"
+
+          fail=0
+          note() { echo "  ✗ $*"; fail=1; }
+          # `|| true` обязателен: при set -o pipefail отсутствующий заголовок
+          # делает grep неуспешным, а set -e убивает шаг молча — без единой
+          # строки о причине. Ровно это и ловили на прогоне против чужого адреса.
+          hdr() { grep -i "^$2:" "$1" | tail -n1 | sed 's/^[^:]*:[ \t]*//' | tr -d '\r' || true; }
+
+          # 1. Четыре локали: ровно 200, наша страница, свежий ответ.
+          for loc in uk en he ro; do
+            url="$base/$loc"
+            head=$(mktemp); body=$(mktemp)
+            code=$(curl -sS -o "$body" -D "$head" -w '%{http_code}' \
+                   --max-time 30 --retry 2 --retry-delay 5 "$url" || true)
+            code=${code:-000}
+            age=$(hdr "$head" age); cache=$(hdr "$head" x-vercel-cache); vid=$(hdr "$head" x-vercel-id)
+            echo "GET $url -> $code (x-vercel-cache: ${cache:-—}, age: ${age:-0}, x-vercel-id: ${vid:-—})"
+
+            [ "$code" = "200" ] || note "$url: ждали 200, получили $code"
+
+            # Маркер нашей страницы: canonical с нашим доменом И этой локалью.
+            # Ни заглушка хостинга, ни страница ошибки Vercel такого не отдадут.
+            marker="rel=\"canonical\" href=\"$base/$loc\""
+            grep -qF "$marker" "$body" \
+              || note "$url: в теле нет маркера [$marker] — это не наша страница"
+
+            case "${age:-0}" in ''|*[!0-9]*) age=0 ;; esac
+            [ "${age:-0}" -le "$MAX_AGE_SECONDS" ] \
+              || note "$url: age=${age}s — ответ пережил выкат (порог ${MAX_AGE_SECONDS}s), показывают не свежее"
+          done
+
+          # 2. Апекс: 308 на /uk и не больше двух переходов до 200.
+          #    Петля редиректов на домене — самая дорогая поломка: сайта нет,
+          #    а все четыре локали по отдельности при этом живые.
+          apex_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$base/" || true)
+          apex_to=$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 30 "$base/" || true)
+          echo "GET $base/ -> ${apex_code:-000} -> ${apex_to:-—}"
+          [ "${apex_code:-000}" = "308" ] || note "$base/: ждали 308, получили ${apex_code:-000}"
+          [ "$apex_to" = "$base/uk" ] || note "$base/: ждали переход на $base/uk, получили '${apex_to:-—}'"
+
+          chain=$(curl -sS -L -o /dev/null --max-redirs 5 \
+                  -w '%{num_redirects} %{http_code} %{url_effective}' --max-time 30 "$base/" || true)
+          set -- ${chain:-9 000 —}
+          echo "Цепочка апекса: переходов=$1, итог=$2 ($3)"
+          [ "$1" -le 2 ] || note "$base/: $1 переходов до конца — похоже на петлю редиректов"
+          [ "$2" = "200" ] || note "$base/: цепочка закончилась кодом $2, а не 200"
+          [ "$3" = "$base/uk" ] || note "$base/: цепочка привела на '$3', а не на $base/uk"
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Смока не прошла: боевой сайт отдаёт не то, что мы выкатили (подробности выше)"
+            exit 1
+          fi
+          echo "Смока прошла: $base — 4 локали по 200 с нашим canonical, апекс 308 на /uk"
