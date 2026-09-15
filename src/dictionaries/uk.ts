@@ -217,6 +217,17 @@ const dict = {
       instagram: "Instagram Direct",
     },
   },
+  /* 404 — a document of its own (src/app/global-not-found.tsx), so the copy
+     below is all it needs: it borrows nothing from the page shell. No
+     messenger links here on purpose — the way out of a dead address is a
+     LIVE page of the site, where every channel is already gathered. */
+  notFound: {
+    metaTitle: "Сторінку не знайдено — SHUR-SHUR",
+    heading: "ТАКОЇ СТОРІНКИ НЕМАЄ",
+    text: "Можливо, в адресі помилка або сторінку прибрали. Усе, що ми робимо, зібрано на головній.",
+    home: "На головну",
+    chooseLanguage: "Оберіть мову",
+  },
 };
 
 export type Dictionary = typeof dict;

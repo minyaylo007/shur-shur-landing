@@ -194,4 +194,11 @@ export const he: Dictionary = {
       instagram: "Instagram Direct",
     },
   },
+  notFound: {
+    metaTitle: "הדף לא נמצא — SHUR-SHUR",
+    heading: "הדף הזה לא קיים",
+    text: "ייתכן שיש טעות בכתובת או שהדף הוסר. כל מה שאנחנו עושים מרוכז בדף הראשי.",
+    home: "לדף הראשי",
+    chooseLanguage: "בחרו שפה",
+  },
 };

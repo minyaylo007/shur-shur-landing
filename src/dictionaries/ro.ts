@@ -187,4 +187,11 @@ export const ro: Dictionary = {
       instagram: "Instagram Direct",
     },
   },
+  notFound: {
+    metaTitle: "Pagina nu a fost găsită — SHUR-SHUR",
+    heading: "PAGINA NU EXISTĂ",
+    text: "Poate că adresa are o greșeală sau pagina a fost ștearsă. Tot ce facem este adunat pe pagina principală.",
+    home: "Înapoi pe site",
+    chooseLanguage: "Alegeți limba",
+  },
 };
