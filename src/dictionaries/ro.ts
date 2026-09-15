@@ -158,9 +158,33 @@ export const ro: Dictionary = {
       successTitle: "Am primit!",
       successText: "Ne uităm pe profil și revenim la contactul pe care l-ai lăsat.",
       successAgain: "Trimite încă una",
-      errorTitle: "Ceva nu a mers",
-      errorText: "Nu s-a trimis. Încearcă din nou sau scrie-ne direct:",
       retry: "Încearcă din nou",
+      failures: {
+        rate_limited: {
+          title: "Cererea ta a ajuns deja la noi",
+          text: "Ai trimis mai multe una după alta — toate au ajuns la noi. Formularul acceptă una nouă peste circa 10 minute. Dacă e urgent, scrie-ne sau sună-ne direct:",
+        },
+        invalid_json: {
+          title: "Cererea a ajuns deteriorată",
+          text: "Datele s-au pierdut pe drum — se întâmplă pe o conexiune instabilă. Încearcă din nou, iar dacă se repetă, scrie-ne direct:",
+        },
+        invalid_input: {
+          title: "Verifică ce ai scris în câmpuri",
+          text: "Numele de utilizator: 2–60 de caractere latine, cifre, punct și underscore, @ opțional. Contactul: un Telegram sau un număr de telefon, minim 3 caractere. Corectează și trimite din nou.",
+        },
+        delivery_failed: {
+          title: "Cererea nu a ajuns la noi",
+          text: "Legătura cu mesageria noastră nu funcționează acum, iar o nouă încercare se va termina cel mai probabil la fel. Cel mai rapid ajungi la noi dacă ne scrii sau ne suni:",
+        },
+        network: {
+          title: "Conexiunea s-a întrerupt",
+          text: "Cererea nici nu a plecat: rețeaua a dispărut sau nu a venit niciun răspuns în 15 secunde. Verifică conexiunea și încearcă din nou.",
+        },
+        unknown: {
+          title: "Ceva nu a mers",
+          text: "Serverul a răspuns cu o eroare la care nu ne așteptam. Încearcă din nou, iar dacă se repetă, scrie-ne direct:",
+        },
+      },
       errors: {
         igHandle: "Introdu un nume de utilizator: 2–60 de caractere, @ opțional",
         contact: "Introdu un Telegram sau un telefon (minim 3 caractere)",

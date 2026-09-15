@@ -376,19 +376,29 @@ describe("AuditForm — two fields, same pipeline (brief §20)", () => {
   });
 
   /*
-   * The error state. Every translation of `errorText` ends in a colon and
-   * promises a channel; until 15.09.2026 nothing was printed after it, and
-   * `errorTitle` existed in all four dictionaries but was rendered nowhere.
-   * With TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID still unset in production this
-   * is not a rare branch — it is the one every visitor reaches.
+   * The error state. Until 15.09.2026 it was ONE state for four different
+   * server answers, and its single line of copy was false for two of them —
+   * after a 429 the previous requests had arrived, after a rejected payload
+   * «try again» was a loop with no exit. `errorTitle`/`errorText` are gone;
+   * every failure now carries its own copy. That the set of states matches
+   * what the route can actually answer, in all four languages, is checked
+   * against the route source in tests/lead-failures.test.ts. Asserted here:
+   * the way out is still rendered, and still only through the readiness gate.
    */
-  describe("failed delivery leaves a way out", () => {
-    const errorBranch = src.match(/status === "error" \? \([\s\S]*?\n      \) : null/)?.[0] ?? "";
+  describe("a failed submission leaves a way out", () => {
+    const errorBranch =
+      src.match(/behaviour !== null && failureCopy !== null \? \([\s\S]*?\n      \) : null/)?.[0] ?? "";
 
-    it("the branch exists and shows the title that used to be dead copy", () => {
+    it("the branch exists and shows the copy of THIS failure, not a shared line", () => {
       expect(errorBranch).not.toBe("");
-      expect(errorBranch).toContain("dict.errorTitle");
-      expect(errorBranch).toContain("dict.errorText");
+      expect(errorBranch).toContain("failureCopy.title");
+      expect(errorBranch).toContain("failureCopy.text");
+      // The one-size-fits-all strings must not come back.
+      expect(src).not.toContain("dict.errorTitle");
+      expect(src).not.toContain("dict.errorText");
+      for (const dict of allDicts) {
+        expect(Object.keys(dict.audit.form)).not.toContain("errorText");
+      }
     });
 
     it("something real follows the colon: the phone and the ready messengers", () => {
@@ -412,13 +422,6 @@ describe("AuditForm — two fields, same pipeline (brief §20)", () => {
       expect(src.match(/setIgHandle\(""\)/g)).toHaveLength(1);
       expect(src.match(/setContact\(""\)/g)).toHaveLength(1);
       expect(src).toContain("dict.retry");
-    });
-
-    it("every locale's error copy promises a channel and names the failure", () => {
-      for (const dict of allDicts) {
-        expect(dict.audit.form.errorText.trim().endsWith(":")).toBe(true);
-        expect(dict.audit.form.errorTitle.length).toBeGreaterThan(5);
-      }
     });
   });
 });
