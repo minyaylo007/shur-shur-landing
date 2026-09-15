@@ -49,6 +49,41 @@ export function Header({ locale, nav, langSwitcher }: HeaderProps) {
         atTop ? "bg-transparent" : "bg-cherry-deep/90 shadow-[0_2px_24px_rgb(0_0_0/0.35)] backdrop-blur-md"
       }`}
     >
+      {/* Читаемость поверх первого кадра, БЕЗ плашки.
+          Прозрачная шапка над роликом — решение дизайна, и на широком экране
+          оно работает: от `lg` ролик уезжает в свою рамку справа, а полоса
+          шапки лежит на тёмном поле секции. Ниже `lg` ролик занимает весь
+          первый экран, и полоса попадает на светлое небо: кремовый логотип
+          и приглушённые (`opacity-70`) неактивные пилюли языков на нём почти
+          пропадают.
+
+          Поэтому мягкая подложка-градиент — только ниже `lg` и только пока
+          `atTop`. Она не рисует край: 96px (112 от `md`) от 75% cherry-black
+          вверху до полной прозрачности внизу, то есть примерно полторы
+          высоты полосы, и кадр под ней виден.
+
+          Контраст по WCAG, замерен на самом светлом кадре ролика (перебор
+          с шагом 0.2 с по средней яркости полосы шапки: 390 → t=4.0 c,
+          768 → t=2.2 c), фон взят из-под самой надписи:
+
+            неактивные пилюли  2.16—3.23 → 4.89—5.98
+            логотип            3.93—4.79 → 9.19—10.38
+
+          Активная пилюля рисует свой фон juice-500, её 4.78 подложка не
+          меняет. 75/45 вместо 70/40 — ровно для запаса: на 70/40 худшая
+          пилюля давала 4.51, то есть AA без права на ошибку.
+
+          `opacity-0`, а не размонтирование: когда страница уже прокручена,
+          у шапки есть своя заливка `cherry-deep/90`, и подложка поверх неё
+          только затемнила бы верх полосы. Гаснет той же длительностью, что
+          и появление заливки, — иначе на границе 24px видна ступенька. */}
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-x-0 top-0 h-24 bg-linear-to-b from-cherry-black/75 via-cherry-black/45 to-transparent transition-opacity duration-300 md:h-28 lg:hidden ${
+          atTop ? "opacity-100" : "opacity-0"
+        }`}
+      />
+
       <a
         href="#main"
         onClick={(e) => handleAnchor(e, "#main")}
@@ -63,7 +98,7 @@ export function Header({ locale, nav, langSwitcher }: HeaderProps) {
           when a wider minimum would push a Romanian CTA off the edge. Nothing
           moves on a roomy bar: the 16px the old `sm:gap-4` reserved was never
           visible there. */}
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6 md:h-[72px]">
+      <div className="relative mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6 md:h-[72px]">
         <a
           href="#top"
           onClick={(e) => handleAnchor(e, "#top")}
