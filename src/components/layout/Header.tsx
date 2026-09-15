@@ -142,7 +142,9 @@ export function Header({ locale, nav, langSwitcher }: HeaderProps) {
               and the bar is full wherever the CTA and the four language pills
               have to share the row with something else:
 
-                <768   no room even for the icon (it was never shown here)
+                <768   no room even for the icon. It used to show from 640
+                       (`sm:inline-flex`), which is what the `md` here
+                       changed: at 640 the Romanian bar does not fit with it
                 768—1023  icon only — no inline menu at these widths
                 1024—1279 nothing — the inline menu has the middle of the bar
                 ≥1280  icon + number, the full bar the site always had
