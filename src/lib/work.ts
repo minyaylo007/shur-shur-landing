@@ -5,7 +5,7 @@ import type { Locale } from "./i18n";
  *
  * Every entry below is real SHUR-SHUR material from the agency's own shoot
  * archive — no stock, no placeholders. Localized strings use the same
- * `Record<Locale, string>` alt shape as `posts.ts`, so there is one alt
+ * `Record<Locale, string>` alt shape the portfolio has always used — one alt
  * convention in the codebase rather than two.
  *
  * A note that shaped the whole layout: ALL twenty source files are vertical

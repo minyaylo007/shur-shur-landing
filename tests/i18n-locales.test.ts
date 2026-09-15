@@ -12,7 +12,6 @@ import {
 import { getDictionary } from "../src/dictionaries";
 import sitemap from "../src/app/sitemap";
 import { site } from "../src/lib/site";
-import { posts } from "../src/lib/posts";
 
 const read = (rel: string) =>
   readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -175,13 +174,14 @@ describe("dictionaries — no untranslated leftovers", () => {
     }
   });
 
-  it("post alt texts exist for every locale (a11y, SEO)", () => {
-    for (const post of posts) {
-      for (const locale of locales) {
-        expect(post.alt[locale].length, `${post.image} / ${locale}`).toBeGreaterThan(10);
-      }
-    }
-  });
+  /*
+   * There used to be a sibling check here over `posts` — the alt texts of the
+   * Instagram grid. The grid stopped rendering in redesign v2 and the array
+   * was kept anyway, so this was a test that held a dead constant to a live
+   * standard: it could never fail for a visitor, because no visitor ever met
+   * those strings. The portfolio alt texts, which ARE rendered, are asserted
+   * in tests/content-integrity.
+   */
 });
 
 /* ============================================================
