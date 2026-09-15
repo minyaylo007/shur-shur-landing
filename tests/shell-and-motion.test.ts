@@ -36,12 +36,46 @@ describe("shell — Header", () => {
     expect(src).toContain("transition-[translate,box-shadow,background-color]");
   });
 
+  /* The bar is sized by the LONGEST translation, not the shortest. Romanian
+     used to wrap "DESPRE NOI" and the CTA onto two lines at 1440 and push the
+     whole row off the page at 768; Ukrainian, ~90px shorter, fit and hid the
+     problem. These three assertions keep the three rules that fixed it. */
+  it("nothing in the bar may wrap — a two-line menu item or CTA is the bug", () => {
+    const whitespaceNowrap = src.match(/whitespace-nowrap/g) ?? [];
+    expect(whitespaceNowrap.length).toBeGreaterThanOrEqual(3); // menu item, CTA, phone number
+    expect(src).toMatch(/text-\[13px\][^"]*whitespace-nowrap/); // menu item
+    expect(src).toMatch(/bg-cherry-juice[^"]*whitespace-nowrap/); // CTA
+  });
+
+  it("the inline menu waits for `lg` — at `md` the Romanian bar overflowed", () => {
+    expect(src).toContain("lg:flex");
+    expect(src).not.toContain("md:flex");
+    expect(src).toContain("xl:gap-7"); // full spacing only where there is room
+  });
+
+  it("the phone yields where the bar is full: no number below `xl`, nothing at `lg`", () => {
+    expect(src).toContain("md:inline-flex lg:hidden xl:inline-flex");
+    expect(src).toContain("xl:inline");
+    expect(src).not.toContain("lg:inline\"");
+  });
+
   it("navigates to the four v2 destinations and nothing that no longer exists", () => {
     for (const anchor of ['"#work"', '"#services"', '"#about"', '"#contact"']) {
       expect(src).toContain(anchor);
     }
     expect(src).not.toContain('"#cases"');
     expect(src).not.toContain('"#team"');
+  });
+});
+
+describe("shell — LanguageSwitcher", () => {
+  const src = read("../src/components/layout/LanguageSwitcher.tsx");
+
+  it("four pills stay compact until `xl` — their full size is what crowded the bar", () => {
+    expect(src).toContain("xl:text-xs");
+    expect(src).toContain("xl:px-2.5");
+    expect(src).not.toContain("sm:text-xs");
+    expect(src).not.toContain("sm:px-2.5");
   });
 });
 
