@@ -6,12 +6,16 @@ export type ChannelKey = keyof typeof messengers;
 /**
  * The ONE place the readiness contract from `lib/site` is enforced.
  *
- * The flag was honoured in exactly one of the three components that render a
- * messenger link (ContactBar); the footer and the contact section read
- * `site.socials.*` straight through and shipped a dead t.me deep-link for
- * months. A contract that lives in a comment is not a contract: every render
- * site now has to come through `isChannelReady` / `localeChannels`, and the
- * href itself is only reachable from here in ready state.
+ * The flag was honoured in exactly one of the FOUR components that render a
+ * messenger link (ContactBar); the hero, the footer and the contact section
+ * read `site.socials.*` straight through and shipped a dead t.me deep-link
+ * for months — the hero one survived the first fix, because that fix went
+ * down a list of known places instead of asking who reads the constant.
+ *
+ * So this module hands out the whole channel — link, public profile and the
+ * visible @handle — and only while it is ready. Outside `lib/` there is no
+ * other way to reach any of the three, which is what the source scan in
+ * tests/conversion.test.ts checks, file by file, over all of `src/**`.
  */
 
 /**
@@ -34,7 +38,12 @@ export const MESSENGER_ORDER: Record<Locale, readonly ChannelKey[]> = {
 
 export interface Channel {
   key: ChannelKey;
+  /** Where «write to us» goes: the DM deep-link. */
   href: string;
+  /** Visible @name, or null for the two channels that are just the phone. */
+  handle: string | null;
+  /** Public page of the account, when it has one (Instagram). */
+  profile: string | null;
 }
 
 /** Is this channel a real, answerable account right now? */
@@ -42,9 +51,20 @@ export function isChannelReady(key: ChannelKey): boolean {
   return messengers[key].ready;
 }
 
+/**
+ * The channel — or `null`, which means render nothing at all. `null` is the
+ * whole point: a caller that wants the href or the handle has to deal with
+ * the not-ready case first, instead of being free to forget a flag.
+ */
+export function readyChannel(key: ChannelKey): Channel | null {
+  const channel = messengers[key];
+  if (!channel.ready) return null;
+  return { key, href: channel.href, handle: channel.handle, profile: channel.profile };
+}
+
 /** Ready channels for a locale, in that locale's order. Never a dead link. */
 export function localeChannels(locale: Locale): Channel[] {
   return MESSENGER_ORDER[locale]
-    .filter(isChannelReady)
-    .map((key) => ({ key, href: messengers[key].href }));
+    .map(readyChannel)
+    .filter((channel): channel is Channel => channel !== null);
 }

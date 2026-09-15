@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { uk } from "../src/dictionaries/uk";
@@ -7,7 +7,7 @@ import { he } from "../src/dictionaries/he";
 import { ro } from "../src/dictionaries/ro";
 import { locales } from "../src/lib/i18n";
 import { site, messengers } from "../src/lib/site";
-import { MESSENGER_ORDER, isChannelReady, localeChannels } from "../src/lib/channels";
+import { MESSENGER_ORDER, isChannelReady, localeChannels, readyChannel } from "../src/lib/channels";
 
 /*
  * Conversion path — one contact interaction, one form, one endpoint.
@@ -27,6 +27,54 @@ const srcPath = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 const read = (rel: string) => readFileSync(srcPath(rel), "utf8");
 
 const allDicts = [uk, en, he, ro];
+
+/**
+ * Every source file under `src/`, as repo-relative paths. Walked, not listed:
+ * the first version of the readiness test named the four components it knew
+ * about, so the fifth render site — the hero — sailed straight past it and
+ * kept a dead t.me link on the first screen of all four locales.
+ */
+function sourceFiles(dir = "../src"): string[] {
+  return readdirSync(srcPath(dir), { withFileTypes: true }).flatMap((entry) => {
+    const child = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return sourceFiles(child);
+    return /\.tsx?$/.test(entry.name) ? [child.replace("../", "")] : [];
+  });
+}
+
+/**
+ * The file with comments removed, so «this block used to read site.socials.*»
+ * in a comment is not mistaken for code. Quote-aware on purpose: the thing
+ * being searched for is a URL, and a naive strip of `//` would cut every
+ * `https://` in half.
+ */
+function stripComments(src: string): { code: string; balanced: boolean } {
+  let out = "";
+  let quote: string | null = null;
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    const next = src[i + 1];
+    if (quote !== null) {
+      if (ch === "\\") { out += ch + (next ?? ""); i += 2; continue; }
+      if (ch === quote) quote = null;
+      out += ch; i += 1; continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") { quote = ch; out += ch; i += 1; continue; }
+    if (ch === "/" && next === "/") { while (i < src.length && src[i] !== "\n") i += 1; continue; }
+    if (ch === "/" && next === "*") {
+      i += 2;
+      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i += 1;
+      i += 2; continue;
+    }
+    out += ch; i += 1;
+  }
+  return { code: out, balanced: quote === null };
+}
+
+const codeOf = (repoPath: string) => stripComments(read(`../${repoPath}`)).code;
+
+
 
 /** Every visible string under a dictionary branch, flattened. */
 function strings(value: unknown): string[] {
@@ -60,22 +108,22 @@ describe("lib/site — the one real phone number (brief §5)", () => {
 });
 
 /*
- * The readiness contract, and why it is tested by behaviour and not by a
- * comment. `ready: false` means «this account is not real yet, render it
- * nowhere». Before 15.09.2026 exactly one of the three components that print a
- * messenger link honoured it: the footer and the contact section read
- * `site.socials.*` directly, so a Telegram username that was never registered
- * sat on the live page in two places — and first in line for a Ukrainian
- * visitor in the third. These tests fail if any render site starts reaching
- * around the gate again.
+ * The readiness contract, and why it is tested by walking the tree rather
+ * than by naming files. `ready: false` means «this account is not real yet,
+ * render it nowhere». Before 15.09.2026 exactly one of the FIVE places that
+ * print a messenger link honoured it. The first fix listed the three it knew
+ * about and checked those three — and the hero, which nobody had listed, went
+ * on printing a Telegram username that was never registered on the first
+ * screen of every locale. A test that enumerates render sites can only ever
+ * find the render sites someone remembered.
+ *
+ * So the rule is structural and the check is exhaustive: outside `src/lib`
+ * the raw constants are unreachable — no `site.socials`, no `messengers`, no
+ * deep-link literal — and the only way to a channel's link OR its visible
+ * @name is `lib/channels`, which hands out neither until the flag is true.
+ * Add a sixth render site tomorrow and it is covered the moment it is saved.
  */
 describe("readiness contract — a channel that is not ready renders NOWHERE", () => {
-  const renderSites = [
-    ["contact bar", "../src/components/conversion/ContactBar.tsx"],
-    ["footer", "../src/components/layout/Footer.tsx"],
-    ["contact section", "../src/components/sections/AuditCta.tsx"],
-    ["audit form error state", "../src/components/forms/AuditForm.tsx"],
-  ] as const;
 
   it("lib/channels drops every not-ready channel, in every locale", () => {
     for (const locale of locales) {
@@ -103,16 +151,52 @@ describe("readiness contract — a channel that is not ready renders NOWHERE", (
     }
   });
 
-  it.each(renderSites)("%s takes hrefs through the gate, never site.socials", (_where, path) => {
-    const src = read(path);
-    expect(src).toMatch(/isChannelReady|localeChannels/);
-    // The raw constants are what the footer and the contact section used to
-    // print past the flag. `telegramHandle` (a label, inside a gated row) is
-    // deliberately still allowed — the \b stops it matching here.
-    expect(src).not.toMatch(/site\.socials\.telegram\b/);
-    expect(src).not.toMatch(/site\.socials\.whatsapp\b/);
-    expect(src).not.toMatch(/site\.socials\.viber\b/);
-    expect(src).not.toMatch(/https:\/\/t\.me\//);
+  it("readyChannel hands out nothing at all for a channel that is not ready", () => {
+    for (const key of Object.keys(messengers) as (keyof typeof messengers)[]) {
+      const channel = readyChannel(key);
+      if (messengers[key].ready) {
+        expect(channel).not.toBeNull();
+        expect(channel?.href).toBe(messengers[key].href);
+      } else {
+        // Not «an object with the link and a false flag» — nothing. The link
+        // and the @name are equally unavailable, so a caller cannot print the
+        // name of an account it was not allowed to link to.
+        expect(channel).toBeNull();
+      }
+    }
+  });
+
+  // --- the exhaustive part: every file under src/, derived by walking ------
+
+  it("the scan really covers the tree it claims to cover", () => {
+    const files = sourceFiles();
+    // A vacuous pass is the one failure mode a scan like this can hide.
+    expect(files.length).toBeGreaterThan(20);
+    expect(files).toContain("src/components/sections/Hero.tsx");
+    expect(files).toContain("src/components/layout/Footer.tsx");
+    for (const file of files) expect(stripComments(read(`../${file}`)).balanced).toBe(true);
+  });
+
+  it("NO file outside src/lib reads site.socials or messengers directly", () => {
+    const offenders = sourceFiles()
+      .filter((file) => !file.startsWith("src/lib/"))
+      .filter((file) => /\bsite\.socials\b|\bmessengers\b/.test(codeOf(file)));
+    // Empty array, not a boolean: a failure has to name the file.
+    expect(offenders).toEqual([]);
+  });
+
+  it("a messenger deep-link exists as a literal in exactly ONE file", () => {
+    const deepLink = /https:\/\/t\.me\/|https:\/\/wa\.me\/|https:\/\/ig\.me\/|viber:\/\//;
+    const carriers = sourceFiles().filter((file) => deepLink.test(codeOf(file)));
+    expect(carriers).toEqual(["src/lib/site.ts"]);
+  });
+
+  it("anything that draws a messenger icon got the channel from the gate", () => {
+    const drawing = sourceFiles().filter((file) => /CHANNEL_ICONS\[/.test(codeOf(file)));
+    expect(drawing.length).toBeGreaterThan(0);
+    for (const file of drawing) {
+      expect(codeOf(file)).toMatch(/localeChannels|readyChannel|isChannelReady/);
+    }
   });
 
   it("telegram specifically: the username is unregistered, so it is not ready", () => {
@@ -167,8 +251,13 @@ describe("ContactBar — ONE persistent control (brief §19)", () => {
     expect(src.indexOf("site.phone.tel")).toBeLessThan(src.indexOf("order.map"));
   });
 
-  it("filters channels by the ready flag (code guard, not a comment)", () => {
-    expect(read("../src/lib/channels.ts")).toMatch(/\.filter\(isChannelReady\)/);
+  it("filters channels by the ready flag (behaviour, not a comment)", () => {
+    // Asserted by what comes out, not by the shape of the line that does it.
+    for (const locale of locales) {
+      for (const channel of localeChannels(locale)) {
+        expect(isChannelReady(channel.key)).toBe(true);
+      }
+    }
     expect(src).not.toContain("wa.me");
   });
 
@@ -359,8 +448,10 @@ describe("wiring — one conversion destination", () => {
   });
 
   it("the contact section lists the phone, Telegram and Instagram — not four near-identical rows", () => {
-    const src = read("../src/components/sections/AuditCta.tsx");
-    expect(src.match(/icon: \w+Icon/g)).toHaveLength(3);
+    const src = codeOf("src/components/sections/AuditCta.tsx");
+    expect(src).toContain("site.phone.tel");
+    expect(src).toContain('"telegram"');
+    expect(src).toContain('"instagram"');
     // WhatsApp and Viber reach the same number and live in the ContactBar.
     expect(src).not.toContain("whatsapp");
     expect(src).not.toContain("viber");

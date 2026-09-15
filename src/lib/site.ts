@@ -42,17 +42,34 @@ export const site = {
  * ANYWHERE. Flip the flag to `true` once the real account is wired; no other
  * code changes are needed.
  *
- * The flag is enforced in `lib/channels` (`isChannelReady`, `localeChannels`),
- * and every component that shows a channel — ContactBar, Footer, AuditCta,
- * AuditForm — goes through it. Do not reach for `site.socials.*` directly in a
- * component: that is exactly how the dead Telegram link stayed on the live
- * page in the footer and the contact section while ContactBar was filtering
- * it out.
+ * The flag is enforced in `lib/channels` (`isChannelReady`, `readyChannel`,
+ * `localeChannels`), and nothing outside `lib/` may read `site.socials.*` or
+ * import `messengers`: the href AND the visible @handle are only reachable
+ * through the gate, so a render site cannot print a name whose link it was
+ * not allowed to draw. Naming the components here was not enough — the first
+ * fix listed ContactBar, Footer and AuditCta and missed the hero, which kept
+ * the dead t.me link on the first screen of all four locales. The rule is now
+ * checked by walking `src/**` instead of by listing files (tests/conversion).
  */
 export const messengers = {
   // 15.09.2026: the username is not registered — see socials.telegram above.
-  telegram: { href: site.socials.telegram, ready: false },
-  instagram: { href: site.socials.instagramDm, ready: true },
-  whatsapp: { href: site.socials.whatsapp, ready: true },
-  viber: { href: site.socials.viber, ready: true },
-} as const satisfies Record<string, { href: string; ready: boolean }>;
+  telegram: {
+    href: site.socials.telegram,
+    handle: site.socials.telegramHandle,
+    profile: site.socials.telegram,
+    ready: false,
+  },
+  instagram: {
+    href: site.socials.instagramDm,
+    handle: site.socials.instagramHandle,
+    profile: site.socials.instagram,
+    ready: true,
+  },
+  // WhatsApp and Viber have no @name of their own: they are the phone number,
+  // which the page already shows as a `tel:` link of its own.
+  whatsapp: { href: site.socials.whatsapp, handle: null, profile: null, ready: true },
+  viber: { href: site.socials.viber, handle: null, profile: null, ready: true },
+} as const satisfies Record<
+  string,
+  { href: string; handle: string | null; profile: string | null; ready: boolean }
+>;

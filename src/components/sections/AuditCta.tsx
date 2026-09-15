@@ -1,11 +1,11 @@
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
-import { messengers, site } from "@/lib/site";
-import { isChannelReady } from "@/lib/channels";
+import { site } from "@/lib/site";
+import { readyChannel } from "@/lib/channels";
 import { AuditForm } from "@/components/forms/AuditForm";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Reveal } from "@/components/motion/Reveal";
-import { InstagramIcon, PhoneIcon, TelegramIcon } from "@/components/ui/icons";
+import { CHANNEL_ICONS, PhoneIcon } from "@/components/ui/icons";
 
 /**
  * Conversion section (brief §4, §19, §20): the free Instagram audit and the
@@ -40,27 +40,28 @@ export function AuditCta({
   channelLabels: Dictionary["contactBar"]["channels"];
   callLabel: string;
 }) {
-  // The phone is always real; the two accounts are only listed while the
-  // readiness flag in lib/site says they answer. This list used to read
-  // site.socials.* straight through, so it kept printing a Telegram handle
-  // that the ContactBar had already filtered out as dead.
+  // The phone is always real; the two accounts are only listed while the gate
+  // in lib/channels says they answer. This list used to read site.socials.*
+  // straight through, so it kept printing a Telegram handle that the
+  // ContactBar had already filtered out as dead.
   const channels = [
-    { href: site.phone.tel, icon: PhoneIcon, label: site.phone.display, external: false, ready: true },
-    {
-      href: messengers.telegram.href,
-      icon: TelegramIcon,
-      label: site.socials.telegramHandle,
-      external: true,
-      ready: isChannelReady("telegram"),
-    },
-    {
-      href: site.socials.instagram,
-      icon: InstagramIcon,
-      label: site.socials.instagramHandle,
-      external: true,
-      ready: isChannelReady("instagram"),
-    },
-  ].filter((channel) => channel.ready);
+    { key: "phone", href: site.phone.tel, icon: PhoneIcon, label: site.phone.display, external: false },
+    ...(["telegram", "instagram"] as const)
+      .map(readyChannel)
+      .flatMap((channel) =>
+        channel && channel.handle !== null
+          ? [
+              {
+                key: channel.key,
+                href: channel.profile ?? channel.href,
+                icon: CHANNEL_ICONS[channel.key],
+                label: channel.handle,
+                external: true,
+              },
+            ]
+          : [],
+      ),
+  ];
 
   return (
     <section id="contact" className="scroll-mt-24 bg-paper-50 py-20 md:py-28">
@@ -86,8 +87,8 @@ export function AuditCta({
                 {dict.channelsLabel}
               </h3>
               <ul className="flex flex-col gap-3">
-                {channels.map(({ href, icon: Icon, label, external }) => (
-                  <li key={href}>
+                {channels.map(({ key, href, icon: Icon, label, external }) => (
+                  <li key={key}>
                     <a
                       href={href}
                       {...(external

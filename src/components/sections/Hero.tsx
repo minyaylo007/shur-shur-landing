@@ -1,13 +1,14 @@
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
+import { readyChannel } from "@/lib/channels";
 import { heroVideo } from "@/lib/work";
 import { AutoVideo } from "@/components/media/AutoVideo";
 import { KineticHeading } from "@/components/motion/KineticHeading";
 import { Reveal } from "@/components/motion/Reveal";
 import { StickerBadge } from "@/components/ui/StickerBadge";
 import { ButtonLink } from "@/components/ui/Button";
-import { InstagramIcon, TelegramIcon, PhoneIcon } from "@/components/ui/icons";
+import { CHANNEL_ICONS, PhoneIcon } from "@/components/ui/icons";
 
 interface HeroProps {
   locale: Locale;
@@ -33,6 +34,19 @@ interface HeroProps {
  * other side on its own and the text still leads.
  */
 export function Hero({ locale, dict, contactLabels }: HeroProps) {
+  // The two accounts under the CTA, in the order they have always stood here
+  // — but only while the account exists. This row read `site.socials.*`
+  // straight through and was the last place still printing a dead t.me link,
+  // on the first screen of every locale. `readyChannel` returns null for a
+  // channel that is not live, so the @name is unreachable without its link.
+  const accounts = (["telegram", "instagram"] as const)
+    .map(readyChannel)
+    .flatMap((channel) =>
+      channel && channel.handle !== null
+        ? [{ key: channel.key, href: channel.profile ?? channel.href, handle: channel.handle }]
+        : [],
+    );
+
   return (
     <section
       id="top"
@@ -103,24 +117,21 @@ export function Hero({ locale, dict, contactLabels }: HeroProps) {
                   <PhoneIcon className="size-4 shrink-0" />
                   <span dir="ltr">{site.phone.display}</span>
                 </a>
-                <a
-                  href={site.socials.telegram}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex cursor-pointer items-center gap-2 text-cream-type transition-colors hover:text-juice-300"
-                >
-                  <TelegramIcon className="size-4 shrink-0" />
-                  <span dir="ltr">{site.socials.telegramHandle}</span>
-                </a>
-                <a
-                  href={site.socials.instagram}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex cursor-pointer items-center gap-2 text-cream-type transition-colors hover:text-juice-300"
-                >
-                  <InstagramIcon className="size-4 shrink-0" />
-                  <span dir="ltr">{site.socials.instagramHandle}</span>
-                </a>
+                {accounts.map(({ key, href, handle }) => {
+                  const Icon = CHANNEL_ICONS[key];
+                  return (
+                    <a
+                      key={key}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex cursor-pointer items-center gap-2 text-cream-type transition-colors hover:text-juice-300"
+                    >
+                      <Icon className="size-4 shrink-0" />
+                      <span dir="ltr">{handle}</span>
+                    </a>
+                  );
+                })}
               </div>
             </div>
           </Reveal>
