@@ -187,8 +187,20 @@ describe("404 — nothing may answer an unknown address with 200", () => {
     expect(read("../src/app/[locale]/layout.tsx")).toContain("export const dynamicParams = false");
   });
 
-  it("the 404 document is the one Next is told to use for unmatched routes", () => {
-    expect(read("../next.config.ts")).toMatch(/experimental:\s*\{[\s\S]*?globalNotFound:\s*true/);
+  it("the 404 is a whole document, not a fragment waiting for a layout", () => {
+    /* This is what actually keeps the page alive on an unmatched address.
+       The only layout in this app lives under `[locale]`, and `/fr` never
+       reaches it — a 404 that rendered a fragment would be wrapped by Next's
+       own bare shell instead, which is the production defect: <html> with no
+       `lang`, no text of ours, no way back. So the document must bring its
+       own <html>, <body> and <title>. Which FILE Next picks is not asserted
+       here: that is HTTP behaviour, and `scripts/check-404.sh` asks a real
+       production server for it in CI. */
+    const html = render("/fr");
+    expect(html).toMatch(/^<html[\s>]/);
+    expect(html).toContain("<body");
+    expect(html).toContain("<title>");
+    expect(html).toContain("</html>");
   });
 });
 
