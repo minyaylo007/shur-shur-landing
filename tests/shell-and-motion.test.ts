@@ -41,8 +41,13 @@ describe("shell — Header", () => {
      whole row off the page at 768; Ukrainian, ~90px shorter, fit and hid the
      problem. These three assertions keep the three rules that fixed it. */
   it("nothing in the bar may wrap — a two-line menu item or CTA is the bug", () => {
+    /* Was «at least 3 — menu item, CTA, phone number». v3 §4 takes the phone
+       out of the header, so the third one has nothing left to protect. The
+       count is now EXACT rather than a floor: both remaining wrapping risks
+       are named below, and a fourth `whitespace-nowrap` appearing without a
+       reason is itself worth a failure. */
     const whitespaceNowrap = src.match(/whitespace-nowrap/g) ?? [];
-    expect(whitespaceNowrap.length).toBeGreaterThanOrEqual(3); // menu item, CTA, phone number
+    expect(whitespaceNowrap).toHaveLength(2); // menu item, CTA
     expect(src).toMatch(/text-\[13px\][^"]*whitespace-nowrap/); // menu item
     expect(src).toMatch(/bg-cherry-juice[^"]*whitespace-nowrap/); // CTA
   });
@@ -53,10 +58,27 @@ describe("shell — Header", () => {
     expect(src).toContain("xl:gap-7"); // full spacing only where there is room
   });
 
-  it("the phone yields where the bar is full: no number below `xl`, nothing at `lg`", () => {
-    expect(src).toContain("md:inline-flex lg:hidden xl:inline-flex");
-    expect(src).toContain("xl:inline");
-    expect(src).not.toContain("lg:inline\"");
+  /*
+   * Production's rule here was «the phone yields where the bar is full»: a
+   * `tel:` that appeared, shrank to an icon and disappeared again across four
+   * breakpoints. v3 §4 removes the phone from the header outright, so those
+   * three class assertions describe markup that no longer exists. They are
+   * replaced by the stronger form of the same guarantee — the item that had to
+   * yield is not there to yield, and the bar is three groups, counted.
+   * (The overflow table in the PR measures the result directly, in all four
+   * locales at seven widths.)
+   */
+  it("the crowded item is gone, not merely hidden: no phone in the bar at all", () => {
+    expect(src).not.toContain("tel:");
+    expect(src).not.toContain("site.phone");
+    // No leftover breakpoint juggling from the four-state phone.
+    expect(src).not.toContain("lg:hidden xl:inline-flex");
+  });
+
+  it("the bar carries exactly three groups: logo, menu + language, one action", () => {
+    expect(src.match(/<nav\b/g)).toHaveLength(1);
+    expect(src.match(/<ContactLink\b/g)).toHaveLength(1);
+    expect(src).toContain("<LanguageSwitcher");
   });
 
   it("navigates to the four v2 destinations and nothing that no longer exists", () => {
@@ -71,11 +93,28 @@ describe("shell — Header", () => {
 describe("shell — LanguageSwitcher", () => {
   const src = read("../src/components/layout/LanguageSwitcher.tsx");
 
-  it("four pills stay compact until `xl` — their full size is what crowded the bar", () => {
-    expect(src).toContain("xl:text-xs");
-    expect(src).toContain("xl:px-2.5");
-    expect(src).not.toContain("sm:text-xs");
-    expect(src).not.toContain("sm:px-2.5");
+  /*
+   * Production kept four language pills in the bar and had to hold them at a
+   * compact size until `xl`, because at full size they were what crowded the
+   * row (the 19.09 fix). v3 replaces the four pills with a single disclosure:
+   * one trigger, and the list of languages in a panel. The size assertions
+   * therefore have no pills to size — but the thing they protected, «the
+   * switcher must not crowd the bar», is now structural and is asserted as
+   * such: ONE control in the row, and a panel that is out of flow entirely,
+   * so it cannot widen the bar at any breakpoint.
+   */
+  it("the switcher is one control in the bar, and its list cannot crowd the row", () => {
+    // `aria-expanded=`, not `<button`: the doc comment above the component
+    // names the element in prose, and a comment is not a second control.
+    expect(src.match(/aria-expanded=/g)).toHaveLength(1);
+    // Out of flow: the panel is positioned, not a row of siblings.
+    expect(src).toContain("absolute end-0");
+    expect(src).toContain('role="listbox"');
+  });
+
+  it("the trigger is a finger target, and it is logical-property positioned (RTL)", () => {
+    expect(src).toContain("min-h-11");
+    expect(src).not.toMatch(/\bright-0\b|\bleft-0\b/);
   });
 });
 
