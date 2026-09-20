@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Unbounded, Manrope, Rubik, Assistant } from "next/font/google";
 import { notFound } from "next/navigation";
 import {
   locales,
@@ -9,58 +8,11 @@ import {
   ogLocales,
   type Locale,
 } from "@/lib/i18n";
+import { fontClasses } from "../fonts";
 import { getDictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
+import { buildSha, BUILD_SHA_META } from "@/lib/build";
 import "../globals.css";
-
-/* Cyrillic subset is REQUIRED — without it Ukrainian text silently
-   falls back to a system font. */
-const unbounded = Unbounded({
-  subsets: ["latin", "cyrillic"],
-  variable: "--font-unbounded",
-  display: "swap",
-});
-
-const manrope = Manrope({
-  subsets: ["latin", "cyrillic"],
-  variable: "--font-manrope",
-  display: "swap",
-});
-
-/* Hebrew pair. Unbounded/Manrope ship no Hebrew glyphs, so `he` would fall
-   back to whatever the OS has — different metrics on every device and none of
-   the brand character. Rubik keeps the heavy geometric display voice and
-   Assistant the neutral grotesk body voice, both with a real `hebrew` subset.
-   They bind to the SAME CSS variables, so every component and the Tailwind
-   `--font-display`/`--font-body` theme keep working unchanged.
-
-   `preload: false` on purpose: all four families live in this one shared
-   layout, so `<link rel="preload">` would be emitted on EVERY locale — the
-   Ukrainian page would start four Hebrew font downloads at highest priority.
-   Hebrew therefore loads its faces when the CSS first uses them (one hop
-   later, `display: swap` covers the gap) and uk/en/ro keep exactly the head
-   they had before this locale existed. */
-const rubik = Rubik({
-  subsets: ["latin", "hebrew"],
-  variable: "--font-unbounded",
-  display: "swap",
-  preload: false,
-});
-
-const assistant = Assistant({
-  subsets: ["latin", "hebrew"],
-  variable: "--font-manrope",
-  display: "swap",
-  preload: false,
-});
-
-/** Font classes for a locale: the Hebrew pair for `he`, the Latin/Cyrillic
- *  pair for everyone else — only one pair is ever emitted per document. */
-function fontClasses(locale: Locale): string {
-  return locale === "he"
-    ? `${rubik.variable} ${assistant.variable}`
-    : `${unbounded.variable} ${manrope.variable}`;
-}
 
 export const dynamicParams = false;
 
@@ -98,20 +50,35 @@ export async function generateMetadata({ params }: LayoutParams): Promise<Metada
       description: dict.meta.description,
       locale: ogLocales[locale],
       alternateLocale: locales.filter((code) => code !== locale).map((code) => ogLocales[code]),
-      /* v3 §10: this was a 2.75 MB PNG — a photographic cover stored
-         losslessly. Re-encoded to JPEG q82 it is 444 KB, 84% smaller, with no
-         visible difference at the size a share card is ever rendered. JPEG
-         rather than WebP on purpose: at this quality WebP came out slightly
-         LARGER here (461 KB), and every crawler that matters — Facebook, X,
-         Telegram, WhatsApp, LinkedIn — has always understood JPEG. */
-      images: [{ url: "/og.jpg", width: 1080, height: 1350, alt: dict.meta.ogAlt }],
+      /* The link card is 1.91:1 (1200x630) and the logotype sits in its
+         middle third ON PURPOSE: messengers crop a card to a square, and the
+         previous 1080x1350 artwork lost the word «shur-shur» — it stood at
+         the bottom edge — in every such crop. width/height below are the
+         file's REAL dimensions; tests/og-card asserts that by measuring the
+         file, so a replacement asset of another shape cannot slip in.
+
+         v3 arrived here with its own answer to a different problem: the card
+         used to be a 2.75 MB lossless PNG, and the branch re-encoded it to a
+         444 KB JPEG. Production had already done that AND fixed the crop, so
+         the branch's vertical 1080x1350 card is not restored — its file is
+         deleted with this merge. The weight argument is satisfied either
+         way (og-card.jpg is 203 KB, less than half the branch's file); the
+         readable name in a square crop is only satisfied by this one. */
+      images: [{ url: "/og-card.jpg", width: 1200, height: 630, alt: dict.meta.ogAlt }],
     },
     twitter: {
       card: "summary_large_image",
       title: dict.meta.title,
       description: dict.meta.description,
-      images: ["/og.jpg"],
+      images: ["/og-card.jpg"],
     },
+    /* Отпечаток сборки — единственное, по чему смока выката может ИЗМЕРИТЬ,
+       что край отдаёт именно тот коммит, который мы только что выкатили, а не
+       пережившую выкат копию предыдущего (см. lib/build). Живёт в общем
+       layout, значит одинаково стоит во всех четырёх локалях; человеку не
+       виден — это meta в <head>. Пустой объект, когда переменной сборки нет:
+       вне боевого выката отпечатывать нечего. */
+    other: buildSha ? { [BUILD_SHA_META]: buildSha } : {},
   };
 }
 

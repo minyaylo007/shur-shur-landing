@@ -3,15 +3,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
-import { messengers, type MessengerKey } from "@/lib/site";
+import { localeChannels } from "@/lib/channels";
 import { track } from "@/lib/analytics";
-import {
-  ChatIcon,
-  CloseIcon,
-  InstagramIcon,
-  TelegramIcon,
-  WhatsAppIcon,
-} from "@/components/ui/icons";
+import { CHANNEL_ICONS, ChatIcon, CloseIcon } from "@/components/ui/icons";
 
 interface ContactBarProps {
   locale: Locale;
@@ -19,53 +13,39 @@ interface ContactBarProps {
 }
 
 /**
- * Which messenger sits closest to the thumb, per locale. There is no geo-IP
- * here, so the page language stands in for the region. Spelled out per locale
- * on purpose: a new language must state its own preference instead of
- * inheriting a `!== "uk"`.
+ * ONE persistent contact control (brief §19; redesign v3 §4 and §6).
  *
- * v3: Viber is gone from the project entirely (§3), and Instagram is no longer
- * in this list at all (§6) — it is a portfolio account, not a support desk,
- * and putting it beside the messengers made three equal-looking choices out of
- * what should be one action. It keeps its place in the footer and in the
- * contact section.
- */
-const MESSENGER_ORDER: Record<Locale, readonly MessengerKey[]> = {
-  uk: ["whatsapp", "telegram"],
-  en: ["whatsapp", "telegram"],
-  he: ["whatsapp", "telegram"],
-  ro: ["whatsapp", "telegram"],
-};
-
-const ICONS = {
-  whatsapp: WhatsAppIcon,
-  telegram: TelegramIcon,
-  instagram: InstagramIcon,
-} as const;
-
-/**
- * ONE persistent contact control (brief §19; v3 §4 and §6).
+ * It replaced two v1 components at once: the four-scrap messenger FAB and the
+ * sticky mobile CTA bar. Between them the old page put up to five floating
+ * targets over the content — the brief names that pattern explicitly as
+ * something to avoid, and on a 390px phone the FAB and the CTA bar were
+ * actually fighting for the same corner (hence the env(safe-area) arithmetic
+ * that is still here to keep the control off the iOS home indicator).
  *
- * v2 opened a panel whose first row was the phone number and whose remaining
- * rows were four messengers. Both are gone:
+ * What v3 changes is what the panel contains.
  *
- *  - The phone left (§4). A tap-to-call is the most expensive action on the
- *    page and reaches nobody outside office hours; the number now appears once,
- *    in the footer, as a detail.
- *  - Only genuinely ready channels are offered (§7). Telegram carries a
- *    placeholder address that the owner never confirmed, so `ready: false` in
- *    lib/site keeps it out of the DOM — a dead deep link silently swallows
- *    real enquiries, which is worse than not offering the channel.
+ *  - The phone left it (§4). A tap-to-call is the most expensive action on the
+ *    page and reaches nobody outside office hours; the number now appears once
+ *    in the footer, as a detail, and once inside the audit form's failure
+ *    state, where a visitor whose message did not send needs every way out
+ *    there is.
+ *  - The channel list is not written here. It comes from `localeChannels`,
+ *    which is the locale ordering and the readiness gate in one: a channel
+ *    whose account is still a placeholder is dropped wherever it stands, and
+ *    the footer, the contact section and the form's error state read the same
+ *    list, so none of them can drift from this one.
  *
- * That leaves one ready messenger today, and the control adapts to the count
- * instead of hard-coding a shape:
+ * The control adapts to how many channels survive that gate instead of
+ * hard-coding a shape:
  *
- *   1 ready  → the pill IS the link. Straight into WhatsApp, one tap. A bottom
- *              sheet listing a single destination would cost an extra tap to
- *              say nothing — that is the mobile trade-off §6 asks to justify.
+ *   1 ready  → the pill IS the link. One tap, straight into the messenger. A
+ *              bottom sheet listing a single destination would cost an extra
+ *              tap to say nothing — that is the mobile trade-off §6 asks to
+ *              justify.
  *   2+ ready → the same pill becomes a disclosure listing them, which is what
  *              happens by itself the day the owner's real Telegram address
  *              lands in lib/site and `ready` flips to true. No other edit.
+ *   0 ready  → nothing renders at all, rather than an empty panel.
  *
  * Disclosure semantics (the 2+ branch): aria-expanded on the trigger, Escape
  * and an outside pointer close it, focus moves into the panel and back to the
@@ -88,15 +68,7 @@ export function ContactBar({ locale, dict }: ContactBarProps) {
   const firstLinkRef = useRef<HTMLAnchorElement>(null);
   const panelId = useId();
 
-  const ready = MESSENGER_ORDER[locale]
-    .filter((key) => messengers[key].ready)
-    .map((key) => ({
-      key,
-      href: messengers[key].href,
-      label: dict.channels[key],
-      Icon: ICONS[key],
-    }));
-
+  const ready = localeChannels(locale);
   const single = ready.length === 1 ? ready[0] : null;
 
   // Scroll gate: reveal only after the hero (#top) fully leaves the viewport.
@@ -201,28 +173,31 @@ export function ContactBar({ locale, dict }: ContactBarProps) {
                 {dict.label}
               </p>
               <ul className="flex flex-col">
-                {ready.map(({ key, href, label, Icon }, index) => (
-                  <li key={key}>
-                    <a
-                      ref={index === 0 ? firstLinkRef : undefined}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() =>
-                        track({
-                          name: "contact_click",
-                          channel: key,
-                          locale,
-                          placement: "contact_bar",
-                        })
-                      }
-                      className={rowClass}
-                    >
-                      <Icon className="size-4 shrink-0 text-juice-500" aria-hidden="true" />
-                      {label}
-                    </a>
-                  </li>
-                ))}
+                {ready.map(({ key, href }, index) => {
+                  const Icon = CHANNEL_ICONS[key];
+                  return (
+                    <li key={key}>
+                      <a
+                        ref={index === 0 ? firstLinkRef : undefined}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() =>
+                          track({
+                            name: "contact_click",
+                            channel: key,
+                            locale,
+                            placement: "contact_bar",
+                          })
+                        }
+                        className={rowClass}
+                      >
+                        <Icon className="size-4 shrink-0 text-juice-500" aria-hidden="true" />
+                        {dict.channels[key]}
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : null}

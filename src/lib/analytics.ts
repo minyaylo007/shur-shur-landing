@@ -24,8 +24,13 @@ import type { Locale } from "./i18n";
 /** Where on the page the interaction happened. */
 export type EventPlacement = "header" | "hero" | "contact_bar" | "contact_section" | "footer";
 
-/** Which channel the visitor chose. Mirrors `MessengerKey` plus the phone. */
-export type EventChannel = "whatsapp" | "telegram" | "instagram" | "phone";
+/**
+ * Which channel the visitor chose. Mirrors `ChannelKey` from `lib/channels`
+ * plus the phone, which is a `tel:` link rather than a messenger. Keep the
+ * two lists in step: a channel that can be clicked but not named here is a
+ * conversion the owner cannot see.
+ */
+export type EventChannel = "whatsapp" | "telegram" | "instagram" | "viber" | "phone";
 
 export type AnalyticsEvent =
   /** A visitor opened a contact channel. */

@@ -1,0 +1,169 @@
+name: Preview
+
+# Превью-выкат в Vercel: отдельный адрес, чтобы показать неслитую ветку живьём.
+# Связи Vercel с GitHub у проекта нет, автопревью на push никто не собирает, —
+# значит собрать превью может только сам Actions, и только по решению человека:
+# поэтому единственный запуск — ручной, без автотриггеров на push и pull_request.
+# Сценарий намеренно не трогает прод: сборка и выкат идут без ключа продакшена,
+# очередь concurrency своя, environment у работы нет — окружение production
+# в репозитории одно, и превью к нему отношения не имеет.
+#
+# В поле ref принимается любая форма: имя ветки, тег, короткий и полный SHA.
+# Короткий SHA раньше упал бы: actions/checkout принимает его не за коммит, а за
+# образец имени ветки/тега (см. шапку deploy.yml и прогон 34971736713 от
+# 15.09.2026). Поэтому checkout берёт ветку по умолчанию со всей историей,
+# а нужный коммит выбирает шаг «Resolve ref» — одинаково с deploy.yml.
+#
+# Нужны: секрет VERCEL_TOKEN и переменные VERCEL_ORG_ID / VERCEL_PROJECT_ID.
+# Без них workflow не падает, а пропускает выкат с предупреждением — как в deploy.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ветка, тег, короткий или полный SHA, который нужно показать"
+        required: true
+        default: redesign/v3-show-more-tell-less
+
+permissions:
+  contents: read
+
+# Своя очередь, отдельная от deploy-production: превью не должно ни ждать
+# прод-выката, ни тем более отменять его. Ключ — по показываемой ветке,
+# чтобы превью разных веток собирались параллельно.
+concurrency:
+  group: deploy-preview-${{ inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check deploy credentials
+        id: creds
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::warning::Превью пропущено: нужен секрет VERCEL_TOKEN и переменные VERCEL_ORG_ID / VERCEL_PROJECT_ID"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Без ref: и со всей историей — чтобы нужный коммит можно было выбрать
+      # локально, в какой бы форме его ни назвали. Сам ref сюда не передаётся.
+      - uses: actions/checkout@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: Resolve ref
+        if: steps.creds.outputs.ready == 'true'
+        id: target
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          req="${REQUESTED_REF:-}"
+          if [ -z "$req" ]; then
+            echo "::error::Пустой ref: нечего показывать"
+            exit 1
+          fi
+          # Порядок проб: коммит/тег/локальная ветка → ветка на origin → тег.
+          resolve() {
+            local cand
+            for cand in "$1" "origin/$1" "refs/tags/$1"; do
+              if git rev-parse --verify --quiet "${cand}^{commit}"; then
+                return 0
+              fi
+            done
+            return 1
+          }
+          if ! sha=$(resolve "$req"); then
+            # Коммит вне веток и тегов (например, из уже закрытого PR) — добираем точечно.
+            git fetch --quiet origin "$req" 2>/dev/null || true
+            if ! sha=$(resolve "$req"); then
+              echo "::error::Не нашёл такой коммит/ветку/тег: '$req'"
+              exit 1
+            fi
+          fi
+          git checkout --quiet --detach "$sha"
+          short=$(git rev-parse --short "$sha")
+          subject=$(git log -1 --pretty=%s "$sha")
+          {
+            echo "sha=$sha"
+            echo "short=$short"
+          } >> "$GITHUB_OUTPUT"
+          echo "Превью коммита: $sha ($short) — $subject" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Pull Vercel preview settings
+        if: steps.creds.outputs.ready == 'true'
+        run: npx --yes vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+
+      - name: Build
+        if: steps.creds.outputs.ready == 'true'
+        run: npx --yes vercel build --token="$VERCEL_TOKEN"
+
+      - name: Deploy preview
+        if: steps.creds.outputs.ready == 'true'
+        id: deploy
+        run: |
+          url=$(npx --yes vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          # Сводка прогона — единственное место, откуда дирижёр возьмёт ссылку.
+          echo "Превью: $url (коммит ${{ steps.target.outputs.short }})" >> "$GITHUB_STEP_SUMMARY"
+
+      # Смока превью: здесь 302 — законный ответ, поэтому его и требуем.
+      #
+      # Адрес превью закрыт защитой Vercel по замыслу: неслитая ветка не должна
+      # быть публичной. Значит проверка обратная прод-смоке — не «хоть что-то
+      # ответило», а «ответило ровно то, что мы ждём»: либо наша страница (200,
+      # если защиту однажды снимут), либо перевод на вход Vercel
+      # (3xx на vercel.com/sso-api). Всё прочее — поломка сборки или день, когда
+      # превью внезапно оказалось открыто миру; и то и другое должно валить шаг.
+      - name: Smoke check
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          url="${DEPLOY_URL%/}/uk"
+          head=$(mktemp)
+          code=$(curl -sS -o /dev/null -D "$head" -w '%{http_code}' \
+                 --max-time 30 --retry 2 --retry-delay 5 "$url" || true)
+          code=${code:-000}
+          # `|| true`: у ответа 200 заголовка Location нет, grep неуспешен, а с
+          # set -o pipefail и set -e шаг умер бы молча, не напечатав ни строки.
+          location=$(grep -i '^location:' "$head" | tail -n1 | sed 's/^[^:]*:[ \t]*//' | tr -d '\r' || true)
+          echo "GET $url -> $code${location:+ -> $location}"
+
+          case "$code" in
+            200)
+              echo "Превью отдало страницу целиком — защиты Vercel на нём нет."
+              ;;
+            3??)
+              case "$location" in
+                *vercel.com/sso-api*)
+                  echo "Превью за защитой Vercel: нас увели на вход — так и задумано."
+                  ;;
+                *)
+                  echo "::error::Ждали вход Vercel (vercel.com/sso-api), а увели на '${location:-—}'"
+                  exit 1
+                  ;;
+              esac
+              ;;
+            *)
+              echo "::error::Превью ответило $code: это ни наша страница (200), ни вход Vercel (3xx на vercel.com/sso-api)"
+              exit 1
+              ;;
+          esac

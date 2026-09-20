@@ -6,14 +6,17 @@ export const site = {
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://shur-shur.agency",
   city: { uk: "Чернівці", en: "Chernivtsi" },
   /**
-   * The agency's single phone number.
+   * The agency's single phone number. It already lived inside the wa.me and
+   * viber deep-links below; redesign v2 surfaced it as a real `tel:` link
+   * (brief §5 — the number must be visible on the page, not buried in a
+   * messenger URL).
    *
-   * v3: the phone is NO LONGER a conversion path. It appears exactly once, in
-   * the footer, as a detail — not in the header, not on the first screen, not
-   * in the sticky contact control. A call costs the visitor more than a
-   * message, reaches nobody outside office hours, and on a landing page whose
-   * whole funnel is messengers it was competing with the one action that
-   * matters. `display` carries NBSPs so the groups never wrap.
+   * v3 keeps the link and demotes the placement (§4): the number is no longer
+   * a conversion path competing with the messengers on the first screen. It
+   * appears in the footer as a detail, and inside the failure state of the
+   * audit form — where a visitor whose message did not go through needs any
+   * way at all to reach a human. `display` carries NBSPs so the groups never
+   * wrap.
    */
   phone: {
     e164: "+380972499107",
@@ -25,48 +28,69 @@ export const site = {
     instagramHandle: "@shur.shur.agency",
     /** Official Instagram DM deep-link (ig.me). */
     instagramDm: "https://ig.me/m/shur.shur.agency",
-    // Placeholder until the owner confirms the real channel/username.
-    // Gated by `messengers.telegram.ready === false` below — nothing renders
-    // it while this value is a guess.
+    /**
+     * PLACEHOLDER, and a checked one: `t.me/shur_shur_agency` answers 200
+     * (Telegram does that for free usernames too) but its markup has no
+     * `tgme_page_title` block, which every live account has — the name is
+     * simply unregistered. Nothing renders it while `messengers.telegram`
+     * is not ready; the real channel is still a question for the client.
+     */
     telegram: "https://t.me/shur_shur_agency",
     telegramHandle: "@shur_shur_agency",
     whatsapp: "https://wa.me/380972499107",
+    viber: "viber://chat?number=%2B380972499107",
   },
 } as const;
 
 /**
- * Messenger channels with launch readiness.
+ * Messenger channels with launch readiness (REM-FIX-C4). `ready: false`
+ * means the contact detail above is still a placeholder — a dead deep-link
+ * silently swallows real enquiries, so the UI must NOT render the channel
+ * ANYWHERE. Flip the flag to `true` once the real account is wired; no other
+ * code changes are needed.
  *
- * `ready: false` means the contact detail is still a placeholder and the UI
- * must NOT render the link — a dead deep-link silently swallows real
- * enquiries, which is worse than not offering the channel at all.
+ * The flag is enforced in `lib/channels` (`isChannelReady`, `readyChannel`,
+ * `localeChannels`, `primaryAction`), and NO file but this one and
+ * `lib/channels.ts` may read `site.socials.*` or import `messengers`: the
+ * href AND the visible @handle are only reachable through the gate, so a
+ * render site cannot print a name whose link it was not allowed to draw.
+ * Naming the components here was not enough — the first fix listed
+ * ContactBar, Footer and AuditCta and missed the hero, which kept the dead
+ * t.me link on the first screen of all four locales. The rule is now checked
+ * by walking `src/**` instead of by listing files (tests/conversion).
  *
- * v3 state:
- *   whatsapp  — real number, primary action everywhere.
- *   instagram — real account, offered as a social/portfolio link.
- *   telegram  — `t.me/shur_shur_agency` was never confirmed by the owner, so
- *               it is OFF. When the real address arrives, write it into
- *               `site.socials.telegram` and flip this flag; the contact
- *               control turns itself from a single direct link into a
- *               two-channel sheet with no other code change.
- *   viber     — removed in v3: the channel does not exist in the project.
+ * 15.09.2026: the exemption used to read «outside `lib/`», and `lib` holds
+ * data as well as the gate. `lib/posts.ts` — a grid nothing rendered any more
+ * — reached `site.socials.instagram` on three of its tiles and the scan let it
+ * through by address. Two files are exempt now, by name, and both are here.
+ *
+ * 20.09.2026, redesign v3: Viber STAYS. The redesign branch removed it with
+ * the note «the channel does not exist in the project» — but it does: it is
+ * the same number WhatsApp already reaches, it is answered, and the Telegram
+ * bot that carries the audit form is not configured in production yet, so
+ * enquiries from the form are not arriving at all. Taking a live way to reach
+ * a human off the page in that week is the one change a visitor could not
+ * work around.
  */
 export const messengers = {
-  whatsapp: { href: site.socials.whatsapp, ready: true },
-  telegram: { href: site.socials.telegram, ready: false },
-  instagram: { href: site.socials.instagramDm, ready: true },
-} as const satisfies Record<string, { href: string; ready: boolean }>;
-
-export type MessengerKey = keyof typeof messengers;
-
-/**
- * The ONE primary action of the whole page (v3, discrepancy §6). Everything
- * labelled «Обговорити проєкт» — header, hero, contact control, contact
- * section — points here. There is deliberately no second filled button
- * anywhere: Instagram is a portfolio link, and the audit form is a different,
- * differently-labelled offer.
- */
-export const primaryChannel = {
-  key: "whatsapp" as const,
-  href: messengers.whatsapp.href,
-};
+  // 15.09.2026: the username is not registered — see socials.telegram above.
+  telegram: {
+    href: site.socials.telegram,
+    handle: site.socials.telegramHandle,
+    profile: site.socials.telegram,
+    ready: false,
+  },
+  instagram: {
+    href: site.socials.instagramDm,
+    handle: site.socials.instagramHandle,
+    profile: site.socials.instagram,
+    ready: true,
+  },
+  // WhatsApp and Viber have no @name of their own: they are the phone number,
+  // which the page already shows as a `tel:` link of its own.
+  whatsapp: { href: site.socials.whatsapp, handle: null, profile: null, ready: true },
+  viber: { href: site.socials.viber, handle: null, profile: null, ready: true },
+} as const satisfies Record<
+  string,
+  { href: string; handle: string | null; profile: string | null; ready: boolean }
+>;

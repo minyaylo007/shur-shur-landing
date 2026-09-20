@@ -14,6 +14,7 @@ export const en: Dictionary = {
     about: "About",
     contact: "Contact",
     cta: "Discuss a project",
+    callLabel: "Call us",
     menuLabel: "Page navigation",
     skipToContent: "Skip to content",
   },
@@ -140,9 +141,33 @@ export const en: Dictionary = {
       successTitle: "Got it!",
       successText: "We will look at the profile and get back to you.",
       successAgain: "Send another one",
-      errorTitle: "Something went wrong",
-      errorText: "It did not send. Try again or message us directly:",
       retry: "Try again",
+      failures: {
+        rate_limited: {
+          title: "We already have your request",
+          text: "You sent several in a row — all of them reached us. The form will take a new one in about 10 minutes. If it is urgent, message or call us directly:",
+        },
+        invalid_json: {
+          title: "The request arrived damaged",
+          text: "The data was lost on the way — that happens on a shaky connection. Try again, and if it repeats, message us directly:",
+        },
+        invalid_input: {
+          title: "Check what is in the fields",
+          text: "The username is 2–60 Latin characters, digits, dots and underscores, @ optional. The contact is a Telegram handle or a phone number, 3 characters or more. Fix it and send again.",
+        },
+        delivery_failed: {
+          title: "Your request did not reach us",
+          text: "The link to our messenger is down right now, and another attempt will most likely end the same way. The fastest way to us is to write or call:",
+        },
+        network: {
+          title: "The connection dropped",
+          text: "The request never left: the network went away or no answer came within 15 seconds. Check the connection and try again.",
+        },
+        unknown: {
+          title: "Something went wrong",
+          text: "The server answered with an error we did not expect. Try again, and if it repeats, message us directly:",
+        },
+      },
       errors: {
         igHandle: "Enter a username: 2–60 characters, @ optional",
         contact: "Enter a messenger handle or phone (3 characters or more)",
@@ -165,7 +190,15 @@ export const en: Dictionary = {
     channels: {
       telegram: "Telegram",
       whatsapp: "WhatsApp",
+      viber: "Viber",
       instagram: "Instagram Direct",
     },
+  },
+  notFound: {
+    metaTitle: "Page not found — SHUR-SHUR",
+    heading: "NO SUCH PAGE",
+    text: "The address may have a typo, or the page is gone. Everything we do is gathered on the main page.",
+    home: "Back to the site",
+    chooseLanguage: "Choose a language",
   },
 };

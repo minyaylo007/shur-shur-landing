@@ -135,6 +135,26 @@ export function PhoneIcon(props: IconProps) {
   );
 }
 
+/* Viber. The channel reaches the same number as WhatsApp; redesign v3 first
+   dropped it as «not in the project», which it is not — see the note beside
+   `messengers` in lib/site. The mark stays here because CHANNEL_ICONS must
+   have one drawing per key of the gate, with no gaps. */
+export function ViberIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
+      <path
+        d="M12 2.5c5.5 0 9.5 2.4 9.5 8.6 0 5.3-2.8 7.9-6.8 8.5l-3.1 3.1v-3.1c-4.3-.5-9.1-2.6-9.1-8.5C2.5 4.9 6.5 2.5 12 2.5Z"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.1 7.3c.3-.1.6 0 .8.3l1 1.4c.2.3.2.6-.1.9l-.6.5c.5 1 1.4 1.9 2.4 2.4l.5-.6c.3-.3.6-.3.9-.1l1.4 1c.3.2.4.5.3.8-.3.9-1.2 1.5-2.1 1.3-2.8-.7-5-2.9-5.7-5.7-.2-.9.4-1.8 1.2-2.2Z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
+  );
+}
+
 /* Globe — the language switcher's affordance. A globe is understood without
    translation and, unlike a flag, does not claim that a language belongs to
    one country (Hebrew, Romanian and English each span several). */
@@ -165,3 +185,16 @@ export function CheckIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * One icon per messenger key from `lib/channels`, so every place that renders
+ * a channel list — the contact bar and the form's error state — draws the same
+ * mark and a new channel cannot be added with an icon in one list and a blank
+ * in the other.
+ */
+export const CHANNEL_ICONS = {
+  telegram: TelegramIcon,
+  whatsapp: WhatsAppIcon,
+  instagram: InstagramIcon,
+  viber: ViberIcon,
+} as const;

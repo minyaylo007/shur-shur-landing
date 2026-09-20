@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { leadSchema, isSpam } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
-import { sendLeadToTelegram } from "@/lib/telegram";
+import { sendLeadToTelegram, TelegramNotConfiguredError } from "@/lib/telegram";
 import { defaultLocale } from "@/lib/i18n";
 
 export const runtime = "nodejs";
@@ -47,12 +47,22 @@ export async function POST(request: Request) {
       locale: parsed.data.locale ?? defaultLocale,
     });
   } catch (error) {
-    // Log without ever exposing the bot token; include the request kind so
-    // dropped audit requests are distinguishable from classic leads.
-    console.error(
-      `[lead] Telegram delivery failed (kind=${parsed.data.kind}):`,
-      error instanceof Error ? error.message : error,
-    );
+    // Two different incidents, two different log lines. «Not configured» means
+    // the env vars were never set here — every request fails, nobody at
+    // Telegram is at fault, and the fix is one deployment setting. It used to
+    // be logged word for word like an outage. Names of the missing variables
+    // only: never a value, not even a prefix. The request kind stays in both,
+    // so dropped audit requests remain distinguishable from classic leads.
+    if (error instanceof TelegramNotConfiguredError) {
+      console.error(
+        `[lead] Telegram bot NOT CONFIGURED (kind=${parsed.data.kind}): missing env ${error.missing.join(", ")} — lead not delivered, nothing was sent to Telegram`,
+      );
+    } else {
+      console.error(
+        `[lead] Telegram delivery failed (kind=${parsed.data.kind}):`,
+        error instanceof Error ? error.message : error,
+      );
+    }
     return NextResponse.json({ ok: false, error: "delivery_failed" }, { status: 502 });
   }
 

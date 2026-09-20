@@ -30,6 +30,18 @@ interface KineticHeadingProps {
  *    exactly the same way `gsap.matchMedia()` was, without the library.
  *  - the "breathing" letter-spacing while in view is unchanged.
  *
+ * The mask slack survives the port, and it is not decoration: `.char-mask`
+ * clips each word, and a mask tight to the box eats the part of a glyph that
+ * leaves it — Romanian Ș and Ț below the baseline, Ă and Î above it, and the
+ * Hebrew letters that sit high in the em box. GSAP closed the slack while the
+ * letters were parked below the line and reopened it per word as that word's
+ * last character came home; the same two moments are now `--char-mask-slack`
+ * and the `mask-open` animation in globals.css, driven by `--mask-index`
+ * below. The timing constants moved there with them — 0.9s, a 26ms stagger,
+ * and the reopen at half the last letter's travel, where `power4.out` has
+ * already covered ~94% of the distance, so the diacritic rides the final few
+ * pixels in with its letter instead of popping in afterwards.
+ *
  * With JS off the `.no-js` guard in globals.css leaves every character at its
  * final position, so the heading is simply there.
  */

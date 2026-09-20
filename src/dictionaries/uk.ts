@@ -7,8 +7,15 @@
  * Redesign v3 (discrepancy §8) — visible prose down ~44%. Four moves:
  *   1. Keys that only repeated a promise the page already makes are gone:
  *      `hero.badge` (the city, on the FIRST SCREEN — §1), `hero.contactLabel`,
- *      `hero.scrollHint`, `nav.callLabel`, `work.sub`, `services.sub`,
- *      `audit.cityLine`, `contactBar.channels.viber`.
+ *      `hero.scrollHint`, `work.sub`, `services.sub`, `audit.cityLine`.
+ *      Two keys v3 also listed here came BACK when the redesign met
+ *      production on 20.09.2026, and neither is visible prose:
+ *      `nav.callLabel` is the accessible name of the one remaining `tel:`
+ *      link (footer, and the form's failure state — a production fix of
+ *      15.09), and `contactBar.channels.viber` names a channel that is live
+ *      in production on the same number as WhatsApp. A key that a rendered
+ *      channel needs is not decoration; see the note beside `messengers` in
+ *      lib/site.
  *   2. Portfolio group notes — five sentences that all said the same thing —
  *      collapsed into ONE `work.note`, and the labels became one-word chips.
  *   3. The 22 service bullets were MERGED into 12. Not one of the seven real
@@ -36,6 +43,12 @@ const dict = {
     about: "Про нас",
     contact: "Контакти",
     cta: "Обговорити проєкт",
+    /* Не видимий підпис, а доступне імʼя для tel:-посилання — воно лишилось
+       рівно в двох місцях: у підвалі й усередині відмови форми. v3 прибрав
+       ключ разом із телефоном із шапки; сама відмова форми — правка бою від
+       15.09, і зчитувач екрана має читати там «Зателефонувати», а не набір
+       цифр. Тому ключ повертається. */
+    callLabel: "Зателефонувати",
     menuLabel: "Навігація по сторінці",
     skipToContent: "Перейти до контенту",
   },
@@ -135,7 +148,7 @@ const dict = {
     ],
     knownBy: {
       label: "Нас знають:",
-      /* Order matches knownHandles in src/lib/posts.ts (verified accounts). */
+      /* Order matches knownHandles in src/lib/known.ts (verified accounts). */
       names: [
         "радіо «Буковинська Хвиля»",
         "салон текстилю «Тюльпан»",
@@ -174,9 +187,36 @@ const dict = {
       successTitle: "Прийнято!",
       successText: "Подивимось профіль і звʼяжемося з вами.",
       successAgain: "Надіслати ще один",
-      errorTitle: "Щось пішло не так",
-      errorText: "Не надіслалося. Спробуйте ще раз або напишіть напряму:",
       retry: "Спробувати ще раз",
+      /* Один текст на чотири різні відмови — це була неправда: при 429 заявка
+         вже в нас, при 400 повтор дасть те саме. Тепер кожен випадок каже, що
+         сталося і що робити; поведінка кнопки й каналів — у lib/lead-failure. */
+      failures: {
+        rate_limited: {
+          title: "Заявку вже прийнято",
+          text: "Ви надіслали кілька заявок поспіль — усі вони в нас. Нову форма прийме приблизно за 10 хвилин. Якщо терміново, напишіть або зателефонуйте напряму:",
+        },
+        invalid_json: {
+          title: "Заявка дійшла пошкодженою",
+          text: "Дані загубилися дорогою — так буває на нестабільному звʼязку. Спробуйте ще раз, а якщо повториться — напишіть напряму:",
+        },
+        invalid_input: {
+          title: "Перевірте, що у полях",
+          text: "Нікнейм — 2–60 символів латиницею, цифри, крапка й підкреслення, можна з @. Контакт — Telegram або телефон, від 3 символів. Виправте й надішліть ще раз.",
+        },
+        delivery_failed: {
+          title: "Ми не отримали вашу заявку",
+          text: "Звʼязок із нашим месенджером зараз не працює, і повторна спроба, найімовірніше, дасть те саме. Найшвидший шлях до нас — написати або зателефонувати:",
+        },
+        network: {
+          title: "Звʼязок обірвався",
+          text: "Заявка навіть не пішла: зник інтернет або відповідь не прийшла за 15 секунд. Перевірте звʼязок і спробуйте ще раз.",
+        },
+        unknown: {
+          title: "Щось пішло не так",
+          text: "Сервер відповів помилкою, якої ми не очікували. Спробуйте ще раз, а якщо повториться — напишіть напряму:",
+        },
+      },
       errors: {
         igHandle: "Вкажіть нікнейм: 2–60 символів, можна з @",
         contact: "Вкажіть месенджер або телефон (від 3 символів)",
@@ -192,7 +232,10 @@ const dict = {
     rights: "Всі права захищено",
     madeIn: "Зроблено з вишнями у Чернівцях",
   },
-  /* §6: ONE contact control. Viber is gone — the channel does not exist. */
+  /* §6: ONE contact control. Один ключ на кожен канал воріт із lib/channels —
+     Viber у бою увімкнений і стоїть на тому самому номері, що WhatsApp, тому
+     підпис для нього тут обовʼязковий: без нього канал вийшов би в панель із
+     порожнім рядком. */
   contactBar: {
     open: "Обговорити проєкт",
     close: "Закрити",
@@ -200,8 +243,20 @@ const dict = {
     channels: {
       telegram: "Telegram",
       whatsapp: "WhatsApp",
+      viber: "Viber",
       instagram: "Instagram Direct",
     },
+  },
+  /* 404 — a document of its own (src/app/global-not-found.tsx), so the copy
+     below is all it needs: it borrows nothing from the page shell. No
+     messenger links here on purpose — the way out of a dead address is a
+     LIVE page of the site, where every channel is already gathered. */
+  notFound: {
+    metaTitle: "Сторінку не знайдено — SHUR-SHUR",
+    heading: "ТАКОЇ СТОРІНКИ НЕМАЄ",
+    text: "Можливо, в адресі помилка або сторінку прибрали. Усе, що ми робимо, зібрано на головній.",
+    home: "На головну",
+    chooseLanguage: "Оберіть мову",
   },
 };
 

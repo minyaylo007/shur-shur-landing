@@ -51,7 +51,17 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         <ProcessResult locale={locale} dict={dict.process} />
         <Services dict={dict.services} />
         <Trust dict={dict.trust} />
-        <AuditCta locale={locale} dict={dict.audit} ctaLabel={dict.nav.cta} />
+        {/* `ctaLabel` is v3: the one primary action is worded identically in
+            the header, the hero and here. `channelLabels`/`callLabel` are
+            production's: the form's failure state needs names for the
+            channels and the phone it offers when a lead does not send. */}
+        <AuditCta
+          locale={locale}
+          dict={dict.audit}
+          ctaLabel={dict.nav.cta}
+          channelLabels={dict.contactBar.channels}
+          callLabel={dict.nav.callLabel}
+        />
       </main>
       <TapeDivider color="black" decor="clip" flip />
       <Footer locale={locale} nav={dict.nav} footer={dict.footer} />

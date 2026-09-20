@@ -1,6 +1,6 @@
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
-import { primaryChannel } from "@/lib/site";
+import { primaryAction } from "@/lib/channels";
 import { heroVideo } from "@/lib/work";
 import { AutoVideo } from "@/components/media/AutoVideo";
 import { KineticHeading } from "@/components/motion/KineticHeading";
@@ -37,6 +37,15 @@ interface HeroProps {
  * side on its own and the text still leads.
  */
 export function Hero({ locale, dict }: HeroProps) {
+  /* The three-link row that used to stand under the button is gone with §4,
+     and with it the last place on the first screen that read `site.socials`
+     straight through — which is how a dead t.me link reached every locale
+     here until 19.09. The button below keeps the lesson rather than the row:
+     it is resolved by `primaryAction()`, the same readiness gate, so it can
+     degrade to #contact but can never become a link to nowhere. */
+  const primary = primaryAction();
+
+
   return (
     <section
       id="top"
@@ -81,10 +90,11 @@ export function Hero({ locale, dict }: HeroProps) {
           <Reveal delay={0.18} className="w-full">
             <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
               <ContactLink
-                href={primaryChannel.href}
-                channel={primaryChannel.key}
+                href={primary.href}
+                channel={primary.key}
                 locale={locale}
                 placement="hero"
+                {...(primary.external ? {} : { target: undefined, rel: undefined })}
                 className={buttonClass("juice", "w-full justify-center sm:w-auto")}
               >
                 {dict.cta}

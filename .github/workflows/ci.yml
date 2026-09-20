@@ -1,10 +1,15 @@
 name: CI
 
-# Проверки на каждый push в любую ветку и на каждый pull request.
+# Проверки на push в main и на каждый pull request.
+# Push сужен до main намеренно: ветку с открытым PR проверяет событие
+# pull_request, и на push в неё CI шёл вторым прогоном того же SHA впустую.
+# paths-ignore здесь не ставим: на main включена защита ветки с обязательной
+# проверкой verify, а пропущенная проверка и пройденная — для GitHub разные
+# состояния, и PR с правкой одних текстов не отчитался бы никогда.
 # Деплой отдельно (deploy.yml) и только после зелёного CI на main.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -41,3 +46,26 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
           # Для проверки сборки достаточно заглушки; настоящий адрес задаётся в Vercel.
           NEXT_PUBLIC_SITE_URL: https://example.invalid
+
+      # Несуществующий адрес обязан отвечать 404 и показывать нашу страницу.
+      # Код ответа нельзя проверить вёрсткой: страница с кодом 200 выглядит
+      # так же, а сайт с неё выпадает из поиска. Поэтому шаг идёт ПОСЛЕ сборки
+      # и поднимает настоящий прод-сервер: dev-сервер обрабатывает непойманные
+      # маршруты иначе, и его ответ ничего не доказывает.
+      - name: 404 на несуществующих адресах
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_SITE_URL: https://example.invalid
+        run: |
+          set -uo pipefail
+          npm start -- -H 127.0.0.1 -p 3000 &
+          server=$!
+          for _ in $(seq 1 30); do
+            curl -sSf -o /dev/null http://127.0.0.1:3000/uk && break
+            sleep 1
+          done
+          ./scripts/check-404.sh http://127.0.0.1:3000
+          status=$?
+          # Строго по PID: по имени в раннере тоже нельзя — привычка одна на все машины.
+          kill -TERM "$server" 2>/dev/null || true
+          exit "$status"

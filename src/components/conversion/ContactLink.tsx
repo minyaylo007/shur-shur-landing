@@ -6,7 +6,12 @@ import { track, type EventChannel, type EventPlacement } from "@/lib/analytics";
 
 interface ContactLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
   href: string;
-  channel: EventChannel;
+  /**
+   * `null` for a destination that is not a channel at all — the primary
+   * action degraded to the page's own `#contact` section. Nothing left the
+   * site, so nothing is reported as a contact click.
+   */
+  channel: EventChannel | null;
   locale: Locale;
   placement: EventPlacement;
   children: ReactNode;
@@ -39,7 +44,7 @@ export function ContactLink({
       target="_blank"
       rel="noopener noreferrer"
       onClick={(event) => {
-        track({ name: "contact_click", channel, locale, placement });
+        if (channel !== null) track({ name: "contact_click", channel, locale, placement });
         onClick?.(event);
       }}
       {...rest}

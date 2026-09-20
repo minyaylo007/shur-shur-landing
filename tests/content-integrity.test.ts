@@ -6,14 +6,14 @@ import { en } from "../src/dictionaries/en";
 import { he } from "../src/dictionaries/he";
 import { ro } from "../src/dictionaries/ro";
 import { locales } from "../src/lib/i18n";
-import { knownHandles } from "../src/lib/posts";
+import { knownHandles } from "../src/lib/known";
 import { workItems, workGroupOrder, itemsInGroup, processPair, heroVideo } from "../src/lib/work";
 
 /*
  * Content integrity — every claim on the page traces back to something real.
  *
  * History: this file is `tests/redesign-cycle3.test.ts`, renamed. Its
- * `lib/posts.ts` assertions (the four verified «Нас знають» accounts) are
+ * `lib/known.ts` assertions (the four verified «Нас знають» accounts) are
  * kept as they were. Everything else in cycle 3 guarded content that v2
  * deleted rather than restyled — the four «кейси» metric cards (+4 180, ×3.2,
  * 215, 4.7%) and the aggregate counters (27 / 4.2 млн / 850+). Those were

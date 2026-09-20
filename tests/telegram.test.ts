@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { escapeHtml, formatLeadMessage, sendLeadToTelegram } from "../src/lib/telegram";
+import {
+  escapeHtml,
+  formatLeadMessage,
+  sendLeadToTelegram,
+  TelegramNotConfiguredError,
+} from "../src/lib/telegram";
 
 describe("escapeHtml", () => {
   it("escapes & < > for Telegram HTML parse_mode", () => {
@@ -54,5 +59,39 @@ describe("sendLeadToTelegram", () => {
     await expect(
       sendLeadToTelegram({ name: "Test", contact: "@t", message: "", locale: "uk" }),
     ).rejects.toThrow(/TELEGRAM/);
+  });
+
+  /* «Never configured» is not «Telegram is down»: one is an outage nobody on
+     this side can fix, the other is a deployment setting. The API route logs
+     them differently, which it can only do if they are different types. */
+  it("missing credentials throw TelegramNotConfiguredError, naming both vars", async () => {
+    const error = await sendLeadToTelegram({ kind: "audit", igHandle: "@x", locale: "uk" }).catch(
+      (thrown: unknown) => thrown,
+    );
+    expect(error).toBeInstanceOf(TelegramNotConfiguredError);
+    expect((error as TelegramNotConfiguredError).missing).toEqual([
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_CHAT_ID",
+    ]);
+  });
+
+  it("names only the variable that is actually missing", async () => {
+    process.env.TELEGRAM_BOT_TOKEN = "test-token-not-real";
+    const error = await sendLeadToTelegram({ kind: "audit", igHandle: "@x", locale: "uk" }).catch(
+      (thrown: unknown) => thrown,
+    );
+    expect(error).toBeInstanceOf(TelegramNotConfiguredError);
+    expect((error as TelegramNotConfiguredError).missing).toEqual(["TELEGRAM_CHAT_ID"]);
+  });
+
+  it("the message carries variable NAMES, never a value or a prefix of one", async () => {
+    process.env.TELEGRAM_BOT_TOKEN = "1234567:super-secret-value";
+    process.env.TELEGRAM_CHAT_ID = "";
+    const error = (await sendLeadToTelegram({ kind: "audit", igHandle: "@x", locale: "uk" }).catch(
+      (thrown: unknown) => thrown,
+    )) as Error;
+    expect(error.message).toContain("TELEGRAM_CHAT_ID");
+    expect(error.message).not.toContain("1234567");
+    expect(error.message).not.toContain("super-secret-value");
   });
 });

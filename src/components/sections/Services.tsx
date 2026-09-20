@@ -39,7 +39,21 @@ export function Services({ dict }: ServicesProps) {
             <Reveal key={item.title} delay={Math.min(index, 3) * 0.08} as="li">
               <details className="group h-full rounded-lg border-2 border-cherry-900/15 bg-paper-100 p-6 transition-colors duration-200 open:border-cherry-900/35 hover:border-cherry-900/35 md:p-7">
                 <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
-                  <div className="flex flex-col gap-2">
+                  {/* `min-w-0`: without it this column keeps its min-content
+                      width — the longest word of the title — and a flex item
+                      that refuses to shrink pushes the whole card past the
+                      viewport.
+
+                      `wrap-anywhere` is the guarantee behind it. `min-w-0`
+                      alone lets the column shrink, but an unbreakable word
+                      then paints straight out of it and the card still runs
+                      off the page (Romanian "Administrarea" did, by 1px, on a
+                      320px card). `overflow-wrap: anywhere` is the one value
+                      that also lowers the min-content contribution, so the
+                      word breaks instead of the layout. It only ever fires
+                      when the word cannot fit on its own line — at every
+                      width measured below, nothing breaks. */}
+                  <div className="flex min-w-0 flex-col gap-2 wrap-anywhere">
                     <h3 className="display-type text-xl font-extrabold text-cherry-900 md:text-2xl">
                       {item.title}
                     </h3>
@@ -47,9 +61,26 @@ export function Services({ dict }: ServicesProps) {
                   </div>
                   {/* The plus/cross is a rotation, not a direction, so it
                       needs no RTL handling. The word beside it is what makes
-                      the card obviously openable at a glance. */}
+                      the card obviously openable at a glance — so it is kept
+                      at every width where it fits, and only there.
+
+                      This block cannot shrink (`shrink-0`) and the word is
+                      unbreakable, so it is a fixed ~127px claim on the card.
+                      The card is at its NARROWEST at 768, not at 320: that is
+                      where `md:grid-cols-2` halves it (296px of content
+                      against 664px at 767). The word plus the longest title
+                      word did not fit there, and the card ran off the page —
+                      27px in Romanian, 11px in Ukrainian, 6px in English.
+
+                        <640      icon only — 240px of card, too narrow
+                        640—767   icon + word — one column, the roomiest card
+                        768—1023  icon only — two columns, the tightest card
+                        ≥1024     icon + word — two columns, but 424px wide
+
+                      Measured at 1024: the word leaves ~281px for the title,
+                      against ~220px it needs in Romanian. */}
                   <span className="mt-1 flex shrink-0 items-center gap-2 font-display text-[11px] font-bold tracking-[0.14em] text-juice-500 uppercase">
-                    <span className="hidden sm:inline">
+                    <span className="hidden sm:inline md:hidden lg:inline">
                       <span className="group-open:hidden">{dict.expand}</span>
                       <span className="hidden group-open:inline">{dict.collapse}</span>
                     </span>
