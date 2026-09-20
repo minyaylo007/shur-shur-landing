@@ -1,0 +1,116 @@
+name: Sync Vercel env
+
+# Переносит боевые переменные времени работы из секретов GitHub в окружение
+# production проекта Vercel.
+#
+# Зачем отдельный сценарий, а не шаг в Deploy: значения меняются раз в полгода,
+# а выкат идёт на каждый коммит. Класть секреты в каждый прогон — лишний повод
+# их потерять; к тому же смена токена и выкат — разные события с разными
+# последствиями, и падать они должны по отдельности.
+#
+# Запуск ТОЛЬКО вручную: Actions → Sync Vercel env → Run workflow. Никаких
+# триггеров на push: сценарий пишет в боевое окружение, и делать это «заодно
+# с коммитом» нельзя.
+#
+# ВАЖНО: переменные времени работы подхватывает только НОВЫЙ выкат. Пока после
+# этого сценария не прогнали Deploy, на сайте живёт прежнее окружение и форма
+# по-прежнему отвечает 502 delivery_failed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Два одновременных прогона снимали бы и заводили одну и ту же переменную
+# вперемешку — очередь по одному.
+concurrency:
+  group: sync-vercel-env
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      # Значения приходят сюда окружением, а не аргументом команды: аргумент
+      # виден в `ps` любому процессу на раннере.
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      # Проверяем ВСЁ до первой записи. Если секрета нет, а мы уже успели снять
+      # прежнее значение, боевое окружение осталось бы хуже, чем было.
+      - name: Доступы и секреты на месте
+        run: |
+          set -euo pipefail
+          missing=""
+          for n in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID \
+                   TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+            if [ -z "${!n-}" ]; then
+              missing="$missing $n"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Пусто или не задано:$missing — синхронизация остановлена, в боевом окружении ничего не менялось"
+            exit 1
+          fi
+          echo "Все пять значений на месте (перечислены только имена)"
+
+      - name: Привязать проект Vercel
+        run: |
+          set -euo pipefail
+          npx --yes vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          # pull нужен ровно затем, чтобы появился .vercel/project.json и
+          # команды `vercel env` знали, с каким проектом работают. Скачанные
+          # боевые значения дальше не нужны — файл убираем сразу.
+          rm -f .vercel/.env.production.local
+
+      - name: Перенести переменные в production
+        run: |
+          set -euo pipefail
+
+          # Список имён снимаем ОДИН раз и до правок — и намеренно вне функции,
+          # чтобы сорванный запрос уронил шаг, а не притворился «переменной нет».
+          # `grep -q` здесь нельзя: он закрывает канал на первом совпадении,
+          # awk слева получает SIGPIPE, и при pipefail проверка «есть» вернула бы
+          # «нет» — повторный прогон падал бы на «уже существует».
+          existing=$(npx --yes vercel env ls production --token="$VERCEL_TOKEN" 2>/dev/null \
+                     | awk '{print $1}')
+
+          sync_one() {
+            local name=$1 value
+            value=${!name-}
+            if [ -z "$value" ]; then
+              echo "::error::$name пуст — пустое значение в бою хуже отсутствующего"
+              return 1
+            fi
+            if printf '%s\n' "$existing" | grep -xF "$name" > /dev/null; then
+              echo "· $name в production уже есть — снимаю прежнее значение"
+              npx --yes vercel env rm "$name" production --yes --token="$VERCEL_TOKEN"
+            else
+              echo "· $name в production ещё не было"
+            fi
+            # Значение уходит стандартным вводом: ни в аргументах, ни в логе.
+            printf '%s' "$value" | npx --yes vercel env add "$name" production --token="$VERCEL_TOKEN"
+            echo "· $name заведён в production"
+          }
+
+          sync_one TELEGRAM_BOT_TOKEN
+          sync_one TELEGRAM_CHAT_ID
+
+      # Отчёт о том, ЧТО теперь лежит в боевом окружении: список имён. Значения
+      # Vercel в нём не печатает — колонка value для секретов всегда Encrypted.
+      - name: Что теперь в боевом окружении
+        run: |
+          set -euo pipefail
+          npx --yes vercel env ls production --token="$VERCEL_TOKEN"
+          {
+            echo "### Боевое окружение Vercel после синхронизации"
+            echo
+            echo 'Полный список — в логе шага. Значения не печатаются нигде.'
+            echo
+            echo '⚠️ Переменные подхватит только НОВЫЙ выкат: запустите Deploy (ref=main).'
+          } >> "$GITHUB_STEP_SUMMARY"
