@@ -9,7 +9,14 @@
 
 import { usePathname } from "next/navigation";
 import { getDictionary } from "@/dictionaries";
-import { defaultLocale, getDirection, isLocale, locales, type Locale } from "@/lib/i18n";
+import {
+  defaultLocale,
+  getDirection,
+  isLocale,
+  locales,
+  localeNames,
+  type Locale,
+} from "@/lib/i18n";
 import { Logo } from "@/components/ui/Logo";
 
 /**
@@ -129,7 +136,15 @@ export function NotFoundView({ pathname, latinFontClass, hebrewFontClass }: NotF
                         : "border-current opacity-70 hover:opacity-100"
                     }`}
                   >
-                    {dict.langSwitcher[code]}
+                    {/* Autonym, from lib/i18n. Production read these four
+                        names out of `dict.langSwitcher`; redesign v3 moved
+                        them into the locale table itself, because a language
+                        name has no business being translated — someone who
+                        only reads Hebrew must find «עברית», not «Іврит». The
+                        404 page is the one place where that matters most: it
+                        is where a visitor who landed in the wrong language
+                        gets out. */}
+                    {localeNames[code]}
                   </a>
                 </li>
               ))}
