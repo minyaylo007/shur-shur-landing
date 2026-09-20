@@ -59,18 +59,23 @@ export function SelectedWork({ locale, dict }: SelectedWorkProps) {
   return (
     <section id="work" tabIndex={-1} className="scroll-mt-20 bg-cherry-black py-20 text-cream-type md:py-28">
       <div className="mx-auto flex max-w-7xl flex-col gap-14 px-4 sm:px-6">
-        <SectionHeading kicker={dict.kicker} heading={dict.heading} sub={dict.sub} tone="light" />
+        {/* §8: the section says its one thing once. The five per-group notes
+            that used to repeat "made for clients" under every row are now this
+            single line. */}
+        <SectionHeading kicker={dict.kicker} heading={dict.heading} sub={dict.note} tone="light" />
 
         {workGroupOrder.map((key) => {
           const group = dict.groups[key];
           const items = itemsInGroup(key);
           return (
             <div key={key} className="flex flex-col gap-5">
-              <div className="flex flex-col gap-1 border-t border-cream-type/15 pt-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+              {/* A one-word chip, not a headline with a caption: the row of
+                  tiles underneath is the argument, the label only says which
+                  industry it belongs to. */}
+              <div className="border-t border-cream-type/15 pt-5">
                 <h3 className="font-display text-sm font-bold tracking-[0.18em] text-juice-300 uppercase">
                   {group.label}
                 </h3>
-                <p className="text-sm text-cream-type/70">{group.note}</p>
               </div>
               <ul className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
                 {items.map((item, index) => (

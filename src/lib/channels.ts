@@ -69,3 +69,43 @@ export function localeChannels(locale: Locale): Channel[] {
     .map(readyChannel)
     .filter((channel): channel is Channel => channel !== null);
 }
+
+/**
+ * The ONE primary action of the whole page (redesign v3 §6). Everything
+ * labelled «Обговорити проєкт» — header, hero, contact section — points here,
+ * and there is deliberately no second filled button anywhere: Instagram is a
+ * portfolio link and the audit form is a different, differently-labelled
+ * offer.
+ *
+ * WhatsApp carries it: it is the agency's real number, it is answered, and it
+ * is the messenger that dominates every market this page is written for
+ * except Ukraine — where the Ukrainian first choice, Telegram, is still an
+ * unregistered placeholder.
+ */
+const PRIMARY_CHANNEL: ChannelKey = "whatsapp";
+
+/** Anchor of the page's own contact section — the destination that never dies. */
+export const CONTACT_ANCHOR = "#contact";
+
+export interface PrimaryAction {
+  href: string;
+  /** `null` when the action has degraded to the on-page contact section. */
+  key: ChannelKey | null;
+  /** Whether the destination leaves the site (`target="_blank"`). */
+  external: boolean;
+}
+
+/**
+ * Where the primary action points — through the readiness gate like every
+ * other link on the page, but never `null`. A `readyChannel` that hands out
+ * nothing means «draw no link»; for the page's single main action that would
+ * mean a first screen with no action at all, which is a worse answer than a
+ * slightly longer one. So it degrades to `#contact`: the audit form on the
+ * same page, always reachable, no deep-link involved.
+ */
+export function primaryAction(): PrimaryAction {
+  const channel = readyChannel(PRIMARY_CHANNEL);
+  return channel
+    ? { href: channel.href, key: channel.key, external: true }
+    : { href: CONTACT_ANCHOR, key: null, external: false };
+}

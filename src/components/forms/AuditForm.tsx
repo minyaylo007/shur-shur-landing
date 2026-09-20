@@ -7,6 +7,7 @@ import { leadSchema } from "@/lib/validation";
 import { site } from "@/lib/site";
 import { localeChannels } from "@/lib/channels";
 import { failureOf, LEAD_FAILURES, type LeadFailure } from "@/lib/lead-failure";
+import { track } from "@/lib/analytics";
 import { CHANNEL_ICONS, CherryIcon, PhoneIcon } from "@/components/ui/icons";
 
 type Status = "idle" | "submitting" | "success" | "error";
@@ -119,6 +120,10 @@ export function AuditForm({
         | { ok?: boolean; error?: unknown }
         | null;
       if (response.ok && data?.ok) {
+        /* v3 §12: the page's second conversion. Fired on the ACCEPTED
+           submission, not on the click — a rejected, rate-limited or
+           timed-out request is not a lead. */
+        track({ name: "audit_submit", locale, placement: "contact_section" });
         setStatus("success");
         return;
       }

@@ -14,13 +14,20 @@ const variants = {
 /* Cycle-2 brand physics: squash & stretch. Hover = gentle stretch, press
    (incl. touch :active) = hard squish. Tailwind v4 scale/translate utilities
    emit the individual CSS `scale` and `translate` properties → they compose
-   with the variant translate offsets and never fight gsap transforms
-   (Magnetic/Splat wrappers animate their OWN elements). Reduced motion: the
-   global transition-duration kill-switch makes the states instant. */
+   with the variant translate offsets instead of overwriting them, which is
+   also why v3 could drop the animation library: nothing here needs a JS
+   transform. Reduced motion: the global transition-duration kill-switch
+   makes the states instant. */
 const base =
   "inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-7 py-3.5 font-display text-sm font-bold tracking-wide uppercase transition-[background-color,box-shadow,color,translate,scale] duration-200 hover:scale-x-[1.04] hover:scale-y-[0.96] active:scale-x-[1.08] active:scale-y-[0.88] disabled:cursor-not-allowed disabled:opacity-60";
 
 type Variant = keyof typeof variants;
+
+/** The button look as a class string — for links that are not <ButtonLink>,
+    e.g. the tracked contact anchors in components/conversion. */
+export function buttonClass(variant: Variant = "juice", className = ""): string {
+  return `${base} ${variants[variant]} ${className}`;
+}
 
 export function Button({
   variant = "juice",

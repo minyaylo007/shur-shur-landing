@@ -46,3 +46,30 @@ export const ogLocales: Record<Locale, string> = {
  * language switcher can never drift from the list above.
  */
 export const localeSegmentPattern = new RegExp(`^/(?:${locales.join("|")})(?=/|$)`);
+
+/**
+ * Each language written in itself (autonym). A language list is the one place
+ * where translating the names is actively harmful: someone who reads only
+ * Hebrew has to find «עברית», not «Hebrew» spelled in Ukrainian. Because the
+ * names never change with the page language they live here rather than in the
+ * four dictionaries — which is also four fewer strings to keep in sync.
+ *
+ * No flags anywhere: a flag names a country, not a language.
+ */
+export const localeNames: Record<Locale, string> = {
+  uk: "Українська",
+  en: "English",
+  he: "עברית",
+  ro: "Română",
+};
+
+/** Compact form for the collapsed switcher (the ISO code, uppercased). */
+export const localeShort: Record<Locale, string> = {
+  uk: "UK",
+  en: "EN",
+  he: "HE",
+  ro: "RO",
+};
+
+/** Cookie + storage key holding a visitor's manual language choice. */
+export const localeStorageKey = "shur.locale";

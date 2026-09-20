@@ -12,7 +12,6 @@ import { fontClasses } from "../fonts";
 import { getDictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
 import { buildSha, BUILD_SHA_META } from "@/lib/build";
-import { SmoothScroll } from "@/components/motion/SmoothScroll";
 import "../globals.css";
 
 export const dynamicParams = false;
@@ -56,7 +55,15 @@ export async function generateMetadata({ params }: LayoutParams): Promise<Metada
          previous 1080x1350 artwork lost the word «shur-shur» — it stood at
          the bottom edge — in every such crop. width/height below are the
          file's REAL dimensions; tests/og-card asserts that by measuring the
-         file, so a replacement asset of another shape cannot slip in. */
+         file, so a replacement asset of another shape cannot slip in.
+
+         v3 arrived here with its own answer to a different problem: the card
+         used to be a 2.75 MB lossless PNG, and the branch re-encoded it to a
+         444 KB JPEG. Production had already done that AND fixed the crop, so
+         the branch's vertical 1080x1350 card is not restored — its file is
+         deleted with this merge. The weight argument is satisfied either
+         way (og-card.jpg is 203 KB, less than half the branch's file); the
+         readable name in a square crop is only satisfied by this one. */
       images: [{ url: "/og-card.jpg", width: 1200, height: 630, alt: dict.meta.ogAlt }],
     },
     twitter: {
@@ -96,8 +103,8 @@ export default async function RootLayout({
        suppressHydrationWarning (scoped to this element only).
        `dir` comes from the locale: it drives the logical Tailwind utilities
        and the `[dir="rtl"]` rules in globals.css. Redesign v2 removed the
-       pinned Services track, so nothing left on the page depends on GSAP for
-       readable layout — every section is static HTML first. */
+       pinned Services track, and v3 removed GSAP and Lenis entirely — every
+       section is static HTML first, and the only motion left is CSS. */
     <html
       lang={locale}
       dir={getDirection(locale)}
@@ -110,7 +117,7 @@ export default async function RootLayout({
             __html: "document.documentElement.classList.remove('no-js')",
           }}
         />
-        <SmoothScroll>{children}</SmoothScroll>
+        {children}
       </body>
     </html>
   );

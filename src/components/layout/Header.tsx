@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent } from "react";
+import { Suspense, useEffect, useState, type MouseEvent } from "react";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
 import { scrollToAnchor } from "@/components/motion/SmoothScroll";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { Logo } from "@/components/ui/Logo";
-import { PhoneIcon } from "@/components/ui/icons";
-import { site } from "@/lib/site";
+import { ContactLink } from "@/components/conversion/ContactLink";
+import { primaryAction } from "@/lib/channels";
 
 interface HeaderProps {
   locale: Locale;
@@ -30,6 +30,8 @@ export function Header({ locale, nav, langSwitcher }: HeaderProps) {
      dark background — cream nav over paper sections is unreadable otherwise.
      JS only *removes* the background once it knows we're at the very top. */
   const [atTop, setAtTop] = useState(false);
+  /* Resolved once per render, not per click: the gate is static data. */
+  const primary = primaryAction();
 
   useEffect(() => {
     const onScroll = () => setAtTop(window.scrollY <= 24);
@@ -92,12 +94,19 @@ export function Header({ locale, nav, langSwitcher }: HeaderProps) {
         {nav.skipToContent}
       </a>
 
-      {/* One `gap-2` at every width, on purpose. `justify-between` already
-          spreads the three groups whenever there is room, so this value is a
-          *minimum* that only binds when the bar is crowded — which is exactly
-          when a wider minimum would push a Romanian CTA off the edge. Nothing
-          moves on a roomy bar: the 16px the old `sm:gap-4` reserved was never
-          visible there. */}
+      {/* v3: the bar carries three things — logo, language, one action. The
+          phone left the header entirely (§4): it competed with the action that
+          converts, and a call reaches nobody after hours. It lives in the
+          footer now, as a detail.
+
+          One `gap-2` at every width, on purpose — kept from the 19.09 fix for
+          the longest language. `justify-between` already spreads the groups
+          whenever there is room, so this value is a *minimum* that only binds
+          when the bar is crowded, which is exactly when a wider minimum would
+          push a Romanian CTA off the edge. Dropping the phone gives the row
+          ~44–160px back depending on width, and the minimum stays anyway:
+          slack is not a reason to re-introduce a value that only shows up in
+          the failure case. */}
       <div className="relative mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6 md:h-[72px]">
         <a
           href="#top"
@@ -135,42 +144,39 @@ export function Header({ locale, nav, langSwitcher }: HeaderProps) {
         </nav>
 
         <div className="flex items-center gap-2 text-cream-type sm:gap-3">
-          {/* Brief §5: the phone must be reachable from the top of the page,
-              not only from the footer. It is the one item in the bar that has a
-              second home two taps away (the contact pill, the hero, the
-              footer), so it is also the one that yields when the bar is full —
-              and the bar is full wherever the CTA and the four language pills
-              have to share the row with something else:
+          {/* useSearchParams() reads the request URL, so the switcher is the
+              one client island that cannot be prerendered with the shell. */}
+          <Suspense fallback={null}>
+            <LanguageSwitcher locale={locale} dict={langSwitcher} />
+          </Suspense>
+          {/* §6: the single primary action. It goes straight to the messenger
+              rather than to #contact — one tap instead of a scroll and a tap.
 
-                <768   no room even for the icon. It used to show from 640
-                       (`sm:inline-flex`), which is what the `md` here
-                       changed: at 640 the Romanian bar does not fit with it
-                768—1023  icon only — no inline menu at these widths
-                1024—1279 nothing — the inline menu has the middle of the bar
-                ≥1280  icon + number, the full bar the site always had
+              Through `primaryAction()`, which is the readiness gate: if the
+              chosen channel is ever switched off the button does not vanish
+              and does not turn into a dead deep-link — it falls back to
+              #contact, where the form and every live channel already are.
+              The no-wrap rule on the label below is the 19.09 fix for the
+              longest language and stays: it keeps "SĂ DISCUTĂM PROIECTUL" on
+              one line.
 
-              The gap in the middle is the deliberate part: at 1024 the Romanian
-              menu plus CTA leave ~20px of slack, and a 44px phone would spend
-              all of it. */}
-          <a
-            href={site.phone.tel}
-            aria-label={nav.callLabel}
-            className="hidden cursor-pointer items-center gap-2 rounded-full px-2 py-2 text-cream-type transition-colors duration-200 hover:text-juice-300 md:inline-flex lg:hidden xl:inline-flex xl:px-3"
-          >
-            <PhoneIcon className="size-4" />
-            {/* Bidi-neutral: pinned LTR so "+380…" keeps its shape in Hebrew. */}
-            <span dir="ltr" className="hidden text-sm font-semibold whitespace-nowrap xl:inline">
-              {site.phone.display}
-            </span>
-          </a>
-          <LanguageSwitcher locale={locale} dict={langSwitcher} />
-          <a
-            href="#contact"
-            onClick={(e) => handleAnchor(e, "#contact")}
+              The phone is no longer beside it. Until 20.09 the bar carried a
+              call link that appeared, shrank to an icon and disappeared again
+              across four breakpoints — the most fragile thing in the row, and
+              the item v3 §4 removes from the conversion path. The width rules
+              that governed it are gone with it; what they protected — a bar
+              that does not overflow in Romanian — is now protected by having
+              one item fewer, and is measured directly in the overflow table. */}
+          <ContactLink
+            href={primary.href}
+            channel={primary.key}
+            locale={locale}
+            placement="header"
+            {...(primary.external ? {} : { target: undefined, rel: undefined })}
             className="hidden cursor-pointer items-center rounded-full bg-cherry-juice px-5 py-2.5 font-display text-xs font-bold tracking-wide whitespace-nowrap text-cream-type uppercase shadow-[3px_3px_0_rgb(244_239_230)] transition-[translate,box-shadow,background-color] duration-200 hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-cherry-700 hover:shadow-[1px_1px_0_rgb(244_239_230)] sm:inline-flex"
           >
             {nav.cta}
-          </a>
+          </ContactLink>
         </div>
       </div>
     </header>

@@ -8,14 +8,20 @@ import type { Locale } from "./i18n";
  * `Record<Locale, string>` alt shape the portfolio has always used — one alt
  * convention in the codebase rather than two.
  *
- * A note that shaped the whole layout: ALL twenty source files are vertical
- * 9:16. The six 4K clips are stored as 3840×2160 with `rotation=-90` in
- * their metadata, which reads as landscape until a player applies the
- * matrix. The agency shoots Instagram-native and nothing else, so the grid
- * is built from 9:16 tiles by design instead of cropping tall footage into
- * wide boxes.
+ * v3: the shared Drive folder grew from 20 files to 43. The new material is
+ * not "more of the same" — it adds whole industries the site could not show
+ * before (fashion studio, bridal atelier, an Italian restaurant, furniture
+ * and textile salons, a leisure complex). So the clusters are now by
+ * INDUSTRY rather than by "stills / stories": a visitor recognises their own
+ * business in a row of tiles, which no amount of prose achieves. Everything
+ * that was only a frame grab from a three-second clip (bridal-terrace,
+ * bridal-seawall, bts-pool) is retired — it was the weakest evidence in the
+ * archive and there are now real photographs in its place.
+ *
+ * ALL source files are vertical 9:16, so the grid is built from 9:16 tiles
+ * by design instead of cropping tall footage into wide boxes.
  */
-export type WorkGroupKey = "beauty" | "food" | "bridal" | "stories";
+export type WorkGroupKey = "beauty" | "food" | "fashion" | "interior" | "estate";
 
 interface WorkBase {
   /** Stable key — also the basename of the media file. */
@@ -68,7 +74,7 @@ const video = (
 
 /** Order here is the render order inside each group. */
 export const workItems: WorkItem[] = [
-  // ─── Beauty & product ────────────────────────────────────────────────
+  // ─── Beauty, skincare & wellness ─────────────────────────────────────
   photo("beauty-spf", "beauty", 1000, 1500, {
     uk: "Предметна зйомка: сонцезахисний крем на шкірі, деталь у м’якому світлі",
     en: "Product shoot: sunscreen on skin, close detail in soft light",
@@ -80,6 +86,12 @@ export const workItems: WorkItem[] = [
     en: "Product shoot: cleansing foam with its texture in frame",
     he: "צילום מוצר: קצף ניקוי עם המרקם שלו בפריים",
     ro: "Ședință de produs: spumă de curățare cu textura în cadru",
+  }),
+  photo("beauty-gel", "beauty", 1000, 1500, {
+    uk: "Предметна зйомка: гель для тіла в руці моделі на тлі шкіри",
+    en: "Product shoot: body gel held against the model’s skin",
+    he: "צילום מוצר: ג’ל גוף מוחזק על רקע עורה של הדוגמנית",
+    ro: "Ședință de produs: gel de corp ținut pe fundalul pielii modelului",
   }),
   photo("beauty-lineup", "beauty", 1024, 1500, {
     uk: "Предметна зйомка: повна лінійка догляду, розкладка на світлому тлі",
@@ -105,19 +117,31 @@ export const workItems: WorkItem[] = [
     he: "טבע דומם אסתטי של קוסמטיקה עם עבודת אור",
     ro: "Natură statică editorială de cosmetice, cu lumină modelată",
   }),
+  video("reel-massage", "beauty", 540, 960, {
+    uk: "Reels для велнес-студії: процедура масажу — готовий креатив для клієнта",
+    en: "Reel for a wellness studio: a massage treatment — a finished creative for the client",
+    he: "ריל לסטודיו וולנס: טיפול עיסוי — קריאייטיב מוגמר עבור הלקוח",
+    ro: "Reel pentru un studio de wellness: o ședință de masaj — creativ finalizat pentru client",
+  }),
+  photo("story-massage", "beauty", 720, 1280, {
+    uk: "Сторіс для велнес-студії із запрошенням на процедуру",
+    en: "Story creative for a wellness studio inviting bookings",
+    he: "קריאייטיב סטורי לסטודיו וולנס עם הזמנה לטיפול",
+    ro: "Creativ de story pentru un studio de wellness, cu invitație la programare",
+  }),
 
   // ─── Food & hospitality ──────────────────────────────────────────────
-  video("reel-bakery", "food", 540, 960, {
-    uk: "Відео: процес приготування випічки в турецькій пекарні",
-    en: "Video: the baking process at a Turkish bakery",
-    he: "וידאו: תהליך האפייה במאפייה טורקית",
-    ro: "Video: procesul de coacere într-o brutărie turcească",
-  }),
   photo("food-pastry", "food", 982, 1500, {
     uk: "Зйомка для кав’ярні: випічка на темному тлі",
     en: "Coffee-shop shoot: pastry on a dark surface",
     he: "צילום לבית קפה: מאפה על משטח כהה",
     ro: "Ședință pentru cafenea: patiserie pe o suprafață închisă",
+  }),
+  photo("food-cream", "food", 1000, 1500, {
+    uk: "Зйомка для кондитерської: кондитер відсаджує крем на десерт",
+    en: "Patisserie shoot: a pastry chef piping cream onto a dessert",
+    he: "צילום לקונדיטוריה: קונדיטור מזלף קרם על קינוח",
+    ro: "Ședință pentru cofetărie: un cofetar toarnă cremă pe un desert",
   }),
   photo("food-interior", "food", 1000, 1500, {
     uk: "Інтер’єрна зйомка залу ресторану",
@@ -125,55 +149,123 @@ export const workItems: WorkItem[] = [
     he: "צילום פנים של אולם המסעדה",
     ro: "Fotografie de interior a sălii unui restaurant",
   }),
-  video("bts-pool", "food", 720, 1280, {
-    uk: "Бекстейдж: зйомка сніданку біля басейну котеджу",
-    en: "Behind the scenes: shooting breakfast by a cottage pool",
-    he: "מאחורי הקלעים: צילום ארוחת בוקר ליד בריכת הקוטג’",
-    ro: "Din culise: fotografierea micului dejun lângă piscina unei cabane",
+  video("reel-kitchen", "food", 540, 960, {
+    uk: "Reels для італійського ресторану: кухар готує страву на кухні",
+    en: "Reel for an Italian restaurant: a chef cooking in the kitchen",
+    he: "ריל למסעדה איטלקית: שף מבשל במטבח",
+    ro: "Reel pentru un restaurant italian: un bucătar gătind în bucătărie",
   }),
-
-  // ─── Fashion & bridal ────────────────────────────────────────────────
-  video("bts-crew", "bridal", 720, 1280, {
-    uk: "Бекстейдж: команда зі студійним світлом на виїзній зйомці",
-    en: "Behind the scenes: the crew with studio light on location",
-    he: "מאחורי הקלעים: הצוות עם תאורת סטודיו בצילומי חוץ",
-    ro: "Din culise: echipa cu lumină de studio la filmare în locație",
+  video("reel-bakery", "food", 540, 960, {
+    uk: "Відео: процес приготування випічки в турецькій пекарні",
+    en: "Video: the baking process at a Turkish bakery",
+    he: "וידאו: תהליך האפייה במאפייה טורקית",
+    ro: "Video: procesul de coacere într-o brutărie turcească",
   }),
-  photo("bridal-terrace", "bridal", 844, 1500, {
-    uk: "Бекстейдж весільної зйомки: наречена на терасі, фотограф у кадрі",
-    en: "Bridal shoot behind the scenes: the bride on a terrace, photographer in frame",
-    he: "מאחורי הקלעים של צילומי כלה: הכלה במרפסת, הצלם בפריים",
-    ro: "Din culisele ședinței de nuntă: mireasa pe terasă, fotograful în cadru",
-  }),
-  photo("bridal-seawall", "bridal", 844, 1500, {
-    uk: "Весільна зйомка на локації біля моря",
-    en: "Bridal shoot on location by the sea",
-    he: "צילומי כלה בלוקיישן על שפת הים",
-    ro: "Ședință de nuntă în locație, lângă mare",
-  }),
-
-  // ─── Stories & reels made for clients ────────────────────────────────
-  video("reel-baklava", "stories", 540, 960, {
+  video("reel-baklava", "food", 540, 960, {
     uk: "Reels для пекарні: подача пахлави — готовий креатив для клієнта",
     en: "Reel for a bakery: serving baklava — a finished creative made for the client",
     he: "ריל למאפייה: הגשת בקלאווה — קריאייטיב מוגמר עבור הלקוח",
     ro: "Reel pentru o brutărie: servirea baclavalei — creativ finalizat pentru client",
   }),
-  video("reel-massage", "stories", 540, 960, {
-    uk: "Reels для велнес-студії — готовий креатив для клієнта",
-    en: "Reel for a wellness studio — a finished creative made for the client",
-    he: "ריל לסטודיו וולנס — קריאייטיב מוגמר עבור הלקוח",
-    ro: "Reel pentru un studio de wellness — creativ finalizat pentru client",
+  photo("story-estate", "food", 1000, 1778, {
+    uk: "Сторіс для італійського ресторану: сезонне меню літньої веранди",
+    en: "Story creative for an Italian restaurant: the summer terrace menu",
+    he: "קריאייטיב סטורי למסעדה איטלקית: תפריט המרפסת הקיצית",
+    ro: "Creativ de story pentru un restaurant italian: meniul terasei de vară",
   }),
-  photo("story-massage", "stories", 720, 1280, {
-    uk: "Сторіс для велнес-студії — готовий креатив для клієнта",
-    en: "Story creative for a wellness studio — made for the client",
-    he: "קריאייטיב סטורי לסטודיו וולנס — עבור הלקוח",
-    ro: "Creativ de story pentru un studio de wellness — realizat pentru client",
+  photo("story-pasta", "food", 1000, 1778, {
+    uk: "Сторіс для ресторану: паста й вино у фірмовому оформленні",
+    en: "Story creative for a restaurant: pasta and wine in the brand’s own styling",
+    he: "קריאייטיב סטורי למסעדה: פסטה ויין בעיצוב המותג",
+    ro: "Creativ de story pentru restaurant: paste și vin în stilul brandului",
+  }),
+
+  // ─── Fashion & bridal ────────────────────────────────────────────────
+  photo("fashion-suit", "fashion", 1000, 1508, {
+    uk: "Фешн-зйомка в студії: модель у світлому костюмі бренду одягу",
+    en: "Studio fashion shoot: a model in a light suit for a clothing brand",
+    he: "צילומי אופנה בסטודיו: דוגמנית בחליפה בהירה עבור מותג אופנה",
+    ro: "Ședință fashion în studio: un model într-un costum deschis, pentru un brand de haine",
+  }),
+  photo("fashion-dress", "fashion", 1000, 1500, {
+    uk: "Фешн-зйомка в студії: модель у білій сукні на стільці",
+    en: "Studio fashion shoot: a model in a white dress on a chair",
+    he: "צילומי אופנה בסטודיו: דוגמנית בשמלה לבנה על כיסא",
+    ro: "Ședință fashion în studio: un model într-o rochie albă, pe un scaun",
+  }),
+  photo("bridal-atelier", "fashion", 1000, 1500, {
+    uk: "Чорно-біла зйомка ательє: швачка працює з весільною сукнею на манекені",
+    en: "Black-and-white atelier shoot: a seamstress working on a wedding dress on the form",
+    he: "צילום שחור-לבן בסטודיו תפירה: תופרת עובדת על שמלת כלה על הבובה",
+    ro: "Ședință alb-negru în atelier: o croitoreasă lucrează la o rochie de mireasă pe manechin",
+  }),
+  video("reel-atelier", "fashion", 540, 960, {
+    uk: "Reels для весільного бренду: виробництво сукні, робота з деталями",
+    en: "Reel for a bridal brand: the dress being made, detail by detail",
+    he: "ריל למותג כלות: ייצור השמלה, פרט אחר פרט",
+    ro: "Reel pentru un brand de mirese: confecționarea rochiei, detaliu cu detaliu",
+  }),
+  video("reel-bride", "fashion", 540, 960, {
+    uk: "Reels для весільного бренду: імідж-ролик салону",
+    en: "Reel for a bridal brand: the salon’s image clip",
+    he: "ריל למותג כלות: סרטון התדמית של הסלון",
+    ro: "Reel pentru un brand de mirese: clipul de imagine al salonului",
+  }),
+  video("bts-crew", "fashion", 540, 960, {
+    uk: "Бекстейдж: команда зі студійним світлом на виїзній весільній зйомці",
+    en: "Behind the scenes: the crew with studio light on a bridal shoot on location",
+    he: "מאחורי הקלעים: הצוות עם תאורת סטודיו בצילומי כלה בחוץ",
+    ro: "Din culise: echipa cu lumină de studio la o ședință de nuntă în locație",
+  }),
+
+  // ─── Interior, furniture & textile ───────────────────────────────────
+  photo("story-curtains", "interior", 1000, 1778, {
+    uk: "Сторіс для салону текстилю: добірка штор для дому",
+    en: "Story creative for a textile salon: choosing curtains for the home",
+    he: "קריאייטיב סטורי לסלון טקסטיל: בחירת וילונות לבית",
+    ro: "Creativ de story pentru un salon textil: alegerea draperiilor pentru casă",
+  }),
+  photo("story-textile", "interior", 1000, 1778, {
+    uk: "Сторіс для салону текстилю: штори в оформленні інтер’єру",
+    en: "Story creative for a textile salon: curtains as part of the interior",
+    he: "קריאייטיב סטורי לסלון טקסטיל: וילונות כחלק מעיצוב הפנים",
+    ro: "Creativ de story pentru un salon textil: draperiile ca parte din interior",
+  }),
+  photo("story-armchair", "interior", 1000, 1778, {
+    uk: "Сторіс для салону дизайнерських меблів: крісло в інтер’єрі",
+    en: "Story creative for a designer-furniture salon: an armchair in the interior",
+    he: "קריאייטיב סטורי לסלון רהיטי עיצוב: כורסה בחלל",
+    ro: "Creativ de story pentru un salon de mobilier de design: un fotoliu în interior",
+  }),
+  photo("story-furniture", "interior", 1000, 1778, {
+    uk: "Сторіс для салону меблів: меблі під замовлення в кадрі",
+    en: "Story creative for a furniture salon: made-to-order furniture in frame",
+    he: "קריאייטיב סטורי לסלון רהיטים: רהיטים בהזמנה אישית בפריים",
+    ro: "Creativ de story pentru un salon de mobilă: mobilier la comandă în cadru",
+  }),
+
+  // ─── Leisure complex & property ──────────────────────────────────────
+  photo("story-kodra", "estate", 1000, 1778, {
+    uk: "Сторіс для комплексу відпочинку: запрошення забронювати котедж",
+    en: "Story creative for a leisure complex: an invitation to book a cottage",
+    he: "קריאייטיב סטורי למתחם נופש: הזמנה להזמין קוטג’",
+    ro: "Creativ de story pentru un complex de agrement: invitație la rezervarea unei cabane",
+  }),
+  photo("story-kodra-dates", "estate", 1000, 1778, {
+    uk: "Сторіс для комплексу відпочинку: календар вільних дат на місяць",
+    en: "Story creative for a leisure complex: the month’s open dates calendar",
+    he: "קריאייטיב סטורי למתחם נופש: לוח התאריכים הפנויים לחודש",
+    ro: "Creativ de story pentru un complex de agrement: calendarul datelor libere ale lunii",
+  }),
+  photo("story-kodra-invest", "estate", 1000, 1778, {
+    uk: "Сторіс для забудовника: інвестиції в заміську нерухомість",
+    en: "Story creative for a developer: investing in out-of-town property",
+    he: "קריאייטיב סטורי ליזם: השקעה בנדל״ן כפרי",
+    ro: "Creativ de story pentru un dezvoltator: investiția în proprietăți din afara orașului",
   }),
 ];
 
-export const workGroupOrder: WorkGroupKey[] = ["beauty", "food", "bridal", "stories"];
+export const workGroupOrder: WorkGroupKey[] = ["beauty", "food", "fashion", "interior", "estate"];
 
 export function itemsInGroup(group: WorkGroupKey): WorkItem[] {
   return workItems.filter((item) => item.group === group);
@@ -200,7 +292,7 @@ export const processPair = {
 } as const;
 
 /** Hero background (brief §6): a street shoot in the agency's own city. */
-export const heroVideo = video("hero-street", "beauty", 900, 1600, {
+export const heroVideo = video("hero-street", "fashion", 720, 1280, {
   uk: "Бекстейдж вуличної зйомки в Чернівцях: оператор знімає модель біля фруктової ятки",
   en: "Behind the scenes of a street shoot in Chernivtsi: an operator filming a model by a fruit stall",
   he: "מאחורי הקלעים של צילומי רחוב בצ’רנוביץ: צלם מצלם דוגמנית ליד דוכן פירות",

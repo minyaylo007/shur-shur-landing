@@ -4,19 +4,37 @@
  * compiler-enforced: a new string here fails the build until all four
  * locales carry it.
  *
- * Redesign v2 (brief §3): visible copy is roughly half of what v1 shipped.
- * Nothing factual was invented — every figure below already existed in the
- * project and is self-reported by the agency (team size, number of service
- * directions, countries). The v1 «кейси» figures and aggregate counters were
- * removed rather than restated: they were marked in code as an illustrative
- * placeholder set, and brief §16/§28 forbid presenting unverified numbers as
- * client results.
+ * Redesign v3 (discrepancy §8) — visible prose down ~44%. Four moves:
+ *   1. Keys that only repeated a promise the page already makes are gone:
+ *      `hero.badge` (the city, on the FIRST SCREEN — §1), `hero.contactLabel`,
+ *      `hero.scrollHint`, `work.sub`, `services.sub`, `audit.cityLine`.
+ *      Two keys v3 also listed here came BACK when the redesign met
+ *      production on 20.09.2026, and neither is visible prose:
+ *      `nav.callLabel` is the accessible name of the one remaining `tel:`
+ *      link (footer, and the form's failure state — a production fix of
+ *      15.09), and `contactBar.channels.viber` names a channel that is live
+ *      in production on the same number as WhatsApp. A key that a rendered
+ *      channel needs is not decoration; see the note beside `messengers` in
+ *      lib/site.
+ *   2. Portfolio group notes — five sentences that all said the same thing —
+ *      collapsed into ONE `work.note`, and the labels became one-word chips.
+ *   3. The 22 service bullets were MERGED into 12. Not one of the seven real
+ *      service directions was dropped; micro-services that used to be ranked
+ *      alongside whole directions («Мобільна зйомка», «Підбір моделей»,
+ *      «Оформлення стрічки», «Маркетингова консультація») now sit inside the
+ *      line they belong to.
+ *   4. `trust.paragraphs` went from two paragraphs to one sentence. The
+ *      geography that used to close the hero subtitle lives there: low on the
+ *      page, small, beside the team fact it actually supports (§1).
+ *
+ * Nothing factual was invented — every figure is self-reported by the agency
+ * and already existed in the project.
  */
 const dict = {
   meta: {
     title: "SHUR-SHUR — контент-агенція з Чернівців",
     description:
-      "Знімаємо, монтуємо й просуваємо контент для соцмереж: зйомка, Reels, таргетована реклама, motion та AI-рішення. Команда з 11 людей у Чернівцях.",
+      "Знімаємо, монтуємо й просуваємо контент для соцмереж: зйомка, Reels, таргетована реклама, motion та AI-рішення.",
     ogAlt: "SHUR-SHUR — контент-агенція з Чернівців.",
   },
   nav: {
@@ -25,119 +43,104 @@ const dict = {
     about: "Про нас",
     contact: "Контакти",
     cta: "Обговорити проєкт",
+    /* Не видимий підпис, а доступне імʼя для tel:-посилання — воно лишилось
+       рівно в двох місцях: у підвалі й усередині відмови форми. v3 прибрав
+       ключ разом із телефоном із шапки; сама відмова форми — правка бою від
+       15.09, і зчитувач екрана має читати там «Зателефонувати», а не набір
+       цифр. Тому ключ повертається. */
+    callLabel: "Зателефонувати",
     menuLabel: "Навігація по сторінці",
     skipToContent: "Перейти до контенту",
-    callLabel: "Зателефонувати",
   },
+  /* §2: the switcher is a disclosure, and the language NAMES are autonyms
+     from lib/i18n — never translated, never flags. Only the labels the
+     control needs for screen readers live here. */
   langSwitcher: {
     label: "Мова сайту",
-    uk: "Укр",
-    en: "Eng",
-    he: "עב",
-    ro: "Rom",
+    current: "Поточна мова",
   },
-  /* Brief §5: one statement, one supporting line, ONE primary CTA, and
-     direct contact within reach. The audit form moved to its own section. */
+  /* §5 + §1 + §6: one statement, one short line, ONE primary action.
+     No city badge, no row of competing contact links. */
   hero: {
-    badge: "Контент-агенція • Чернівці",
     titleLines: ["ЗНІМАЄМО", "КОНТЕНТ,", "ЯКИЙ ПРОДАЄ"],
-    subtitle:
-      "Повний цикл: зйомка, монтаж, ведення соцмереж і таргетована реклама. Україна, Румунія, Ізраїль.",
+    subtitle: "Зйомка, монтаж, соцмережі, реклама.",
     cta: "Обговорити проєкт",
-    contactLabel: "Або одразу:",
-    scrollHint: "Наші роботи",
+    secondary: "Дивитись роботи",
   },
-  /* Brief §7: the portfolio sits immediately after the hero. */
   work: {
     kicker: "Портфоліо",
     heading: "НАШІ РОБОТИ",
-    sub: "Знято, змонтовано й опубліковано командою SHUR-SHUR.",
+    /* §12 of the v2 brief, said ONCE instead of five times: these are finished
+       creatives made FOR clients, so client branding inside the frame reads as
+       a work sample rather than as the site's own copy. */
+    note: "Зняли й змонтували для клієнтів.",
+    /* Industry filters, not formats — a restaurateur looks for food, not for
+       «Reels». One word each: these are chips, not sentences. */
     groups: {
-      beauty: { label: "Б’ЮТІ ТА ПРЕДМЕТКА", note: "Студійна зйомка косметики й догляду" },
-      food: { label: "ЇЖА ТА ЗАКЛАДИ", note: "Кав’ярні, ресторани, пекарні" },
-      bridal: { label: "FASHION І ВЕСІЛЛЯ", note: "Виїзні зйомки на локаціях" },
-      /* Framing required for §12: these are finished creatives the agency
-         produced FOR clients, so client branding inside the frame reads as
-         a work sample rather than as the site's own copy. */
-      stories: { label: "STORIES ТА REELS", note: "Готові креативи, які ми зробили для клієнтів" },
+      beauty: { label: "Б’ЮТІ" },
+      food: { label: "ЇЖА" },
+      fashion: { label: "FASHION" },
+      interior: { label: "ІНТЕР’ЄР" },
+      estate: { label: "НЕРУХОМІСТЬ" },
     },
-    playLabel: "Відео відтворюється без звуку",
+    playLabel: "Відео без звуку",
   },
-  /* Brief §8: behind the scenes → finished frame, one shoot, one product. */
   process: {
     kicker: "Як це виглядає",
     heading: "ВІД БЕКСТЕЙДЖУ ДО КАДРУ",
-    sub: "Одна зйомка косметики: спершу процес у студії, потім готовий кадр для клієнта.",
+    sub: "Одна зйомка, два кадри.",
     btsLabel: "Бекстейдж",
     resultLabel: "Результат",
   },
-  /* Brief §15: the same seven real services, grouped into four. Nothing was
-     invented and nothing was dropped — the detail lists below hold every
-     bullet the v1 cards carried, just collapsed by default. */
+  /* Four directions, 12 bullets instead of 22 — merged, not deleted. */
   services: {
     kicker: "Що ми робимо",
     heading: "ПОСЛУГИ",
-    sub: "Чотири напрями. Розгорніть будь-який, щоб побачити деталі.",
     expand: "Детальніше",
     collapse: "Згорнути",
     items: [
       {
         title: "Контент і продакшн",
-        tagline: "Зйомка, монтаж і готові Reels — від ідеї до публікації",
+        tagline: "Зйомка, монтаж, Reels",
         points: [
-          "Професійна фото- та відеозйомка",
-          "Мобільна зйомка",
-          "Сценарії для Reels та TikTok",
-          "Підбір моделей та локацій",
-          "Монтаж, субтитри, звуковий дизайн",
-          "Адаптація під кожну платформу",
+          "Фото, відео, мобільна зйомка",
+          "Сценарії, моделі, локації",
+          "Монтаж, субтитри, звук",
         ],
       },
       {
         title: "Ведення соцмереж",
-        tagline: "Профіль під ключ: стратегія, контент-план, щоденні сторіс",
+        tagline: "Профіль під ключ",
         points: [
-          "Контент-стратегія",
-          "Reels, сторіс та пости",
-          "Контент-план",
-          "Оформлення стрічки",
+          "Стратегія, контент-план, оформлення",
+          "Reels, сторіс, пости",
           "Аналітика та звітність",
         ],
       },
       {
         title: "Реклама і стратегія",
-        tagline: "Заявки та продажі, а не просто покази",
+        tagline: "Заявки, а не покази",
         points: [
-          "Аналіз ніші та конкурентів",
-          "Рекламна стратегія",
-          "Креативи для кампаній",
-          "Запуск та оптимізація",
+          "Аналіз ніші, стратегія, консультація",
+          "Креативи, запуск, оптимізація",
           "Meta, Google, TikTok, Telegram Ads, X",
-          "Маркетингова консультація й план розвитку",
         ],
       },
       {
         title: "Motion, IT та AI",
-        tagline: "Анімація, сайти й автоматизація під ваш бізнес",
+        tagline: "Анімація, сайти, боти",
         points: [
-          "Анімовані афіші та рекламні ролики",
-          "Анімація логотипів, motion-креативи",
-          "Сайти, лендинги, інтернет-магазини",
-          "CRM та бек-офіс системи",
-          "AI-агенти, чат-боти, інтеграції",
+          "Motion-ролики, афіші, логотипи",
+          "Сайти, лендинги, магазини",
+          "CRM, бек-офіс, AI-агенти, чат-боти",
         ],
       },
     ],
   },
-  /* Brief §17: one consolidated proof block instead of the four separate
-     «trust us» sections v1 shipped (about + team + numbers + wall of love). */
   trust: {
     kicker: "Про нас",
     heading: "КОМАНДА З ЧЕРНІВЦІВ",
-    paragraphs: [
-      "SHUR-SHUR — команда з 11 людей, яка живе контентом: знімає, монтує, анімує, запускає рекламу та будує AI-рішення. Кожен напрям закриває окремий спеціаліст.",
-      "Працюємо з бізнесами по всій Україні й виходимо на міжнародні ринки — серед клієнтів уже є проєкти з Румунії та Ізраїлю.",
-    ],
+    paragraphs: ["Одинадцять людей у Чернівцях. Працюємо в Україні, Румунії та Ізраїлі."],
     facts: [
       { value: "11", label: "людей у команді" },
       { value: "7", label: "напрямів послуг" },
@@ -153,39 +156,36 @@ const dict = {
         "бренд одягу IRONY",
       ],
     },
-    /* Brief §28: never fake social proof. These are verbatim real comments
-       and post excerpts from verified Instagram posts. */
+    /* Brief §28: never fake social proof. Verbatim comments and post excerpts
+       from verified Instagram posts. */
     quotes: {
-      caption: "З коментарів та дописів про нас в Instagram — дослівно.",
+      caption: "З Instagram, дослівно.",
       items: [
-        { text: "Дай Боже", source: "коментар під постом-знайомством" },
-        { text: "Горжусь!!", source: "коментар під постом-знайомством" },
+        { text: "Дай Боже", source: "коментар під постом" },
+        { text: "Горжусь!!", source: "коментар під постом" },
         {
           /* Trailing «…» = honest truncation marker: an excerpt of a longer post. */
           text: "Навчання з @lexi.brzvsk Кольорокорекція, робота зі стабілізатором, правильні налаштування камери…",
-          source: "@pafos.art — допис про навчання з нашою командою",
+          source: "@pafos.art, допис",
         },
       ],
     },
   },
-  /* Brief §20: two fields, clear delivery, no «за 24 години» promise — that
-     was a guarantee the business never actually made. */
   audit: {
     kicker: "Безкоштовно",
     heading: "РОЗБІР ВАШОГО INSTAGRAM",
-    sub: "Подивимось ваш профіль і скажемо, що змінити в контенті, щоб він приносив заявки.",
-    delivery: "Відповідь надішлемо в Telegram або зателефонуємо — як вам зручніше.",
+    sub: "Скажемо, що змінити в контенті.",
+    delivery: "Відповімо у ваш месенджер.",
     channelsLabel: "Або напишіть напряму",
-    cityLine: "Чернівці, Україна",
     form: {
       igLabel: "Нікнейм в Instagram",
       igPlaceholder: "@vash_biznes",
-      contactLabel: "Telegram або номер телефону",
+      contactLabel: "Месенджер або телефон",
       contactPlaceholder: "@nickname або +380…",
       submit: "Отримати розбір",
       submitting: "Надсилаємо…",
       successTitle: "Прийнято!",
-      successText: "Ми подивимось профіль і звʼяжемося з вами вказаним контактом.",
+      successText: "Подивимось профіль і звʼяжемося з вами.",
       successAgain: "Надіслати ще один",
       retry: "Спробувати ще раз",
       /* Один текст на чотири різні відмови — це була неправда: при 429 заявка
@@ -219,7 +219,7 @@ const dict = {
       },
       errors: {
         igHandle: "Вкажіть нікнейм: 2–60 символів, можна з @",
-        contact: "Вкажіть Telegram або телефон (від 3 символів)",
+        contact: "Вкажіть месенджер або телефон (від 3 символів)",
       },
     },
   },
@@ -232,9 +232,12 @@ const dict = {
     rights: "Всі права захищено",
     madeIn: "Зроблено з вишнями у Чернівцях",
   },
-  /* Brief §19: ONE contact control, not three or four floating circles. */
+  /* §6: ONE contact control. Один ключ на кожен канал воріт із lib/channels —
+     Viber у бою увімкнений і стоїть на тому самому номері, що WhatsApp, тому
+     підпис для нього тут обовʼязковий: без нього канал вийшов би в панель із
+     порожнім рядком. */
   contactBar: {
-    open: "Звʼязатися з нами",
+    open: "Обговорити проєкт",
     close: "Закрити",
     label: "Способи звʼязку",
     channels: {

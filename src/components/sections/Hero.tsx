@@ -1,51 +1,50 @@
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
-import { site } from "@/lib/site";
-import { readyChannel } from "@/lib/channels";
+import { primaryAction } from "@/lib/channels";
 import { heroVideo } from "@/lib/work";
 import { AutoVideo } from "@/components/media/AutoVideo";
 import { KineticHeading } from "@/components/motion/KineticHeading";
 import { Reveal } from "@/components/motion/Reveal";
-import { StickerBadge } from "@/components/ui/StickerBadge";
-import { ButtonLink } from "@/components/ui/Button";
-import { CHANNEL_ICONS, PhoneIcon } from "@/components/ui/icons";
+import { ContactLink } from "@/components/conversion/ContactLink";
+import { buttonClass } from "@/components/ui/Button";
+import { AnchorLink } from "@/components/motion/SmoothScroll";
 
 interface HeroProps {
   locale: Locale;
   dict: Dictionary["hero"];
-  contactLabels: { call: string };
 }
 
 /**
- * First screen (brief §5).
+ * First screen (brief §5, v3 §1 and §6).
  *
- * v1 stacked nine competing elements here — a marquee, a 3D cherry, a
- * rotating word, three statistics, two buttons and the whole audit form.
- * v2 keeps four things: who we are, what we do, one primary action, and a
- * direct way to reach a human. The audit form moved to its own section
- * further down, where it is a step in the funnel rather than a second
- * headline competing with the first.
+ * v2 kept a city sticker, a headline, a subtitle, a button and a row of three
+ * contact links. v3 removes two of those:
  *
- * The media is one clip of the agency shooting on its own street. It is
- * 9:16, like every other file in the archive, so it is used natively: on a
- * phone it fills the screen exactly, and from `lg` up it becomes a tall
- * frame on the inline-end side instead of being cropped into a wide band.
- * `start-auto`/`end-*` are logical, so under RTL the frame moves to the
- * other side on its own and the text still leads.
+ *  - The «Контент-агенція • Чернівці» sticker is gone, and the subtitle no
+ *    longer ends «Україна, Румунія, Ізраїль» (§1). Geography on the first
+ *    screen answers a question nobody has asked yet; it lives in the team
+ *    block now, one line, below the fold.
+ *  - The three-link row (phone / Telegram / Instagram) is gone (§4, §6).
+ *    Three equally-weighted links next to a button is four actions, which is
+ *    no action. What is left is ONE filled button straight into WhatsApp and
+ *    one quiet text link down to the work.
+ *
+ * The media is one clip of the agency shooting on its own street. It is 9:16,
+ * like every other file in the archive, so it is used natively: on a phone it
+ * fills the screen exactly, and from `lg` up it becomes a tall frame on the
+ * inline-end side instead of being cropped into a wide band.
+ * `start-auto`/`end-*` are logical, so under RTL the frame moves to the other
+ * side on its own and the text still leads.
  */
-export function Hero({ locale, dict, contactLabels }: HeroProps) {
-  // The two accounts under the CTA, in the order they have always stood here
-  // — but only while the account exists. This row read `site.socials.*`
-  // straight through and was the last place still printing a dead t.me link,
-  // on the first screen of every locale. `readyChannel` returns null for a
-  // channel that is not live, so the @name is unreachable without its link.
-  const accounts = (["telegram", "instagram"] as const)
-    .map(readyChannel)
-    .flatMap((channel) =>
-      channel && channel.handle !== null
-        ? [{ key: channel.key, href: channel.profile ?? channel.href, handle: channel.handle }]
-        : [],
-    );
+export function Hero({ locale, dict }: HeroProps) {
+  /* The three-link row that used to stand under the button is gone with §4,
+     and with it the last place on the first screen that read `site.socials`
+     straight through — which is how a dead t.me link reached every locale
+     here until 19.09. The button below keeps the lesson rather than the row:
+     it is resolved by `primaryAction()`, the same readiness gate, so it can
+     degrade to #contact but can never become a link to nowhere. */
+  const primary = primaryAction();
+
 
   return (
     <section
@@ -73,12 +72,6 @@ export function Hero({ locale, dict, contactLabels }: HeroProps) {
 
       <div className="relative mx-auto w-full max-w-7xl px-4 py-24 sm:px-6 lg:py-28">
         <div className="flex max-w-xl flex-col items-start gap-7 lg:max-w-[52%]">
-          <Reveal>
-            <StickerBadge variant="juice" rotate={-2}>
-              {dict.badge}
-            </StickerBadge>
-          </Reveal>
-
           <KineticHeading
             as="h1"
             immediate
@@ -92,47 +85,26 @@ export function Hero({ locale, dict, contactLabels }: HeroProps) {
             </p>
           </Reveal>
 
-          {/* Exactly one primary action (brief §21). Everything beside it is
-              a text link, so there is no second filled button to compete. */}
+          {/* Exactly one filled button on the page's first screen (§6), and it
+              opens the messenger directly rather than scrolling to a form. */}
           <Reveal delay={0.18} className="w-full">
-            <ButtonLink href="#contact" variant="juice" className="w-full sm:w-auto">
-              {dict.cta}
-            </ButtonLink>
-          </Reveal>
-
-          <Reveal delay={0.26} className="w-full">
-            <div className="flex flex-col gap-3">
-              <span className="font-display text-[11px] font-bold tracking-[0.2em] text-cream-type/60 uppercase">
-                {dict.contactLabel}
-              </span>
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm font-semibold">
-                {/* The number was already in the project, inside the wa.me
-                    and viber links — brief §5 asks for it to be visible and
-                    tappable, so here it is as a real tel: link. */}
-                <a
-                  href={site.phone.tel}
-                  aria-label={contactLabels.call}
-                  className="inline-flex cursor-pointer items-center gap-2 text-cream-type transition-colors hover:text-juice-300"
-                >
-                  <PhoneIcon className="size-4 shrink-0" />
-                  <span dir="ltr">{site.phone.display}</span>
-                </a>
-                {accounts.map(({ key, href, handle }) => {
-                  const Icon = CHANNEL_ICONS[key];
-                  return (
-                    <a
-                      key={key}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex cursor-pointer items-center gap-2 text-cream-type transition-colors hover:text-juice-300"
-                    >
-                      <Icon className="size-4 shrink-0" />
-                      <span dir="ltr">{handle}</span>
-                    </a>
-                  );
-                })}
-              </div>
+            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
+              <ContactLink
+                href={primary.href}
+                channel={primary.key}
+                locale={locale}
+                placement="hero"
+                {...(primary.external ? {} : { target: undefined, rel: undefined })}
+                className={buttonClass("juice", "w-full justify-center sm:w-auto")}
+              >
+                {dict.cta}
+              </ContactLink>
+              <AnchorLink
+                hash="#work"
+                className="cursor-pointer text-sm font-semibold text-cream-type/75 underline decoration-cream-type/30 underline-offset-4 transition-colors hover:text-juice-300 hover:decoration-juice-300"
+              >
+                {dict.secondary}
+              </AnchorLink>
             </div>
           </Reveal>
         </div>

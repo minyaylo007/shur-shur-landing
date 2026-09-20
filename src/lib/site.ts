@@ -7,14 +7,21 @@ export const site = {
   city: { uk: "Чернівці", en: "Chernivtsi" },
   /**
    * The agency's single phone number. It already lived inside the wa.me and
-   * viber deep-links below; redesign v2 surfaces it as a real `tel:` link
+   * viber deep-links below; redesign v2 surfaced it as a real `tel:` link
    * (brief §5 — the number must be visible on the page, not buried in a
-   * messenger URL). `display` carries NBSPs so the groups never wrap.
+   * messenger URL).
+   *
+   * v3 keeps the link and demotes the placement (§4): the number is no longer
+   * a conversion path competing with the messengers on the first screen. It
+   * appears in the footer as a detail, and inside the failure state of the
+   * audit form — where a visitor whose message did not go through needs any
+   * way at all to reach a human. `display` carries NBSPs so the groups never
+   * wrap.
    */
   phone: {
     e164: "+380972499107",
     tel: "tel:+380972499107",
-    display: "+380\u00a097\u00a0249\u00a091\u00a007",
+    display: "+380 97 249 91 07",
   },
   socials: {
     instagram: "https://www.instagram.com/shur.shur.agency",
@@ -43,19 +50,27 @@ export const site = {
  * code changes are needed.
  *
  * The flag is enforced in `lib/channels` (`isChannelReady`, `readyChannel`,
- * `localeChannels`), and NO file but this one and `lib/channels.ts` may read
- * `site.socials.*` or import `messengers`: the href AND the visible @handle
- * are only reachable through the gate, so a render site cannot print a name
- * whose link it was not allowed to draw. Naming the components here was not
- * enough — the first fix listed ContactBar, Footer and AuditCta and missed the
- * hero, which kept the dead t.me link on the first screen of all four locales.
- * The rule is now checked by walking `src/**` instead of by listing files
- * (tests/conversion).
+ * `localeChannels`, `primaryAction`), and NO file but this one and
+ * `lib/channels.ts` may read `site.socials.*` or import `messengers`: the
+ * href AND the visible @handle are only reachable through the gate, so a
+ * render site cannot print a name whose link it was not allowed to draw.
+ * Naming the components here was not enough — the first fix listed
+ * ContactBar, Footer and AuditCta and missed the hero, which kept the dead
+ * t.me link on the first screen of all four locales. The rule is now checked
+ * by walking `src/**` instead of by listing files (tests/conversion).
  *
  * 15.09.2026: the exemption used to read «outside `lib/`», and `lib` holds
  * data as well as the gate. `lib/posts.ts` — a grid nothing rendered any more
  * — reached `site.socials.instagram` on three of its tiles and the scan let it
  * through by address. Two files are exempt now, by name, and both are here.
+ *
+ * 20.09.2026, redesign v3: Viber STAYS. The redesign branch removed it with
+ * the note «the channel does not exist in the project» — but it does: it is
+ * the same number WhatsApp already reaches, it is answered, and the Telegram
+ * bot that carries the audit form is not configured in production yet, so
+ * enquiries from the form are not arriving at all. Taking a live way to reach
+ * a human off the page in that week is the one change a visitor could not
+ * work around.
  */
 export const messengers = {
   // 15.09.2026: the username is not registered — see socials.telegram above.

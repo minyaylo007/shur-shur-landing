@@ -121,11 +121,26 @@ describe("v2 pruning — removed sections took their CSS with them", () => {
     }
   });
 
-  /* 260, not 250: the display line-height carries a comment saying why it is
-     1.12 and not 0.96 (ink of neighbouring heading lines). Comments do not
-     reach the browser, and the rule count itself has not grown. */
-  it("stays under 260 lines — v1 shipped 342 (brief §26: less CSS to parse)", () => {
-    expect(css.split("\n").length).toBeLessThan(260);
+  it("stays under 320 lines — v1 shipped 342 (brief §26: less CSS to parse)", () => {
+    /* The v2 budget was 250. Production raised it to 260 on 19.09 for the
+       comment that records WHY the display line-height is 1.12 and not 0.96
+       (the ink of neighbouring heading lines) — comments never reach the
+       browser and no rule was added.
+
+       v3 §11 then spent ~25 real lines: the per-char reveal that used to be a
+       GSAP timeline is now a keyframe, and its reduced-motion gate a media
+       query. ~25 lines of CSS against ~124 KB gzip of JavaScript, which is
+       why the ceiling moved instead of the feature.
+
+       And ~40 more for the masks that stop the reveal beheading Й, Ă and the
+       comma under Ț — they clip with slack, closed only while the letters
+       travel. Same trade: the alternative was Ukrainian headings that read
+       «ЯКИИ».
+
+       What the number still guards is the thing brief §26 cares about — the
+       stylesheet does not creep. Every raise above is a named feature with
+       the bytes it bought. */
+    expect(css.split("\n").length).toBeLessThan(320);
   });
 });
 

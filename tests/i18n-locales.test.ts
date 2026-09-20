@@ -8,6 +8,8 @@ import {
   getDirection,
   ogLocales,
   localeSegmentPattern,
+  localeNames,
+  localeShort,
 } from "../src/lib/i18n";
 import { getDictionary } from "../src/dictionaries";
 import sitemap from "../src/app/sitemap";
@@ -33,13 +35,15 @@ function flatten(value: unknown, path = ""): [string, string][] {
   return [];
 }
 
-/* Strings that are the SAME in every locale by design:
-   — the proof quotes are verbatim Ukrainian comments and post excerpts from
-     real Instagram posts (§28 honesty: we translate the attribution and the
-     caption that frames them, never the quote itself);
-   — the «Укр» pill names the Ukrainian language in Ukrainian. */
-const isVerbatim = (path: string) =>
-  /^trust\.quotes\.items\[\d+\]\.text$/.test(path) || path === "langSwitcher.uk";
+/* Strings that are the SAME in every locale by design: the proof quotes are
+   verbatim Ukrainian comments and post excerpts from real Instagram posts
+   (§28 honesty: we translate the attribution and the caption that frames
+   them, never the quote itself).
+
+   v3 §2: the language NAMES left the dictionaries entirely. They are autonyms
+   in lib/i18n — a language is called what its own speakers call it, in every
+   interface language, so translating them was always wrong. */
+const isVerbatim = (path: string) => /^trust\.quotes\.items\[\d+\]\.text$/.test(path);
 
 /* ============================================================
    i18n core — 4 locales, one source of truth (lib/i18n)
@@ -124,18 +128,27 @@ describe("dictionaries — one per locale", () => {
     }
   });
 
-  it("langSwitcher names all four languages in all four dictionaries", () => {
+  it("langSwitcher ships only the labels a screen reader needs", () => {
     for (const locale of locales) {
       const sw = getDictionary(locale).langSwitcher;
       expect(sw.label.length).toBeGreaterThan(3);
-      for (const code of locales) {
-        expect(sw[code].length, `${locale}.langSwitcher.${code}`).toBeGreaterThan(1);
-      }
-      // Each language is named in its OWN script, in every locale.
-      expect(sw.uk).toMatch(CYRILLIC);
-      expect(sw.he).toMatch(HEBREW);
-      expect(sw.ro).toMatch(/^[A-Za-z]+$/);
+      expect(sw.current.length).toBeGreaterThan(3);
+      // The names themselves are NOT here — see localeNames below.
+      for (const code of locales) expect(sw).not.toHaveProperty(code);
     }
+  });
+
+  it("language names are autonyms in lib/i18n, each in its own script", () => {
+    expect(localeNames.uk).toMatch(CYRILLIC);
+    expect(localeNames.he).toMatch(HEBREW);
+    expect(localeNames.ro).toMatch(/^[A-Za-zĂÂÎȘȚăâîșț]+$/);
+    expect(localeNames.en).toBe("English");
+    for (const locale of locales) {
+      expect(localeNames[locale].length).toBeGreaterThan(1);
+      // Two letters, for the collapsed trigger.
+      expect(localeShort[locale]).toMatch(/^[A-Z]{2}$/);
+    }
+    expect(new Set(Object.values(localeNames)).size).toBe(locales.length);
   });
 });
 
@@ -287,16 +300,27 @@ describe("RTL — flipped choreography", () => {
   });
 
   it("numerals and @handles are bidi-isolated so «+380 97…» never reorders", () => {
+    /* Three files left this list in v3, all for the same reason — they no
+       longer print a number or an @handle at all. The hero is one heading,
+       one line and one button (§1, §8); the header CTA is a word (§4); the
+       contact control is one labelled pill (§4, §6). What still prints Latin
+       or digits inside a possibly-RTL line must still isolate it. */
     for (const rel of [
-      "../src/components/sections/Hero.tsx",
       "../src/components/sections/Trust.tsx",
       "../src/components/sections/AuditCta.tsx",
-      "../src/components/conversion/ContactBar.tsx",
-      "../src/components/layout/Header.tsx",
       "../src/components/layout/Footer.tsx",
       "../src/components/forms/AuditForm.tsx",
+      "../src/components/layout/LanguageSwitcher.tsx",
     ]) {
       expect(read(rel), rel).toContain('dir="ltr"');
+    }
+    // …and the three that dropped it print no bare number to isolate.
+    for (const rel of [
+      "../src/components/sections/Hero.tsx",
+      "../src/components/layout/Header.tsx",
+      "../src/components/conversion/ContactBar.tsx",
+    ]) {
+      expect(read(rel), rel).not.toContain("site.phone");
     }
   });
 

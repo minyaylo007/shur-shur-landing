@@ -1,18 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-
-/** Reveal timing — shared with the moment the mask slack reopens. */
-const REVEAL_DURATION = 0.9;
-const REVEAL_STAGGER = 0.026;
-
-/** Progress of the LAST letter's tween at which the masks reopen. `power4.out`
- *  has covered ~94% of the travel by then, so the diacritics ride the final
- *  few pixels into place with their letter instead of popping in at the end —
- *  and the letters are far too close to home to leak out of the slack. */
-const MASK_OPEN_AT = 0.5;
 
 interface KineticHeadingProps {
   /** Each entry renders as its own masked line. */
@@ -24,9 +12,38 @@ interface KineticHeadingProps {
 }
 
 /**
- * Oversized display heading with per-char masked reveal (GSAP) and a subtle
- * letter-spacing "breathing" once in view (CSS class `.kinetic.is-inview`).
- * Reduced motion → static text, no GSAP.
+ * Oversized display heading with a per-character masked reveal.
+ *
+ * v3, discrepancy §11: this used to be the reason the site shipped GSAP +
+ * ScrollTrigger (~124 KB gzipped for two components). The animation is a
+ * transform on N spans with a stagger — CSS does that natively, and an
+ * IntersectionObserver decides when. What is left in JS is one observer and
+ * one class toggle; the motion itself is the `char-rise` keyframe in
+ * globals.css, and the per-character delay is a CSS custom property.
+ *
+ * Behaviour parity with the GSAP version:
+ *  - same rise-and-settle (112% → 0 with a slight rotation),
+ *  - same ~26ms stagger,
+ *  - plays once, on entering the viewport (or immediately for the hero),
+ *  - reduced motion → static text. That gate is now the `@media
+ *    (prefers-reduced-motion: reduce)` block in globals.css, so it is LIVE in
+ *    exactly the same way `gsap.matchMedia()` was, without the library.
+ *  - the "breathing" letter-spacing while in view is unchanged.
+ *
+ * The mask slack survives the port, and it is not decoration: `.char-mask`
+ * clips each word, and a mask tight to the box eats the part of a glyph that
+ * leaves it — Romanian Ș and Ț below the baseline, Ă and Î above it, and the
+ * Hebrew letters that sit high in the em box. GSAP closed the slack while the
+ * letters were parked below the line and reopened it per word as that word's
+ * last character came home; the same two moments are now `--char-mask-slack`
+ * and the `mask-open` animation in globals.css, driven by `--mask-index`
+ * below. The timing constants moved there with them — 0.9s, a 26ms stagger,
+ * and the reopen at half the last letter's travel, where `power4.out` has
+ * already covered ~94% of the distance, so the diacritic rides the final few
+ * pixels in with its letter instead of popping in afterwards.
+ *
+ * With JS off the `.no-js` guard in globals.css leaves every character at its
+ * final position, so the heading is simply there.
  */
 export function KineticHeading({
   lines,
@@ -40,7 +57,7 @@ export function KineticHeading({
     const element = ref.current;
     if (!element) return;
 
-    // Breathing: toggle .is-inview while the heading is on screen.
+    /* Breathing: toggle .is-inview while the heading is on screen. */
     const breathObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -51,62 +68,33 @@ export function KineticHeading({
     );
     breathObserver.observe(element);
 
-    gsap.registerPlugin(ScrollTrigger);
+    if (immediate) {
+      element.classList.add("is-revealed");
+      return () => breathObserver.disconnect();
+    }
 
-    // Live reduced-motion gate: the char reveal reverts to static text the
-    // moment the preference flips on (and re-arms if it flips back off).
-    const mm = gsap.matchMedia();
-    mm.add("(prefers-reduced-motion: no-preference)", () => {
-      const chars = element.querySelectorAll<HTMLElement>(".char");
-
-      const masks = element.querySelectorAll<HTMLElement>(".char-mask");
-
-      /* Close the mask slack (see `.char-mask` in globals.css) for the reveal:
-         while the letters sit below the line the mask has to clip exactly at
-         the box edge, or their tops show through the slack. `fromTo` parks
-         them down there on mount, so this happens now — not when the timeline
-         starts, which for a scrolled-to heading can be minutes later. */
-      gsap.set(masks, { "--char-mask-slack": "0px" });
-
-      const timeline = gsap.timeline(
-        immediate
-          ? { delay: 0.15 }
-          : { scrollTrigger: { trigger: element, start: "top 85%", once: true } },
-      );
-
-      timeline.fromTo(
-        chars,
-        { yPercent: 112, rotate: 4 },
-        {
-          yPercent: 0,
-          rotate: 0,
-          duration: REVEAL_DURATION,
-          ease: "power4.out",
-          stagger: REVEAL_STAGGER,
-        },
-        0,
-      );
-
-      /* Each word reopens its own slack the moment ITS last letter is all but
-         home, so the ascenders and descenders the mask was hiding rejoin the
-         letter mid-flight. The stagger runs in document order, so counting
-         chars word by word gives each mask its own moment. */
-      let charIndex = 0;
-      for (const mask of masks) {
-        charIndex += mask.querySelectorAll(".char").length;
-        timeline.call(
-          () => mask.style.removeProperty("--char-mask-slack"),
-          undefined,
-          (charIndex - 1) * REVEAL_STAGGER + MASK_OPEN_AT * REVEAL_DURATION,
-        );
-      }
-    });
+    /* `rootMargin: -15%` reproduces ScrollTrigger's `start: "top 85%"`. */
+    const revealObserver = new IntersectionObserver(
+      (entries, observer) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.classList.add("is-revealed");
+          observer.unobserve(entry.target); // once
+        }
+      },
+      { rootMargin: "0px 0px -15% 0px" },
+    );
+    revealObserver.observe(element);
 
     return () => {
       breathObserver.disconnect();
-      mm.revert();
+      revealObserver.disconnect();
     };
   }, [immediate]);
+
+  /* One running index across all lines, so the stagger reads as a single
+     sweep through the heading rather than restarting on every line. */
+  let charIndex = 0;
 
   return (
     <Tag ref={ref as never} className={`display-type kinetic ${className}`}>
@@ -114,26 +102,46 @@ export function KineticHeading({
         <span key={lineIndex} className="char-line">
           <span className="sr-only">{line}</span>
           <span aria-hidden="true">
-            {line.split(" ").map((word, wordIndex, words) => (
+            {line.split(" ").map((word, wordIndex, words) => {
+              const trailingSpace = wordIndex < words.length - 1;
+              /* The word's own characters plus the space that follows it: the
+                 LAST of them decides when this word's mask reopens its slack
+                 (see `mask-open` in globals.css). */
+              const maskIndex = charIndex + word.length + (trailingSpace ? 1 : 0) - 1;
+
               /* Every char is its own inline-block, so the WORD decides their
                  order: under dir="rtl" a Latin word would come out mirrored
                  ("SMM" → "MMS"). `dir="auto"` resolves each word from its own
                  first strong character — Hebrew words stay RTL, Latin and
                  numeric ones go LTR. In an LTR document it resolves to the
                  direction those words already had, so uk/en/ro are untouched. */
-              <span
-                key={wordIndex}
-                dir="auto"
-                className="char-mask inline-block align-bottom whitespace-nowrap"
-              >
-                {word.split("").map((char, charIndex) => (
-                  <span key={charIndex} className="char">
-                    {char}
-                  </span>
-                ))}
-                {wordIndex < words.length - 1 ? <span className="char">&nbsp;</span> : null}
-              </span>
-            ))}
+              return (
+                <span
+                  key={wordIndex}
+                  dir="auto"
+                  className="char-mask inline-block align-bottom whitespace-nowrap"
+                  style={{ "--mask-index": maskIndex } as React.CSSProperties}
+                >
+                  {word.split("").map((char) => (
+                    <span
+                      key={charIndex}
+                      className="char"
+                      style={{ "--char-index": charIndex++ } as React.CSSProperties}
+                    >
+                      {char}
+                    </span>
+                  ))}
+                  {trailingSpace ? (
+                    <span
+                      className="char"
+                      style={{ "--char-index": charIndex++ } as React.CSSProperties}
+                    >
+                      &nbsp;
+                    </span>
+                  ) : null}
+                </span>
+              );
+            })}
           </span>
         </span>
       ))}

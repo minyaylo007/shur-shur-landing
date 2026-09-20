@@ -155,27 +155,33 @@ body {
   letter-spacing: 0.005em;
 }
 
-/* Per-char reveal scaffolding (GSAP animates .char).
+/* ------------------------------------------------------------
+   Per-char reveal. v3 (§11): a GSAP timeline became a CSS keyframe;
+   KineticHeading only adds `.is-revealed` from an IntersectionObserver.
+   Stagger --char-index * 26ms, matching the old `stagger: 0.026`. The
+   hidden start state is guarded by `html:not(.no-js)` — with JS off
+   nothing adds `.is-revealed`, and an unguarded rule would leave every
+   heading pushed out of its mask for good.
 
-   Both boxes below are MASKS for the reveal, and both are line-height boxes:
-   `.display-type` sets line-height 1.12, which is still shorter than the type
-   it holds (93px of box against 103px of ascent+descent). In Unbounded at 83px
-   the ink of Й/Ă reaches 4px ABOVE the box top and the comma under Ț/Ș 12px
-   BELOW the box bottom — clipping at the box edge beheads the breve and cuts
-   the comma off.
-
-   So the masks clip with slack (`--char-mask-slack`), and KineticHeading
-   closes that slack to 0 for exactly as long as the letters are travelling.
-   No JS or reduced motion → slack stays open and letters are whole. */
+   Both boxes below are MASKS, and both are line-height boxes: 1.12 is
+   still shorter than the type it holds (93px of box against 103px of
+   ascent+descent). In Unbounded at 83px the ink of Й/Ă reaches 4px ABOVE
+   the box top and the comma under Ț/Ș 12px BELOW it, so clipping at the
+   box edge beheads the breve and cuts the comma off. (At the old 0.96:
+   10px and 19px — opening the lines on 19.09 shrank the overhangs, it
+   did not remove them.) Hence slack — `--char-mask-slack`, closed only
+   while the letters travel, where GSAP used a `gsap.set`.
+   `overflow-clip-margin` costs no layout, so nothing moves when the
+   slack changes, and no-JS or reduced motion leaves it open.
+   ------------------------------------------------------------ */
 .char-line {
   display: block;
   overflow: clip;
   overflow-clip-margin: 0.28em;
 }
 
-/* The per-word mask is the one the reveal rides on, so it is the one whose
-   slack KineticHeading closes and reopens; `.char-line` above only has to
-   stay out of its way. */
+/* The reveal rides on the per-word mask, so this is the slack that closes and
+   reopens; `.char-line` only stays out of its way. Open is the DEFAULT. */
 .char-mask {
   overflow: clip;
   overflow-clip-margin: var(--char-mask-slack, 0.28em);
@@ -183,7 +189,50 @@ body {
 
 .char {
   display: inline-block;
+}
+
+html:not(.no-js) .char {
+  transform: translateY(112%) rotate(4deg);
   will-change: transform;
+}
+
+/* Letters wait below the line: clip at the box edge until they arrive,
+   otherwise their tops show through the slack. */
+html:not(.no-js) .char-mask {
+  --char-mask-slack: 0px;
+}
+
+html:not(.no-js) .is-revealed .char {
+  animation: char-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--char-index, 0) * 26ms + var(--char-lead, 0ms));
+}
+
+/* Each word reopens its own slack when ITS last letter is all but home (450ms
+   into a 900ms rise, ~94% of the ease); `--mask-index` is that letter. */
+html:not(.no-js) .is-revealed .char-mask {
+  animation: mask-open 1ms linear forwards;
+  animation-delay: calc(var(--mask-index, 0) * 26ms + var(--char-lead, 0ms) + 450ms);
+}
+
+@keyframes mask-open {
+  to {
+    --char-mask-slack: 0.28em;
+  }
+}
+
+/* The hero plays on mount, not on scroll: same 0.15s lead GSAP used. */
+.kinetic h1,
+h1.kinetic {
+  --char-lead: 150ms;
+}
+
+@keyframes char-rise {
+  from {
+    transform: translateY(112%) rotate(4deg);
+  }
+  to {
+    transform: translateY(0) rotate(0deg);
+  }
 }
 
 /* Reveal-on-scroll (IO toggles .is-inview) */
@@ -207,7 +256,8 @@ body {
    JS-driven choreography must degrade to readable static layout.
    ============================================================ */
 
-/* Reveal-on-scroll baseline hides content → force it visible. */
+/* Reveal-on-scroll baseline hides content → force it visible. (The per-char
+   rule above is already scoped to html:not(.no-js).) */
 .no-js .reveal {
   opacity: 1 !important;
   transform: none !important;
@@ -240,6 +290,21 @@ body {
   .kinetic.is-inview {
     transition: none;
     letter-spacing: var(--display-tracking);
+  }
+
+  /* Characters are simply THERE. Replaces the GSAP matchMedia gate, and like
+     it, this is live: flipping the OS setting needs no reload. */
+  html:not(.no-js) .char,
+  html:not(.no-js) .is-revealed .char {
+    transform: none;
+    animation: none;
+  }
+
+  /* Nothing travels, so the mask hides nothing: full slack from frame one. */
+  html:not(.no-js) .char-mask,
+  html:not(.no-js) .is-revealed .char-mask {
+    --char-mask-slack: 0.28em;
+    animation: none;
   }
 
   *,
