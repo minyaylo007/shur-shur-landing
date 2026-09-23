@@ -18,6 +18,15 @@ import type { Locale } from "./i18n";
  * bridal-seawall, bts-pool) is retired — it was the weakest evidence in the
  * archive and there are now real photographs in its place.
  *
+ * Owner's cleanup pass, 23.09.2026: beauty is pinned at exactly eight tiles
+ * — the second cosmetics portrait (`beauty-foam`, the smiling model with the
+ * hair clip) is gone, which also turns a nine-tile group with one orphan in
+ * the last row into two full rows of four. Estate gained `story-kodra-house`
+ * from the same Drive folder for the same reason: three tiles left a lonely
+ * fourth slot, and the group had no house in it, which is what the category
+ * is about. The file `beauty-foam.webp` is deleted from `public/` too — an
+ * unreferenced asset would fail tests/public-assets.test.ts.
+ *
  * ALL source files are vertical 9:16, so the grid is built from 9:16 tiles
  * by design instead of cropping tall footage into wide boxes.
  */
@@ -80,12 +89,6 @@ export const workItems: WorkItem[] = [
     en: "Product shoot: sunscreen on skin, close detail in soft light",
     he: "צילום מוצר: קרם הגנה על העור, פרט קרוב באור רך",
     ro: "Ședință de produs: cremă de protecție solară pe piele, detaliu în lumină difuză",
-  }),
-  photo("beauty-foam", "beauty", 1000, 1500, {
-    uk: "Предметна зйомка: пінка для вмивання з текстурою піни",
-    en: "Product shoot: cleansing foam with its texture in frame",
-    he: "צילום מוצר: קצף ניקוי עם המרקם שלו בפריים",
-    ro: "Ședință de produs: spumă de curățare cu textura în cadru",
   }),
   photo("beauty-gel", "beauty", 1000, 1500, {
     uk: "Предметна зйомка: гель для тіла в руці моделі на тлі шкіри",
@@ -256,6 +259,12 @@ export const workItems: WorkItem[] = [
     en: "Story creative for a leisure complex: the month’s open dates calendar",
     he: "קריאייטיב סטורי למתחם נופש: לוח התאריכים הפנויים לחודש",
     ro: "Creativ de story pentru un complex de agrement: calendarul datelor libere ale lunii",
+  }),
+  photo("story-kodra-house", "estate", 1000, 1778, {
+    uk: "Сторіс для забудовника: заміський будинок із басейном і садиба з висоти",
+    en: "Story creative for a developer: an out-of-town house with a pool and the estate from above",
+    he: "קריאייטיב סטורי ליזם: בית כפרי עם בריכה והמתחם ממבט על",
+    ro: "Creativ de story pentru un dezvoltator: o casă la țară cu piscină și domeniul văzut de sus",
   }),
   photo("story-kodra-invest", "estate", 1000, 1778, {
     uk: "Сторіс для забудовника: інвестиції в заміську нерухомість",

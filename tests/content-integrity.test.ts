@@ -6,25 +6,24 @@ import { en } from "../src/dictionaries/en";
 import { he } from "../src/dictionaries/he";
 import { ro } from "../src/dictionaries/ro";
 import { locales } from "../src/lib/i18n";
-import { knownHandles } from "../src/lib/known";
 import { workItems, workGroupOrder, itemsInGroup, processPair, heroVideo } from "../src/lib/work";
 
 /*
  * Content integrity — every claim on the page traces back to something real.
  *
- * History: this file is `tests/redesign-cycle3.test.ts`, renamed. Its
- * `lib/known.ts` assertions (the four verified «Нас знають» accounts) are
- * kept as they were. Everything else in cycle 3 guarded content that v2
- * deleted rather than restyled — the four «кейси» metric cards (+4 180, ×3.2,
- * 215, 4.7%) and the aggregate counters (27 / 4.2 млн / 850+). Those were
- * marked in the v1 source itself as an illustrative placeholder set, and
- * brief §16/§28 forbid presenting unverified figures as client results, so
- * the assertions that pinned their exact wording are replaced by assertions
- * that no such figure can come back unnoticed.
+ * History: this file is `tests/redesign-cycle3.test.ts`, renamed. Everything
+ * in cycle 3 guarded content that v2 deleted rather than restyled — the four
+ * «кейси» metric cards (+4 180, ×3.2, 215, 4.7%) and the aggregate counters
+ * (27 / 4.2 млн / 850+). Those were marked in the v1 source itself as an
+ * illustrative placeholder set, and brief §16/§28 forbid presenting
+ * unverified figures as client results, so the assertions that pinned their
+ * exact wording are replaced by assertions that no such figure can come back
+ * unnoticed.
  *
- * The wall-of-love quotes moved from `socials.wallOfLove.quotes` to
- * `trust.quotes.items` when the four proof sections merged into one; their
- * verbatim-ness is still asserted below, at the new path.
+ * The same reversal happened again on 23.09.2026: the owner's cleanup pass
+ * removed the «Нас знають» row (and with it `src/lib/known.ts`) and the three
+ * verbatim Instagram quotes. The assertions that pinned their wording are
+ * replaced, below, by assertions that neither block can quietly return.
  */
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -90,50 +89,41 @@ describe("no invented numbers (brief §16, §28)", () => {
   });
 });
 
-describe("social proof is verbatim, not manufactured (brief §28)", () => {
-  it("three real Instagram quotes, unembellished, in every locale", () => {
+describe("the removed proof blocks stay removed (cleanup pass, 23.09.2026)", () => {
+  /* The «Нас знають» row (@100fmcv, @tulpan_cv, @terrasa_ace, @irony_ua) and
+     the three verbatim Instagram quotes were cut on the owner's instruction.
+     Cut, not hidden: no empty wrapper, no dictionary keys left feeding
+     nothing, no data module kept alive for a component that no longer reads
+     it. `git show 59af98c` has every handle, URL and quote if they are ever
+     wanted back — and bringing them back has to be a deliberate edit that
+     updates this test, not a stray class that stops hiding them. */
+  it("trust carries exactly the four keys that still render", () => {
     for (const dict of allDicts) {
-      const texts = dict.trust.quotes.items.map((q) => q.text);
-      expect(texts).toHaveLength(3);
-      expect(texts).toContain("Дай Боже");
-      expect(texts).not.toContain("Дай Боже!");
-      // The caption promises «дослівно» — the trailing ellipsis honestly
-      // signals the third quote is an excerpt, not the post's full text.
-      expect(texts).toContain(
-        "Навчання з @lexi.brzvsk Кольорокорекція, робота зі стабілізатором, правильні налаштування камери…",
-      );
-      for (const quote of dict.trust.quotes.items) {
-        expect(quote.source.length).toBeGreaterThan(5);
-      }
+      expect([...Object.keys(dict.trust)].sort()).toEqual([
+        "facts",
+        "heading",
+        "kicker",
+        "paragraphs",
+      ]);
     }
   });
 
-  it("quotes stay Ukrainian in every locale, so they render with dir=\"auto\"", () => {
-    for (const dict of allDicts) {
-      expect(dict.trust.quotes.items.map((q) => q.text)).toEqual(
-        uk.trust.quotes.items.map((q) => q.text),
-      );
-    }
-    expect(read("../src/components/sections/Trust.tsx")).toContain('blockquote dir="auto"');
-  });
-
-  it("knownHandles: the four verified accounts, linked to Instagram", () => {
-    expect(knownHandles.map((k) => k.handle)).toEqual([
-      "@100fmcv",
-      "@tulpan_cv",
-      "@terrasa_ace",
-      "@irony_ua",
-    ]);
-    for (const known of knownHandles) {
-      expect(known.href).toMatch(/^https:\/\/www\.instagram\.com\/[\w.]+\/$/);
+  it("no dead string from either block survives in any locale", () => {
+    for (const string of allStrings) {
+      expect(string).not.toContain("Дай Боже");
+      expect(string).not.toContain("lexi.brzvsk");
+      expect(string).not.toContain("@100fmcv");
+      expect(string).not.toMatch(/Нас знають|Known by|מכירים אותנו|Ne cunosc/i);
     }
   });
 
-  it("«Нас знають» names line up 1:1 with those handles in every locale", () => {
-    for (const dict of allDicts) {
-      expect(dict.trust.knownBy.names).toHaveLength(knownHandles.length);
-      for (const name of dict.trust.knownBy.names) expect(name.length).toBeGreaterThan(2);
-    }
+  it("nothing renders them: no data module, no quote markup left in Trust.tsx", () => {
+    expect(existsSync(fileURLToPath(new URL("../src/lib/known.ts", import.meta.url)))).toBe(false);
+    const src = read("../src/components/sections/Trust.tsx");
+    expect(src).not.toContain('from "@/lib/known"');
+    expect(src).not.toContain("blockquote");
+    expect(src).not.toContain("dict.trust.knownBy");
+    expect(src).not.toContain("dict.trust.quotes");
   });
 });
 
@@ -148,6 +138,21 @@ describe("portfolio data (brief §7–§13)", () => {
     }
     // §9: curated, not an archive dump — 30 of the 43 shared files.
     expect(workItems.length).toBeLessThanOrEqual(32);
+  });
+
+  it("the grid rows fill out — no orphan tile alone in an empty row", () => {
+    /* Four across on desktop, two on phones, so a group whose count is ≡1
+       (mod 4) ends in one lonely tile. Beauty is pinned at exactly eight on
+       the owner's instruction of 23.09.2026: six cosmetics frames, then the
+       two massage pieces, in that order. */
+    expect(itemsInGroup("beauty")).toHaveLength(8);
+    expect(itemsInGroup("beauty").slice(-2).map((i) => i.id)).toEqual([
+      "reel-massage",
+      "story-massage",
+    ]);
+    for (const group of workGroupOrder) {
+      expect(itemsInGroup(group).length % 4, group).not.toBe(1);
+    }
   });
 
   it("every group key is a short one-word chip in every locale", () => {

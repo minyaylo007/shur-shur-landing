@@ -101,26 +101,6 @@ export const ro: Dictionary = {
       { value: "7", label: "direcții de servicii" },
       { value: "3", label: "țări în care lucrăm" },
     ],
-    knownBy: {
-      label: "Ne cunosc:",
-      names: [
-        "radio Bukovynska Khvylia",
-        "showroomul textil Tulpan",
-        "clubul de tenis ACE",
-        "brandul de haine IRONY",
-      ],
-    },
-    quotes: {
-      caption: "De pe Instagram, în original în ucraineană.",
-      items: [
-        { text: "Дай Боже", source: "comentariu sub o postare" },
-        { text: "Горжусь!!", source: "comentariu sub o postare" },
-        {
-          text: "Навчання з @lexi.brzvsk Кольорокорекція, робота зі стабілізатором, правильні налаштування камери…",
-          source: "@pafos.art, o postare",
-        },
-      ],
-    },
   },
   audit: {
     kicker: "Gratuit",

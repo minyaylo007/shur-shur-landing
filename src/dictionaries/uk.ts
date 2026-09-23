@@ -146,30 +146,6 @@ const dict = {
       { value: "7", label: "напрямів послуг" },
       { value: "3", label: "країни присутності" },
     ],
-    knownBy: {
-      label: "Нас знають:",
-      /* Order matches knownHandles in src/lib/known.ts (verified accounts). */
-      names: [
-        "радіо «Буковинська Хвиля»",
-        "салон текстилю «Тюльпан»",
-        "тенісний клуб ACE",
-        "бренд одягу IRONY",
-      ],
-    },
-    /* Brief §28: never fake social proof. Verbatim comments and post excerpts
-       from verified Instagram posts. */
-    quotes: {
-      caption: "З Instagram, дослівно.",
-      items: [
-        { text: "Дай Боже", source: "коментар під постом" },
-        { text: "Горжусь!!", source: "коментар під постом" },
-        {
-          /* Trailing «…» = honest truncation marker: an excerpt of a longer post. */
-          text: "Навчання з @lexi.brzvsk Кольорокорекція, робота зі стабілізатором, правильні налаштування камери…",
-          source: "@pafos.art, допис",
-        },
-      ],
-    },
   },
   audit: {
     kicker: "Безкоштовно",

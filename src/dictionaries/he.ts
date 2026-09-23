@@ -108,26 +108,6 @@ export const he: Dictionary = {
       { value: "7", label: "תחומי שירות" },
       { value: "3", label: "מדינות פעילות" },
     ],
-    knownBy: {
-      label: "מכירים אותנו:",
-      names: [
-        "רדיו Bukovynska Khvylia",
-        "אולם הטקסטיל Tulpan",
-        "מועדון הטניס ACE",
-        "מותג האופנה IRONY",
-      ],
-    },
-    quotes: {
-      caption: "מאינסטגרם, במקור באוקראינית.",
-      items: [
-        { text: "Дай Боже", source: "תגובה מתחת לפוסט" },
-        { text: "Горжусь!!", source: "תגובה מתחת לפוסט" },
-        {
-          text: "Навчання з @lexi.brzvsk Кольорокорекція, робота зі стабілізатором, правильні налаштування камери…",
-          source: "@pafos.art, פוסט",
-        },
-      ],
-    },
   },
   audit: {
     kicker: "בחינם",

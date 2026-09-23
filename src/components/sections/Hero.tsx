@@ -49,7 +49,21 @@ export function Hero({ locale, dict }: HeroProps) {
   return (
     <section
       id="top"
-      className="relative isolate flex min-h-[88svh] items-center overflow-hidden bg-cherry-black text-cream-type"
+      /* The gap that opened under the CTA was not a margin anywhere: it was
+         this section's own height. `min-h-[88svh]` + `items-center` centre a
+         ~500 px content block inside an ~800 px box, so half the leftover
+         viewport was parked between the button and the section below — and
+         the section below is the SAME cherry-black, so it read as a hole
+         rather than as breathing room (owner's cleanup pass, 23.09.2026).
+         Two fixes, one per breakpoint, and neither is a negative margin:
+           - phones/tablets keep the near-full-screen video, but the content
+             is anchored to the BOTTOM, so the leftover height sits above the
+             text, over the clip, instead of below the button;
+           - from `lg` the viewport height stops driving the box at all. The
+             floor is a plain px minimum that real content always clears, so
+             the height is content + padding on every desktop, and a taller
+             monitor no longer reopens the hole. */
+      className="relative isolate flex min-h-[88svh] items-end overflow-hidden bg-cherry-black text-cream-type lg:min-h-[600px] lg:items-center"
     >
       <div className="absolute inset-0 lg:inset-y-10 lg:start-auto lg:end-10 lg:w-[36%] lg:rounded-2xl lg:overflow-hidden">
         <AutoVideo
@@ -70,7 +84,7 @@ export function Hero({ locale, dict }: HeroProps) {
         />
       </div>
 
-      <div className="relative mx-auto w-full max-w-7xl px-4 py-24 sm:px-6 lg:py-28">
+      <div className="relative mx-auto w-full max-w-7xl px-4 pt-24 pb-16 sm:px-6 lg:pt-28 lg:pb-20">
         <div className="flex max-w-xl flex-col items-start gap-7 lg:max-w-[52%]">
           <KineticHeading
             as="h1"

@@ -101,29 +101,6 @@ export const en: Dictionary = {
       { value: "7", label: "service directions" },
       { value: "3", label: "countries we work in" },
     ],
-    knownBy: {
-      label: "Known by:",
-      names: [
-        "Bukovynska Khvylia radio",
-        "Tulpan textile showroom",
-        "ACE tennis club",
-        "IRONY clothing brand",
-      ],
-    },
-    quotes: {
-      /* The quotes stay in the original Ukrainian on every locale: they are
-         verbatim real comments, and translating them would fabricate words
-         nobody wrote. The caption explains that in the reader's language. */
-      caption: "From Instagram, verbatim in Ukrainian.",
-      items: [
-        { text: "Дай Боже", source: "comment under a post" },
-        { text: "Горжусь!!", source: "comment under a post" },
-        {
-          text: "Навчання з @lexi.brzvsk Кольорокорекція, робота зі стабілізатором, правильні налаштування камери…",
-          source: "@pafos.art, a post",
-        },
-      ],
-    },
   },
   audit: {
     kicker: "Free",

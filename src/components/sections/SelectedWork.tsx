@@ -57,7 +57,15 @@ function Tile({ item, locale, index }: { item: WorkItem; locale: Locale; index: 
  */
 export function SelectedWork({ locale, dict }: SelectedWorkProps) {
   return (
-    <section id="work" tabIndex={-1} className="scroll-mt-20 bg-cherry-black py-20 text-cream-type md:py-28">
+    /* Asymmetric on purpose: the hero above shares this exact background, so
+       the top padding only has to separate the CTA from the section kicker —
+       the closing padding still has to separate the last tile from the torn
+       edge into the cream half of the page. */
+    <section
+      id="work"
+      tabIndex={-1}
+      className="scroll-mt-20 bg-cherry-black pt-14 pb-20 text-cream-type md:pt-16 md:pb-28"
+    >
       <div className="mx-auto flex max-w-7xl flex-col gap-14 px-4 sm:px-6">
         {/* §8: the section says its one thing once. The five per-group notes
             that used to repeat "made for clients" under every row are now this

@@ -35,15 +35,16 @@ function flatten(value: unknown, path = ""): [string, string][] {
   return [];
 }
 
-/* Strings that are the SAME in every locale by design: the proof quotes are
-   verbatim Ukrainian comments and post excerpts from real Instagram posts
-   (§28 honesty: we translate the attribution and the caption that frames
-   them, never the quote itself).
+/* There used to be an exception here: `trust.quotes.items[].text` held
+   verbatim Ukrainian Instagram comments, which stayed Cyrillic in the Hebrew
+   and Romanian dictionaries by design. The owner's cleanup pass of 23.09.2026
+   removed that block, so the two scans below now run with NO exception — a
+   strictly stronger check. If verbatim quotes ever come back they need their
+   own allowance again, and a failing scan is the right way to be reminded.
 
    v3 §2: the language NAMES left the dictionaries entirely. They are autonyms
    in lib/i18n — a language is called what its own speakers call it, in every
    interface language, so translating them was always wrong. */
-const isVerbatim = (path: string) => /^trust\.quotes\.items\[\d+\]\.text$/.test(path);
 
 /* ============================================================
    i18n core — 4 locales, one source of truth (lib/i18n)
@@ -153,16 +154,14 @@ describe("dictionaries — one per locale", () => {
 });
 
 describe("dictionaries — no untranslated leftovers", () => {
-  it("he: no Cyrillic outside the verbatim client quotes", () => {
+  it("he: not one Cyrillic character anywhere in the dictionary", () => {
     for (const [path, value] of flatten(getDictionary("he"))) {
-      if (isVerbatim(path)) continue;
       expect(value, `he.${path}`).not.toMatch(CYRILLIC);
     }
   });
 
-  it("ro: no Cyrillic outside the verbatim client quotes", () => {
+  it("ro: not one Cyrillic character anywhere in the dictionary", () => {
     for (const [path, value] of flatten(getDictionary("ro"))) {
-      if (isVerbatim(path)) continue;
       expect(value, `ro.${path}`).not.toMatch(CYRILLIC);
     }
   });
@@ -324,11 +323,10 @@ describe("RTL — flipped choreography", () => {
     }
   });
 
-  it("mixed-language quotes let the browser decide their direction", () => {
-    // The proof quotes stay Ukrainian in every locale — a Hebrew page must
-    // still lay each one out LTR, which only dir="auto" gets right.
-    expect(read("../src/components/sections/Trust.tsx")).toContain('dir="auto"');
-  });
+  /* There was a `dir="auto"` case here for the Ukrainian proof quotes inside
+     the Hebrew page. The quotes were removed on 23.09.2026 and with them the
+     only mixed-language run on the page; Trust.tsx now isolates just its bare
+     numerals, which the `dir="ltr"` case above already covers. */
 
   it("layout-bearing utilities are logical, not physical (spot check)", () => {
     expect(read("../src/components/layout/Header.tsx")).toContain("focus-visible:start-2");
