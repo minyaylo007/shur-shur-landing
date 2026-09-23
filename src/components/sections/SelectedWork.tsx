@@ -60,11 +60,14 @@ export function SelectedWork({ locale, dict }: SelectedWorkProps) {
     /* Asymmetric on purpose: the hero above shares this exact background, so
        the top padding only has to separate the CTA from the section kicker —
        the closing padding still has to separate the last tile from the torn
-       edge into the cream half of the page. */
+       edge into the cream half of the page. Halved 23.09.2026 (56/64 → 32/40):
+       it is not a gap on its own, it is one half of the joint with the hero,
+       and the two halves added up to an empty band the owner saw as a hole.
+       The other half is the hero's `pb`; change them together or not at all. */
     <section
       id="work"
       tabIndex={-1}
-      className="scroll-mt-20 bg-cherry-black pt-14 pb-20 text-cream-type md:pt-16 md:pb-28"
+      className="scroll-mt-20 bg-cherry-black pt-8 pb-20 text-cream-type md:pt-10 md:pb-28"
     >
       <div className="mx-auto flex max-w-7xl flex-col gap-14 px-4 sm:px-6">
         {/* §8: the section says its one thing once. The five per-group notes

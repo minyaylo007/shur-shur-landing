@@ -86,7 +86,17 @@ export function Hero({ locale, dict }: HeroProps) {
         />
       </div>
 
-      <div className="relative mx-auto w-full max-w-7xl px-4 pt-24 pb-16 sm:px-6 lg:pt-28 lg:pb-20">
+      {/* The bottom padding is the hero's HALF of the joint with #work, not a
+          full section gap: the portfolio starts on the same cherry-black, so
+          the eye reads this padding and the portfolio's own top padding as
+          one distance. Two normal section paddings stacked there summed to
+          120 px on a phone and 144 px on a desktop — an empty band under the
+          CTA with nothing in it, because the scrim has already faded the clip
+          to solid black by then (owner, 23.09.2026, phone screenshot). Halved
+          on both sides of the joint (see `SelectedWork`), which lands the
+          distance at ~64 px on phones and ~88 px from `lg`. The top padding
+          is untouched: it clears the fixed header, which is a different job. */}
+      <div className="relative mx-auto w-full max-w-7xl px-4 pt-24 pb-8 sm:px-6 lg:pt-28 lg:pb-12">
         <div className="flex max-w-xl flex-col items-start gap-7 lg:max-w-[52%]">
           <KineticHeading
             as="h1"
