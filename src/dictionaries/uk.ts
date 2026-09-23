@@ -23,9 +23,16 @@
  *      alongside whole directions («Мобільна зйомка», «Підбір моделей»,
  *      «Оформлення стрічки», «Маркетингова консультація») now sit inside the
  *      line they belong to.
- *   4. `trust.paragraphs` went from two paragraphs to one sentence. The
- *      geography that used to close the hero subtitle lives there: low on the
- *      page, small, beside the team fact it actually supports (§1).
+ *   4. `trust.paragraphs` went from two paragraphs to one sentence. It used
+ *      to read «Одинадцять людей у Чернівцях. Працюємо в Україні, Румунії та
+ *      Ізраїлі» — both halves were wrong, and the owner said so on
+ *      23.09.2026: the eleven are not all in Chernivtsi (part of the team is
+ *      remote, in other cities and countries), and three countries is where
+ *      the agency has WORKED, not a boundary around who it can work with.
+ *      The sentence now says the team is hybrid and the market is open, and
+ *      the third fact's label moved from «країни присутності» to «країни, де
+ *      вже працювали» — same self-reported figure, no longer a limit. The
+ *      city itself stays where it is true: metadata, footer, the hero clip.
  *
  * Nothing factual was invented — every figure is self-reported by the agency
  * and already existed in the project.
@@ -139,12 +146,14 @@ const dict = {
   },
   trust: {
     kicker: "Про нас",
-    heading: "КОМАНДА З ЧЕРНІВЦІВ",
-    paragraphs: ["Одинадцять людей у Чернівцях. Працюємо в Україні, Румунії та Ізраїлі."],
+    heading: "ОДНА КОМАНДА, БАГАТО МІСЦЬ",
+    paragraphs: [
+      "Частина команди — у Чернівцях, частина працює дистанційно з інших міст і країн. Беремо проєкти з різних ринків — незалежно від того, де ви.",
+    ],
     facts: [
       { value: "11", label: "людей у команді" },
       { value: "7", label: "напрямів послуг" },
-      { value: "3", label: "країни присутності" },
+      { value: "3", label: "країни, де вже працювали" },
     ],
   },
   audit: {

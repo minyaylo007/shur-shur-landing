@@ -94,12 +94,14 @@ export const ro: Dictionary = {
   },
   trust: {
     kicker: "Despre noi",
-    heading: "O ECHIPĂ DIN CERNĂUȚI",
-    paragraphs: ["Unsprezece oameni în Cernăuți. Lucrăm în Ucraina, România și Israel."],
+    heading: "O ECHIPĂ, MAI MULTE LOCURI",
+    paragraphs: [
+      "O parte din echipă este în Cernăuți, cealaltă lucrează la distanță din alte orașe și țări. Lucrăm cu proiecte din piețe diferite, indiferent unde vă aflați.",
+    ],
     facts: [
       { value: "11", label: "oameni în echipă" },
       { value: "7", label: "direcții de servicii" },
-      { value: "3", label: "țări în care lucrăm" },
+      { value: "3", label: "țări în care am lucrat deja" },
     ],
   },
   audit: {

@@ -22,8 +22,10 @@ interface HeroProps {
  *
  *  - The «Контент-агенція • Чернівці» sticker is gone, and the subtitle no
  *    longer ends «Україна, Румунія, Ізраїль» (§1). Geography on the first
- *    screen answers a question nobody has asked yet; it lives in the team
- *    block now, one line, below the fold.
+ *    screen answers a question nobody has asked yet. It moved to the team
+ *    block below the fold, and on 23.09.2026 the owner cut it back there
+ *    too: naming three countries read as a limit on where the agency can
+ *    work, which it is not.
  *  - The three-link row (phone / Telegram / Instagram) is gone (§4, §6).
  *    Three equally-weighted links next to a button is four actions, which is
  *    no action. What is left is ONE filled button straight into WhatsApp and

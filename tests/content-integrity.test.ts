@@ -155,6 +155,30 @@ describe("portfolio data (brief §7–§13)", () => {
     }
   });
 
+  it("fashion alternates photo and video, so every row carries both", () => {
+    /* The owner's content pass of 23.09.2026. The group used to run three
+       photographs and then three clips: on a four-column desktop grid that
+       is a row of stills above a row of moving tiles, which reads as two
+       sections rather than one. Four and four in strict P-V-P-V order give
+       the same mix to every row at four across AND at two across, so the
+       rhythm holds on phones too — which is why this is asserted on the
+       sequence and not merely on the counts. */
+    const kinds = itemsInGroup("fashion").map((item) => item.kind);
+    expect(kinds).toEqual(["photo", "video", "photo", "video", "photo", "video", "photo", "video"]);
+  });
+
+  it("the white-suit portrait stays out, and the new fashion files stay in", () => {
+    /* Removed on the owner's instruction, 23.09.2026: `fashion-dress`, the
+       model on the chair in the white waistcoat and trousers. Its file is
+       deleted from public/ too, so public-assets.test.ts would fail if the
+       entry came back without it — and this says WHICH entry, by name. */
+    const ids = itemsInGroup("fashion").map((item) => item.id);
+    expect(ids).not.toContain("fashion-dress");
+    expect(ids).toEqual(
+      expect.arrayContaining(["fashion-model", "fashion-production", "bts-production"]),
+    );
+  });
+
   it("every group key is a short one-word chip in every locale", () => {
     for (const dict of allDicts) {
       for (const group of workGroupOrder) {

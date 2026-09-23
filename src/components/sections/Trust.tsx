@@ -33,7 +33,13 @@ interface TrustProps {
  *    and the same commit holds the quotes.
  *
  * The three facts that remain — team size, number of service directions,
- * countries — are self-reported and already existed in the project.
+ * countries — are self-reported and already existed in the project. The
+ * third one's LABEL changed on 23.09.2026 («країни присутності» → «країни,
+ * де вже працювали»), and the heading and paragraph with it: the section
+ * used to say the eleven people are in Chernivtsi and the agency works in
+ * three countries. Neither is accurate — part of the team is remote, and
+ * three countries is experience, not a border. The figures themselves are
+ * untouched.
  */
 export function Trust({ dict }: TrustProps) {
   return (

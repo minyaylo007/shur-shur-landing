@@ -27,6 +27,18 @@ import type { Locale } from "./i18n";
  * is about. The file `beauty-foam.webp` is deleted from `public/` too — an
  * unreferenced asset would fail tests/public-assets.test.ts.
  *
+ * Owner's content pass, 23.09.2026: three new files from the same shared
+ * Drive folder join fashion — a street portrait for a clothing brand
+ * (`fashion-model`), a still of the designer's sketch table
+ * (`fashion-production`) and the clip shot over that table
+ * (`bts-production`). The white-suit studio portrait (`fashion-dress`, the
+ * model on the chair in a white waistcoat and trousers) is gone on the
+ * owner's instruction, and its file is deleted from `public/` with it — an
+ * unreferenced asset would fail tests/public-assets.test.ts. The clip is the
+ * one file in the archive shot 16:9 rather than 9:16; it is cropped to the
+ * centre column at encode time instead of at render time, so the browser is
+ * never sent pixels the tile crops away.
+ *
  * ALL source files are vertical 9:16, so the grid is built from 9:16 tiles
  * by design instead of cropping tall footage into wide boxes.
  */
@@ -184,23 +196,43 @@ export const workItems: WorkItem[] = [
   }),
 
   // ─── Fashion & bridal ────────────────────────────────────────────────
+  /* Owner's content pass, 23.09.2026: photo and video ALTERNATE here, and
+     nowhere else on the page does the order carry meaning like this. The
+     group used to run three photographs and then three clips, which on a
+     four-column desktop grid meant a row of stills above a row of moving
+     tiles — the eye reads that as two different sections. Four photos and
+     four clips in strict P-V-P-V order give every row (four across on
+     desktop, two on phones) the same mix, so the rhythm survives every
+     breakpoint. Keep the alternation when touching this list. */
+  photo("fashion-model", "fashion", 1000, 1500, {
+    uk: "Фешн-зйомка для бренду одягу: модель у шовковому топі та мереживній спідниці",
+    en: "Fashion shoot for a clothing brand: a model in a silk top and a lace skirt",
+    he: "צילומי אופנה למותג אופנה: דוגמנית בטופ משי ובחצאית תחרה",
+    ro: "Ședință fashion pentru un brand de haine: un model într-un top de mătase și o fustă din dantelă",
+  }),
+  video("bts-production", "fashion", 540, 960, {
+    uk: "Бекстейдж виробництва: дизайнерка перебирає ескізи суконь",
+    en: "Behind the scenes of production: the designer going through dress sketches",
+    he: "מאחורי הקלעים של הייצור: המעצבת עוברת על סקיצות של שמלות",
+    ro: "Din culisele producției: designerul răsfoiește schițele rochiilor",
+  }),
   photo("fashion-suit", "fashion", 1000, 1508, {
     uk: "Фешн-зйомка в студії: модель у світлому костюмі бренду одягу",
     en: "Studio fashion shoot: a model in a light suit for a clothing brand",
     he: "צילומי אופנה בסטודיו: דוגמנית בחליפה בהירה עבור מותג אופנה",
     ro: "Ședință fashion în studio: un model într-un costum deschis, pentru un brand de haine",
   }),
-  photo("fashion-dress", "fashion", 1000, 1500, {
-    uk: "Фешн-зйомка в студії: модель у білій сукні на стільці",
-    en: "Studio fashion shoot: a model in a white dress on a chair",
-    he: "צילומי אופנה בסטודיו: דוגמנית בשמלה לבנה על כיסא",
-    ro: "Ședință fashion în studio: un model într-o rochie albă, pe un scaun",
+  video("reel-bride", "fashion", 540, 960, {
+    uk: "Reels для весільного бренду: імідж-ролик салону",
+    en: "Reel for a bridal brand: the salon’s image clip",
+    he: "ריל למותג כלות: סרטון התדמית של הסלון",
+    ro: "Reel pentru un brand de mirese: clipul de imagine al salonului",
   }),
-  photo("bridal-atelier", "fashion", 1000, 1500, {
-    uk: "Чорно-біла зйомка ательє: швачка працює з весільною сукнею на манекені",
-    en: "Black-and-white atelier shoot: a seamstress working on a wedding dress on the form",
-    he: "צילום שחור-לבן בסטודיו תפירה: תופרת עובדת על שמלת כלה על הבובה",
-    ro: "Ședință alb-negru în atelier: o croitoreasă lucrează la o rochie de mireasă pe manechin",
+  photo("fashion-production", "fashion", 1000, 1304, {
+    uk: "Виробництво одягу: ескізи суконь, перли й фатин на столі дизайнерки",
+    en: "Fashion production: dress sketches, pearls and tulle on the designer’s table",
+    he: "ייצור אופנה: סקיצות של שמלות, פנינים וטול על שולחן המעצבת",
+    ro: "Producție de modă: schițe de rochii, perle și tul pe masa designerului",
   }),
   video("reel-atelier", "fashion", 540, 960, {
     uk: "Reels для весільного бренду: виробництво сукні, робота з деталями",
@@ -208,11 +240,11 @@ export const workItems: WorkItem[] = [
     he: "ריל למותג כלות: ייצור השמלה, פרט אחר פרט",
     ro: "Reel pentru un brand de mirese: confecționarea rochiei, detaliu cu detaliu",
   }),
-  video("reel-bride", "fashion", 540, 960, {
-    uk: "Reels для весільного бренду: імідж-ролик салону",
-    en: "Reel for a bridal brand: the salon’s image clip",
-    he: "ריל למותג כלות: סרטון התדמית של הסלון",
-    ro: "Reel pentru un brand de mirese: clipul de imagine al salonului",
+  photo("bridal-atelier", "fashion", 1000, 1500, {
+    uk: "Чорно-біла зйомка ательє: швачка працює з весільною сукнею на манекені",
+    en: "Black-and-white atelier shoot: a seamstress working on a wedding dress on the form",
+    he: "צילום שחור-לבן בסטודיו תפירה: תופרת עובדת על שמלת כלה על הבובה",
+    ro: "Ședință alb-negru în atelier: o croitoreasă lucrează la o rochie de mireasă pe manechin",
   }),
   video("bts-crew", "fashion", 540, 960, {
     uk: "Бекстейдж: команда зі студійним світлом на виїзній весільній зйомці",

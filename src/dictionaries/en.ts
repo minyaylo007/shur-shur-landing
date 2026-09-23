@@ -94,12 +94,14 @@ export const en: Dictionary = {
   },
   trust: {
     kicker: "About",
-    heading: "A TEAM FROM CHERNIVTSI",
-    paragraphs: ["Eleven people in Chernivtsi. We work in Ukraine, Romania and Israel."],
+    heading: "ONE TEAM, MANY PLACES",
+    paragraphs: [
+      "Part of the team is in Chernivtsi, part works remotely from other cities and countries. We take on projects from different markets, wherever you are.",
+    ],
     facts: [
       { value: "11", label: "people on the team" },
       { value: "7", label: "service directions" },
-      { value: "3", label: "countries we work in" },
+      { value: "3", label: "countries we have worked in" },
     ],
   },
   audit: {
