@@ -3,6 +3,8 @@
  * Server-only: never import from client components.
  */
 
+import type { Attribution, Market } from "./attribution";
+
 /** Escape user input for Telegram `parse_mode: "HTML"` (& first, then < >). */
 export function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -17,6 +19,31 @@ export interface LeadMessage {
   /** Instagram nickname for audit requests (leading @ optional). */
   igHandle?: string;
   locale: string;
+  /** Where the lead came from (lib/attribution). Omitted = no source line. */
+  source?: LeadSource;
+}
+
+export interface LeadSource {
+  market: Market;
+  attribution?: Attribution;
+}
+
+/**
+ * One line for the people reading the chat: campaign names and the market.
+ * Click ids are NOT printed — a chat is not where an ad identifier should
+ * live — only the fact that one came with the lead («є fbclid»).
+ */
+export function formatSource({ market, attribution: a }: LeadSource): string {
+  const parts: string[] = [];
+  if (a?.utm_source) parts.push(`source=${a.utm_source}`);
+  if (a?.utm_campaign) parts.push(`campaign=${a.utm_campaign}`);
+  if (a?.utm_content) parts.push(`content=${a.utm_content}`);
+  if (parts.length === 0) parts.push(a?.referrer_host ? `з ${a.referrer_host}` : "прямий захід");
+  parts.push(`ринок: ${market}`);
+  for (const id of ["fbclid", "gclid"] as const) {
+    if (a?.[id]) parts.push(`є ${id}`);
+  }
+  return `<i>Джерело: ${escapeHtml(parts.join(" · "))}</i>`;
 }
 
 export function formatLeadMessage(lead: LeadMessage): string {
@@ -42,6 +69,7 @@ export function formatLeadMessage(lead: LeadMessage): string {
     lines.push(`<b>Повідомлення:</b> ${escapeHtml(lead.message)}`);
   }
   lines.push("", `<i>Мова сторінки: ${escapeHtml(lead.locale)}</i>`);
+  if (lead.source) lines.push(formatSource(lead.source));
   return lines.join("\n");
 }
 

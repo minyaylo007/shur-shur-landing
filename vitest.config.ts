@@ -21,6 +21,7 @@ export const critical = [
   "tests/i18n-locales.test.ts", //      четыре локали живы
   "tests/conversion.test.ts", //        единственный настоящий телефон и готовность каналов
   "tests/build-fingerprint.test.ts", // выкат и откат можно ИЗМЕРИТЬ
+  "tests/lead-attribution.test.ts", //  заявка доходит при любом учёте; HMAC; рынок; пиксель без согласия молчит; PII не в URL/логах
 ];
 
 export default defineConfig({

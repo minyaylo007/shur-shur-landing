@@ -236,6 +236,15 @@ const dict = {
      below is all it needs: it borrows nothing from the page shell. No
      messenger links here on purpose — the way out of a dead address is a
      LIVE page of the site, where every channel is already gathered. */
+  /* Банер згоди на cookie (29.09.2026). Дві рівні кнопки: відмова має бути
+     такою ж простою, як дозвіл. За замовчуванням — нічого рекламного. */
+  consent: {
+    label: "Згода на cookie",
+    text: "Ми використовуємо лише необхідне для роботи сайту. З вашого дозволу — ще рекламні cookie Meta, щоб бачити, яка реклама приводить заявки.",
+    necessary: "Лише необхідне",
+    allowAds: "Дозволити рекламні cookie",
+    settings: "Налаштування cookie",
+  },
   notFound: {
     metaTitle: "Сторінку не знайдено — SHUR-SHUR",
     heading: "ТАКОЇ СТОРІНКИ НЕМАЄ",

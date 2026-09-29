@@ -1,4 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { compactAttribution, marketOf } from "@/lib/attribution";
+import { sendLeadToLedger } from "@/lib/ledger";
 import { leadSchema, isSpam } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { sendLeadToTelegram, TelegramNotConfiguredError } from "@/lib/telegram";
@@ -34,8 +37,17 @@ export async function POST(request: Request) {
   if (isSpam(parsed.data)) {
     const reason = parsed.data.extra_field !== "" ? "honeypot" : "too-fast";
     console.info("[lead] silent drop:", reason, "kind:", parsed.data.kind);
-    return NextResponse.json({ ok: true });
+    // A lead_id here too: a response without one would tell a bot it was caught.
+    return NextResponse.json({ ok: true, lead_id: randomUUID() });
   }
+
+  /* Contract v1 (29.09.2026): the SERVER names the lead. The same UUID goes
+     to the ledger and back to the browser, where the pixel uses it as the
+     event id — so the pixel and a later Conversions API event are one lead. */
+  const leadId = randomUUID();
+  const locale = parsed.data.locale ?? defaultLocale;
+  const attribution = compactAttribution(parsed.data.attribution);
+  const market = marketOf(attribution);
 
   try {
     await sendLeadToTelegram({
@@ -44,7 +56,8 @@ export async function POST(request: Request) {
       contact: parsed.data.contact,
       message: parsed.data.message,
       igHandle: parsed.data.igHandle,
-      locale: parsed.data.locale ?? defaultLocale,
+      locale,
+      source: { market, attribution },
     });
   } catch (error) {
     // Two different incidents, two different log lines. «Not configured» means
@@ -66,5 +79,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "delivery_failed" }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true });
+  /* Best-effort second copy. Awaited (a serverless function may be frozen
+     the moment it answers) but bounded at 2 s and unable to throw: whatever
+     the ledger does, the visitor gets the same answer. */
+  await sendLeadToLedger({
+    lead_id: leadId,
+    created_at: new Date().toISOString(),
+    kind: parsed.data.kind,
+    locale,
+    market,
+    name: parsed.data.name,
+    contact: parsed.data.contact,
+    message: parsed.data.message,
+    ig_handle: parsed.data.igHandle,
+    attribution,
+    consent: parsed.data.consent,
+  });
+
+  return NextResponse.json({ ok: true, lead_id: leadId });
 }

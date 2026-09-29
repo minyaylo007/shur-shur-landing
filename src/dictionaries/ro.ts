@@ -173,6 +173,14 @@ export const ro: Dictionary = {
       instagram: "Instagram Direct",
     },
   },
+  /* ждёт проверки носителем — cookie banner copy, written 29.09.2026 without a native reviewer. */
+  consent: {
+    label: "Consimțământ cookie",
+    text: "Folosim doar ce este necesar pentru funcționarea site-ului. Cu permisiunea dvs., și cookie-uri publicitare Meta — ca să vedem ce reclame aduc solicitări.",
+    necessary: "Doar cele necesare",
+    allowAds: "Permite cookie-urile publicitare",
+    settings: "Setări cookie",
+  },
   notFound: {
     metaTitle: "Pagina nu a fost găsită — SHUR-SHUR",
     heading: "PAGINA NU EXISTĂ",

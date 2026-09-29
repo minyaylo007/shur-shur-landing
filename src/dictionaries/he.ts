@@ -180,6 +180,14 @@ export const he: Dictionary = {
       instagram: "Instagram Direct",
     },
   },
+  /* ждёт проверки носителем — cookie banner copy, written 29.09.2026 without a native reviewer. */
+  consent: {
+    label: "הסכמה לעוגיות",
+    text: "אנחנו משתמשים רק במה שנחוץ לפעולת האתר. באישורכם — גם בעוגיות פרסום של Meta, כדי לדעת איזו פרסומת מביאה פניות.",
+    necessary: "רק ההכרחי",
+    allowAds: "לאשר עוגיות פרסום",
+    settings: "הגדרות עוגיות",
+  },
   notFound: {
     metaTitle: "הדף לא נמצא — SHUR-SHUR",
     heading: "הדף הזה לא קיים",

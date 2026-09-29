@@ -64,7 +64,12 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         />
       </main>
       <TapeDivider color="black" decor="clip" flip />
-      <Footer locale={locale} nav={dict.nav} footer={dict.footer} />
+      <Footer
+        locale={locale}
+        nav={dict.nav}
+        footer={dict.footer}
+        consentSettings={dict.consent.settings}
+      />
       {/* Brief §19: ONE persistent contact control, scroll-gated past the
           hero so it never covers the hero's own CTA. z-40, under the header. */}
       <ContactBar locale={locale} dict={dict.contactBar} />
