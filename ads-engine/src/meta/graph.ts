@@ -8,7 +8,7 @@ export const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
-/** Graph error without the URL: URLs carry the access token. */
+/** Graph error without the URL or the token. */
 export class GraphError extends Error {
   readonly status: number;
   readonly code: number | undefined;
@@ -16,6 +16,24 @@ export class GraphError extends Error {
     super(message);
     this.status = status;
     this.code = code;
+  }
+}
+
+/* The token never rides in a URL: URLs end up in fetch error messages, proxy
+   and access logs. GET sends it as `Authorization: Bearer` — Meta documents
+   that header for graph.facebook.com (developers.facebook.com/documentation/
+   business-messaging/whatsapp/access-tokens/). POST sends it as the
+   `access_token` field of the body — the Conversions API reference passes it
+   as a body parameter (`-F 'access_token=…'`, developers.facebook.com/docs/
+   marketing-api/conversions-api/using-the-api). Checked 29.09.2026. */
+
+/** Network failures (DNS, reset, timeout) become a GraphError with the token cut out. */
+async function send(fetchFn: FetchLike, url: string, init: RequestInit, token: string): Promise<Response> {
+  try {
+    return await fetchFn(url, init);
+  } catch (error) {
+    const raw = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    throw new GraphError(0, undefined, `network: ${token ? raw.split(token).join("[redacted]") : raw}`);
   }
 }
 
@@ -29,6 +47,13 @@ async function parse(res: Response): Promise<unknown> {
   return body;
 }
 
+/** Drops a token Meta may echo into paging.next; the header carries it instead. */
+function withoutToken(url: string): string {
+  const u = new URL(url);
+  u.searchParams.delete("access_token");
+  return u.toString();
+}
+
 /** Read-only client: GET only. The ads_read token is all it ever needs. */
 export class GraphReader {
   private readonly token: string;
@@ -38,14 +63,22 @@ export class GraphReader {
     this.fetchFn = fetchFn;
   }
 
+  private fetchGet(url: string): Promise<Response> {
+    return send(
+      this.fetchFn,
+      url,
+      { method: "GET", headers: { authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(30_000) },
+      this.token,
+    );
+  }
+
   async get(path: string, params: Record<string, string> = {}): Promise<unknown> {
     const url = new URL(`${GRAPH_BASE}/${path.replace(/^\//, "")}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    url.searchParams.set("access_token", this.token);
-    return parse(await this.fetchFn(url.toString(), { method: "GET", signal: AbortSignal.timeout(30_000) }));
+    return parse(await this.fetchGet(url.toString()));
   }
 
-  /** Follows paging.next; each next URL already carries the token. */
+  /** Follows paging.next, stripped of any echoed token. */
   async getAll<T>(path: string, params: Record<string, string>): Promise<T[]> {
     const out: T[] = [];
     let page = (await this.get(path, params)) as { data?: T[]; paging?: { next?: string } };
@@ -53,9 +86,7 @@ export class GraphReader {
       out.push(...(page.data ?? []));
       const next = page.paging?.next;
       if (!next || !next.startsWith("https://graph.facebook.com/")) break;
-      page = (await parse(
-        await this.fetchFn(next, { method: "GET", signal: AbortSignal.timeout(30_000) }),
-      )) as typeof page;
+      page = (await parse(await this.fetchGet(withoutToken(next)))) as typeof page;
     }
     return out;
   }
@@ -68,13 +99,18 @@ export async function graphPost(
   token: string,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  const url = `${GRAPH_BASE}/${path.replace(/^\//, "")}?access_token=${encodeURIComponent(token)}`;
+  const url = `${GRAPH_BASE}/${path.replace(/^\//, "")}`;
   return parse(
-    await fetchFn(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
-    }),
+    await send(
+      fetchFn,
+      url,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, access_token: token }),
+        signal: AbortSignal.timeout(15_000),
+      },
+      token,
+    ),
   );
 }

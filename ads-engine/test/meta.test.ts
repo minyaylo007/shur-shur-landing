@@ -8,6 +8,7 @@ import { sendStageEvent, retryFailed, type CapiSettings } from "../src/meta/capi
 import { GoogleAdsStubReader, GoogleAdsNotConfigured } from "../src/google.ts";
 import { sha256Hex } from "../src/normalize.ts";
 import { memDb, leadBody, NOW, testApp } from "./helpers.ts";
+import { setLogSink } from "../src/log.ts";
 
 /* Сбор Meta Insights (только чтение, закреплённая версия Graph API,
    перечитывание 7 дней) и Conversions API (выключен по умолчанию, только с
@@ -209,4 +210,87 @@ describe("Conversions API", () => {
     up = true;
     expect(await retryFailed(db, ON, g.fn, NOW)).toEqual({ retried: 1, sent: 1 });
   });
+});
+
+describe("Graph token never in a URL, an error or the log", () => {
+  const TOKEN = "EAAsecret-token-5f3a";
+
+  type Seen = { url: string; method: string; auth: string | null; body?: string };
+  function spyFetch(fail: "none" | "network" | "graph") {
+    const seen: Seen[] = [];
+    const fn = async (url: string, init?: RequestInit) => {
+      seen.push({
+        url,
+        method: init?.method ?? "GET",
+        auth: new Headers(init?.headers).get("authorization"),
+        body: init?.body as string | undefined,
+      });
+      // A client that puts the full URL into its error text (node-fetch does).
+      if (fail === "network") throw new TypeError(`request to ${url} failed, reason: ECONNRESET`);
+      if (fail === "graph") return new Response(JSON.stringify({ error: { message: "Invalid OAuth access token", code: 190 } }), { status: 400 });
+      const u = new URL(url);
+      if (u.pathname.endsWith("/act_999")) return new Response(JSON.stringify(ACCOUNT));
+      if (u.pathname.endsWith("/insights") && !u.searchParams.get("after"))
+        // Meta echoes the token into paging.next when it was sent in the query.
+        return new Response(JSON.stringify({ data: [row(u.searchParams.get("level")!, "2026-09-27", "5")], paging: { next: `${u.origin}${u.pathname}?level=x&after=p2&access_token=${TOKEN}` } }));
+      return new Response(JSON.stringify({ data: [], events_received: 1 }));
+    };
+    return { seen, fn: fn as unknown as typeof fetch };
+  }
+
+  function captureLog() {
+    const lines: string[] = [];
+    const prev = setLogSink((l) => lines.push(l));
+    return { lines, restore: () => setLogSink(prev) };
+  }
+
+  async function capiWithLead(fetchFn: typeof fetch) {
+    const db = memDb();
+    const p = parseLead(leadBody({ contact: "ana@example.com" }));
+    if (!p.ok) throw new Error(p.field);
+    ingestLead(db, p.lead);
+    const outcome = await sendStageEvent(db, { enabled: true, token: TOKEN, datasetId: "555" }, p.lead.lead_id, "qualified", fetchFn, NOW);
+    const detail = (db.prepare("SELECT detail FROM capi_events").get() as { detail: string | null }).detail;
+    return { outcome, detail };
+  }
+
+  for (const fail of ["none", "network", "graph"] as const) {
+    it(`CAPI POST (${fail}): token only in the JSON body`, async () => {
+      const g = spyFetch(fail);
+      const log = captureLog();
+      try {
+        const { outcome, detail } = await capiWithLead(g.fn);
+        expect(outcome).toBe(fail === "none" ? "sent" : "failed");
+        expect(g.seen).toHaveLength(1);
+        expect(g.seen[0].url).not.toContain(TOKEN);
+        expect(new URL(g.seen[0].url).search).toBe("");
+        expect(JSON.parse(g.seen[0].body!).access_token).toBe(TOKEN);
+        expect(detail ?? "").not.toContain(TOKEN);
+        expect(log.lines.join("\n")).not.toContain(TOKEN);
+        if (fail === "network") expect(detail).toContain("ECONNRESET");
+      } finally {
+        log.restore();
+      }
+    });
+
+    it(`Insights GET (${fail}): token only in the Authorization header`, async () => {
+      const g = spyFetch(fail);
+      const log = captureLog();
+      try {
+        const s = await collect(memDb(), new MetaHttpReader(TOKEN, "999", g.fn), { now: NOW });
+        expect(s.ok).toBe(fail === "none");
+        expect(g.seen.length).toBeGreaterThan(0);
+        if (fail === "none") expect(g.seen.some((c) => c.url.includes("after=p2"))).toBe(true);
+        for (const c of g.seen) {
+          expect(c.method).toBe("GET");
+          expect(c.url).not.toContain(TOKEN);
+          expect(c.auth).toBe(`Bearer ${TOKEN}`);
+        }
+        expect(JSON.stringify(s)).not.toContain(TOKEN);
+        expect(log.lines.join("\n")).not.toContain(TOKEN);
+      } finally {
+        log.restore();
+      }
+    });
+  }
 });
