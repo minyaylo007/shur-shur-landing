@@ -32,6 +32,10 @@ export default defineConfig({
         resolve: { alias },
         test: { name: "looks", include: ["tests/**/*.test.ts"], exclude: critical },
       },
+      /* The lead ledger and ads analytics service (ads-engine/, runs on
+         ace-main, not on Vercel). Its tests touch no site code, so they ride
+         with the full run only: `npm test` stays the site's fast lane. */
+      { test: { name: "ads", include: ["ads-engine/test/**/*.test.ts"] } },
     ],
   },
 });

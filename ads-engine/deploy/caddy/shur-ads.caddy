@@ -1,0 +1,21 @@
+# ЗАГОТОВКА. В /etc/caddy не кладётся и не подключается этой задачей.
+# Когда сайт на Vercel начнёт слать заявки сюда, блок ставится по процедуре
+# OWNER-RULES п.21 (копия Caddyfile, validate, только reload, сверка чужих сайтов).
+# Наружу открыт только POST /v1/leads; /healthz и всё остальное — 404.
+shur-ads.central-aparts.store {
+	@leads {
+		method POST
+		path /v1/leads
+	}
+	handle @leads {
+		request_body {
+			max_size 32KB
+		}
+		reverse_proxy 127.0.0.1:8014 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		respond 404
+	}
+}
