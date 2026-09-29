@@ -22,6 +22,8 @@ export const critical = [
   "tests/conversion.test.ts", //        единственный настоящий телефон и готовность каналов
   "tests/build-fingerprint.test.ts", // выкат и откат можно ИЗМЕРИТЬ
   "tests/lead-attribution.test.ts", //  заявка доходит при любом учёте; HMAC; рынок; пиксель без согласия молчит; PII не в URL/логах
+  "tests/market-landings.test.ts", //   рынок заявки по пути; черновики посадочных не в индексе; RTL; ширина телефона
+  "tests/privacy.test.ts", //           политика с заглушкой не индексируется; уведомление под каждой формой
 ];
 
 export default defineConfig({
