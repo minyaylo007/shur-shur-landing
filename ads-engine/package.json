@@ -1,0 +1,7 @@
+{
+  "name": "shur-ads-engine",
+  "private": true,
+  "type": "module",
+  "description": "SHUR-SHUR: учёт лидов и рекламная аналитика. Без зависимостей — только встроенные модули Node ≥ 22.18.",
+  "engines": { "node": ">=22.18" }
+}

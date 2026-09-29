@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run --project critical",
-    "test:all": "vitest run"
+    "test:all": "vitest run",
+    "ads": "node ads-engine/src/cli.ts",
+    "ads:typecheck": "tsc -p ads-engine/tsconfig.json"
   },
   "dependencies": {
     "next": "16.2.9",

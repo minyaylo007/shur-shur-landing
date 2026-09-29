@@ -40,6 +40,11 @@ jobs:
       - name: Test
         run: npm run test:all
 
+      # ads-engine живёт на ace-main, не на Vercel, и исключён из tsconfig сайта:
+      # его типы проверяются отдельно.
+      - name: Типы ads-engine
+        run: npm run ads:typecheck
+
       - name: Build
         run: npm run build
         env:
