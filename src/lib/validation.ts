@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { locales } from "./i18n";
+import { attributionSchema, consentSchema } from "./attribution";
 
 /**
  * Shared lead-form schema (client pre-submit + server route).
@@ -33,6 +34,13 @@ export const leadSchema = z
     elapsedMs: z.number(),
     /** Page locale — single source of truth is lib/i18n. */
     locale: z.enum(locales).optional(),
+    /**
+     * First-touch source (lib/attribution). Lenient: a bad or over-long
+     * field is cut or dropped, never a reason to refuse the lead.
+     */
+    attribution: attributionSchema,
+    /** Advertising consent at the moment of sending. Absent or garbled = no. */
+    consent: consentSchema,
   })
   .superRefine((data, ctx) => {
     // Per-kind required fields. Length/charset rules above still apply

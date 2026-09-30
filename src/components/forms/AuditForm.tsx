@@ -8,6 +8,8 @@ import { site } from "@/lib/site";
 import { localeChannels } from "@/lib/channels";
 import { failureOf, LEAD_FAILURES, type LeadFailure } from "@/lib/lead-failure";
 import { track } from "@/lib/analytics";
+import { attributionForSubmit } from "@/lib/attribution";
+import { adsAllowed } from "@/lib/consent";
 import { CHANNEL_ICONS, CherryIcon, PhoneIcon } from "@/components/ui/icons";
 
 type Status = "idle" | "submitting" | "success" | "error";
@@ -86,6 +88,8 @@ export function AuditForm({
     event.preventDefault();
     if (status === "submitting") return;
 
+    // Ad identifiers travel only with consent — lib/attribution decides.
+    const ads = adsAllowed();
     const payload = {
       kind: "audit" as const,
       igHandle: igHandle.trim(),
@@ -93,6 +97,8 @@ export function AuditForm({
       extra_field: extraField,
       elapsedMs: elapsed(),
       locale,
+      attribution: attributionForSubmit(ads),
+      consent: { ads },
     };
     const parsed = leadSchema.safeParse(payload);
     if (!parsed.success) {
@@ -117,13 +123,15 @@ export function AuditForm({
         signal: AbortSignal.timeout(15000),
       });
       const data = (await response.json().catch(() => null)) as
-        | { ok?: boolean; error?: unknown }
+        | { ok?: boolean; error?: unknown; lead_id?: unknown }
         | null;
+      // The server's id for this lead — the pixel's event id (dedup with the server side).
+      const leadId = typeof data?.lead_id === "string" ? data.lead_id : undefined;
       if (response.ok && data?.ok) {
         /* v3 §12: the page's second conversion. Fired on the ACCEPTED
            submission, not on the click — a rejected, rate-limited or
            timed-out request is not a lead. */
-        track({ name: "audit_submit", locale, placement: "contact_section" });
+        track({ name: "audit_submit", locale, placement: "contact_section", lead_id: leadId });
         setStatus("success");
         return;
       }

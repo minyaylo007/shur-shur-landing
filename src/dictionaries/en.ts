@@ -173,6 +173,13 @@ export const en: Dictionary = {
       instagram: "Instagram Direct",
     },
   },
+  consent: {
+    label: "Cookie consent",
+    text: "We use only what the site needs to work. With your permission, also Meta advertising cookies — to see which ads bring in requests.",
+    necessary: "Only necessary",
+    allowAds: "Allow advertising cookies",
+    settings: "Cookie settings",
+  },
   notFound: {
     metaTitle: "Page not found — SHUR-SHUR",
     heading: "NO SUCH PAGE",

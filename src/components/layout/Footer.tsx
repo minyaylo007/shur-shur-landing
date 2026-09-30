@@ -5,18 +5,21 @@ import { readyChannel } from "@/lib/channels";
 import { ContactLink } from "@/components/conversion/ContactLink";
 import { Logo } from "@/components/ui/Logo";
 import { FooterYear } from "./FooterYear";
+import { ConsentSettingsButton } from "@/components/consent/ConsentLayer";
 import { CHANNEL_ICONS, CherryIcon, PhoneIcon } from "@/components/ui/icons";
 
 interface FooterProps {
   locale: Locale;
   nav: Dictionary["nav"];
   footer: Dictionary["footer"];
+  /** «Cookie settings» — reopens the consent banner. */
+  consentSettings: string;
 }
 
 /* Build-time year = server-rendered initial; FooterYear updates it client-side. */
 const buildYear = new Date().getFullYear();
 
-export function Footer({ locale, nav, footer }: FooterProps) {
+export function Footer({ locale, nav, footer, consentSettings }: FooterProps) {
   // Readiness is per account, so the same gate that decides whether the DM
   // deep-link may be drawn decides whether the @name may be printed: if the
   // account is not real, neither exists. This column used to read
@@ -104,6 +107,13 @@ export function Footer({ locale, nav, footer }: FooterProps) {
         <div className="mt-12 flex flex-col gap-3 border-t border-paper-50/10 pt-6 text-xs text-paper-200/60 sm:flex-row sm:items-center sm:justify-between">
           <p>
             © <FooterYear initial={buildYear} /> {site.name}. {footer.rights}.
+            {/* Withdrawing consent must stay as easy as giving it: one click
+                brings the cookie banner back (components/consent). */}
+            {" "}
+            <ConsentSettingsButton
+              label={consentSettings}
+              className="cursor-pointer underline underline-offset-4 transition-colors hover:text-juice-300"
+            />
           </p>
           <p className="inline-flex items-center gap-1.5">
             {footer.madeIn}

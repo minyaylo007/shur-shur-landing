@@ -19,6 +19,11 @@ import type { Locale } from "./i18n";
  *   window.shurTrack = (e) => window.plausible?.(e.name, { props: e });
  *
  * and every event below starts flowing, with no component touched.
+ *
+ * 29.09.2026: the first such sink is written — the Meta Pixel in
+ * lib/meta-pixel. 30.09.2026: the pixel runs after «allow» (ConsentLayer) but
+ * sends only PageView; its hook into this sink (Contact, Lead) stays OFF
+ * until the event scheme is agreed with the targetologist.
  */
 
 /** Where on the page the interaction happened. */
@@ -35,8 +40,13 @@ export type EventChannel = "whatsapp" | "telegram" | "instagram" | "viber" | "ph
 export type AnalyticsEvent =
   /** A visitor opened a contact channel. */
   | { name: "contact_click"; channel: EventChannel; locale: Locale; placement: EventPlacement }
-  /** The audit form — the page's other conversion — was submitted. */
-  | { name: "audit_submit"; locale: Locale; placement: EventPlacement }
+  /**
+   * The audit form — the page's other conversion — was submitted. `lead_id`
+   * is the server's random id for this lead (UUID v4, never personal data):
+   * an ad pixel uses it as the event id, so the same lead reported again from
+   * the server is deduplicated instead of counted twice (lib/meta-pixel).
+   */
+  | { name: "audit_submit"; locale: Locale; placement: EventPlacement; lead_id?: string }
   /** The visitor switched the interface language by hand. */
   | { name: "language_switch"; locale: Locale; to: Locale; placement: EventPlacement };
 
