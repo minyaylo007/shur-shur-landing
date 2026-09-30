@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Dictionary } from "@/dictionaries";
 import { rememberFirstTouch } from "@/lib/attribution";
@@ -11,7 +12,13 @@ import {
   readConsent,
   saveConsent,
 } from "@/lib/consent";
-import { configuredPixelId, revokeMetaPixel, startMetaPixel } from "@/lib/meta-pixel";
+import {
+  configuredPixelId,
+  revokeMetaPixel,
+  startMetaPixel,
+  trackMetaPageView,
+  type PixelWindow,
+} from "@/lib/meta-pixel";
 
 const SERVER = "\u0000server";
 
@@ -42,8 +49,9 @@ interface ConsentLayerProps {
  *      sessionStorage, campaign names and the landing path);
  *   2. asks about advertising cookies, with two EQUAL buttons — saying no is
  *      exactly as easy as saying yes, and no answer means no;
- *   3. starts the Meta Pixel only after «allow» AND only when a pixel id was
- *      configured for the build (lib/meta-pixel). Neither holds by default.
+ *   3. starts the Meta Pixel only after «allow» (lib/meta-pixel), and counts
+ *      a PageView per client-side path change — `usePathname()` has no
+ *      search and no hash, so `#anchor` jumps never count.
  *
  * Direction comes from <html dir>, so the Hebrew banner lays out right to
  * left through the same logical utilities as the rest of the page.
@@ -55,22 +63,38 @@ export function ConsentLayer({ dict }: ConsentLayerProps) {
   const stored = useSyncExternalStore(subscribeConsent, readConsentRaw, () => SERVER);
   const [reopened, setReopened] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     rememberFirstTouch();
-    const choice = readConsent();
-    if (choice !== null) {
-      startMetaPixel({ pixelId: configuredPixelId(), adsAllowed: choice.ads, win: window, doc: document });
-    }
     const reopen = () => setReopened(true);
     window.addEventListener(CONSENT_OPEN_EVENT, reopen);
     return () => window.removeEventListener(CONSENT_OPEN_EVENT, reopen);
   }, []);
 
+  // The first load with a stored «allow» starts the pixel (one PageView);
+  // every later client-side path change — the language switcher's
+  // router.push — is one more. Same path again (StrictMode, a remount of the
+  // [locale] layout) counts nothing: lib/meta-pixel remembers the last path.
+  useEffect(() => {
+    const win = window as PixelWindow;
+    if (win.__shurPixel) {
+      trackMetaPageView(win, pathname);
+      return;
+    }
+    const choice = readConsent();
+    if (choice?.ads) {
+      startMetaPixel({ pixelId: configuredPixelId(), adsAllowed: true, win, doc: document, path: pathname });
+    }
+  }, [pathname]);
+
   const choose = (ads: boolean) => {
     saveConsent(ads);
-    if (ads) startMetaPixel({ pixelId: configuredPixelId(), adsAllowed: true, win: window, doc: document });
-    else revokeMetaPixel(window);
+    if (ads) {
+      startMetaPixel({ pixelId: configuredPixelId(), adsAllowed: true, win: window, doc: document, path: pathname });
+    } else {
+      revokeMetaPixel(window);
+    }
     // `dismissed` also closes it when storage is blocked and nothing was saved.
     setDismissed(true);
     setReopened(false);

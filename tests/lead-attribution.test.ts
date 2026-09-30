@@ -12,13 +12,24 @@ import { LEDGER_TIMEOUT_MS, signLedgerBody } from "../src/lib/ledger";
 import { formatLeadMessage } from "../src/lib/telegram";
 import { leadSchema } from "../src/lib/validation";
 import {
+  CONVERSION_EVENTS_ENABLED,
+  DEFAULT_META_PIXEL_ID,
   META_PIXEL_SRC,
+  configuredPixelId,
   normalizePixelId,
+  revokeMetaPixel,
+  sendToPixel,
   startMetaPixel,
+  trackMetaPageView,
   type PixelDocument,
   type PixelWindow,
 } from "../src/lib/meta-pixel";
 import type { AnalyticsEvent } from "../src/lib/analytics";
+import { readConsent } from "../src/lib/consent";
+import { ConsentLayer } from "../src/components/consent/ConsentLayer";
+import { getDictionary } from "../src/dictionaries";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 /*
  * The «site → lead ledger» contract, v1 (29.09.2026), site side.
@@ -336,7 +347,7 @@ describe("Telegram source line", () => {
   });
 });
 
-describe("Meta Pixel — nothing without an id AND consent", () => {
+describe("Meta Pixel — nothing without consent, one PageView per page", () => {
   function fakes() {
     const appended: { async: boolean; src: string }[] = [];
     const doc: PixelDocument = {
@@ -346,17 +357,24 @@ describe("Meta Pixel — nothing without an id AND consent", () => {
     const win: PixelWindow = {};
     return { appended, doc, win };
   }
+  const calls = (win: PixelWindow, method: string) => win.fbq!.queue!.filter((call) => call[0] === method);
+  const pageViews = (win: PixelWindow) => calls(win, "track").filter((call) => call[1] === "PageView");
+  const start = (win: PixelWindow, doc: PixelDocument, path = "/uk") =>
+    startMetaPixel({ pixelId: DEFAULT_META_PIXEL_ID, adsAllowed: true, win, doc, path });
 
   it.each([
-    ["no consent", "1234567890", false],
+    ["no consent", DEFAULT_META_PIXEL_ID, false],
     ["no pixel id", null, true],
     ["neither", null, false],
   ] as const)("%s → no script, no fbq, no sink", (_label, pixelId, adsAllowed) => {
     const { appended, doc, win } = fakes();
-    expect(startMetaPixel({ pixelId, adsAllowed, win, doc })).toBe(false);
+    expect(startMetaPixel({ pixelId, adsAllowed, win, doc, path: "/uk" })).toBe(false);
     expect(appended).toHaveLength(0);
     expect(win.fbq).toBeUndefined();
     expect(win.shurTrack).toBeUndefined();
+    // A path change before consent does not conjure the pixel up either.
+    expect(trackMetaPageView(win, "/en")).toBe(false);
+    expect(win.fbq).toBeUndefined();
   });
 
   it("the env value is validated: only digits count as an id", () => {
@@ -366,32 +384,99 @@ describe("Meta Pixel — nothing without an id AND consent", () => {
     expect(normalizePixelId(" 1234567890 ")).toBe("1234567890");
   });
 
-  it("the build has no pixel id configured (the pixel ships OFF)", () => {
-    expect(normalizePixelId(process.env.NEXT_PUBLIC_META_PIXEL_ID)).toBeNull();
+  it("the owner's pixel is the default; NEXT_PUBLIC_META_PIXEL_ID overrides it", () => {
+    vi.stubEnv("NEXT_PUBLIC_META_PIXEL_ID", "");
+    expect(configuredPixelId()).toBe("1133465872469034");
+    vi.stubEnv("NEXT_PUBLIC_META_PIXEL_ID", "9876543210");
+    expect(configuredPixelId()).toBe("9876543210");
+    vi.unstubAllEnvs();
   });
 
-  it("id + consent: one script, PageView, Lead with eventID = lead_id, Contact — no personal data", () => {
+  it("consent: one official script, exactly one init and one PageView", () => {
     const { appended, doc, win } = fakes();
-    const earlier: AnalyticsEvent[] = [];
-    win.shurTrack = (e) => earlier.push(e);
-
-    expect(startMetaPixel({ pixelId: "1234567890", adsAllowed: true, win, doc })).toBe(true);
+    expect(start(win, doc)).toBe(true);
     expect(appended).toEqual([{ async: true, src: META_PIXEL_SRC }]);
-
-    const leadId = "0b8e2f4c-1d2e-4a5b-9c6d-7e8f9a0b1c2d";
-    win.shurTrack!({ name: "audit_submit", locale: "ro", placement: "contact_section", lead_id: leadId });
-    win.shurTrack!({ name: "contact_click", channel: "whatsapp", locale: "ro", placement: "footer" });
-    win.shurTrack!({ name: "language_switch", locale: "ro", to: "en", placement: "header" });
-
+    expect(calls(win, "init")).toEqual([["init", "1133465872469034"]]);
+    expect(pageViews(win)).toHaveLength(1);
+    // Meta's own History listener is off: our path dedup is the only source.
+    expect(win.fbq!.disablePushState).toBe(true);
+    // Automatic events (SubscribedButtonClick…) off, and before init.
     const queue = win.fbq!.queue!;
-    expect(queue).toContainEqual(["init", "1234567890"]);
-    expect(queue).toContainEqual(["track", "PageView"]);
-    expect(queue).toContainEqual(["track", "Lead", {}, { eventID: leadId }]);
-    expect(queue).toContainEqual(["track", "Contact", { content_category: "whatsapp" }]);
-    expect(queue.filter((call) => call[0] === "track")).toHaveLength(3);
-    // The previous sink still receives everything: chained, not replaced.
-    expect(earlier).toHaveLength(3);
-    expect(JSON.stringify(queue)).not.toMatch(/380|olena|@/);
+    const autoConfig = queue.findIndex((c) => c[0] === "set" && c[1] === "autoConfig" && c[2] === false);
+    expect(autoConfig).toBeGreaterThanOrEqual(0);
+    expect(autoConfig).toBeLessThan(queue.findIndex((c) => c[0] === "init"));
+  });
+
+  it("StrictMode double effect, remount, second «allow» on the same path → still one init, one PageView", () => {
+    const { appended, doc, win } = fakes();
+    start(win, doc);
+    expect(start(win, doc)).toBe(false);
+    expect(trackMetaPageView(win, "/uk")).toBe(false);
+    expect(start(win, doc)).toBe(false);
+    expect(appended).toHaveLength(1);
+    expect(calls(win, "init")).toHaveLength(1);
+    expect(pageViews(win)).toHaveLength(1);
+  });
+
+  it("a path change (language switch) → +1 PageView; an #anchor is not a path change → +0", () => {
+    const { doc, win } = fakes();
+    start(win, doc, "/uk");
+    expect(trackMetaPageView(win, "/en")).toBe(true);
+    expect(pageViews(win)).toHaveLength(2);
+    // usePathname() carries no hash: /en#contact arrives as /en again.
+    expect(trackMetaPageView(win, "/en")).toBe(false);
+    expect(pageViews(win)).toHaveLength(2);
+  });
+
+  it("refusal after consent → consent revoke, and nothing is counted until a new «allow»", () => {
+    const { doc, win } = fakes();
+    start(win, doc, "/uk");
+    revokeMetaPixel(win);
+    expect(win.fbq!.queue!.at(-1)).toEqual(["consent", "revoke"]);
+    expect(trackMetaPageView(win, "/en")).toBe(false);
+    expect(pageViews(win)).toHaveLength(1);
+    start(win, doc, "/en");
+    expect(calls(win, "consent").map((call) => call[1])).toEqual(["grant", "revoke", "grant"]);
+    expect(calls(win, "init")).toHaveLength(1);
+    expect(pageViews(win)).toHaveLength(2);
+  });
+
+  it("revoke with no pixel on the page does nothing", () => {
+    const { win } = fakes();
+    revokeMetaPixel(win);
+    expect(win.fbq).toBeUndefined();
+  });
+
+  it("only PageView for now: Contact/Lead are switched off, the existing sink is untouched", () => {
+    expect(CONVERSION_EVENTS_ENABLED).toBe(false);
+    const { doc, win } = fakes();
+    const earlier: AnalyticsEvent[] = [];
+    const sink = (e: AnalyticsEvent) => void earlier.push(e);
+    win.shurTrack = sink;
+    start(win, doc);
+    expect(win.shurTrack).toBe(sink);
+    win.shurTrack({ name: "audit_submit", locale: "ro", placement: "contact_section", lead_id: "0b8e2f4c" });
+    win.shurTrack({ name: "contact_click", channel: "whatsapp", locale: "ro", placement: "footer" });
+    expect(calls(win, "track")).toEqual([["track", "PageView"]]);
+    expect(earlier).toHaveLength(2);
+  });
+
+  it("the mapping stays written for later: Lead with eventID = lead_id, Contact by channel, nothing personal", () => {
+    const sent: unknown[][] = [];
+    const fbq = (...args: unknown[]) => void sent.push(args);
+    sendToPixel(fbq, { name: "audit_submit", locale: "ro", placement: "contact_section", lead_id: "L1" });
+    sendToPixel(fbq, { name: "contact_click", channel: "whatsapp", locale: "ro", placement: "footer" });
+    expect(sent).toEqual([
+      ["track", "Lead", {}, { eventID: "L1" }],
+      ["track", "Contact", { content_category: "whatsapp" }],
+    ]);
+  });
+
+  it("SSR: no window — the consent layer renders to nothing and does not throw", () => {
+    expect(typeof window).toBe("undefined");
+    expect(readConsent()).toBeNull();
+    const html = renderToStaticMarkup(createElement(ConsentLayer, { dict: getDictionary("uk").consent }));
+    expect(html).toBe("");
   });
 });
 

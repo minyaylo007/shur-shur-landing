@@ -20,9 +20,10 @@ import type { Locale } from "./i18n";
  *
  * and every event below starts flowing, with no component touched.
  *
- * 29.09.2026: the first such sink exists — the Meta Pixel in lib/meta-pixel —
- * and it stays OFF until a pixel id is configured AND the visitor allows
- * advertising cookies (components/consent/ConsentLayer).
+ * 29.09.2026: the first such sink is written — the Meta Pixel in
+ * lib/meta-pixel. 30.09.2026: the pixel runs after «allow» (ConsentLayer) but
+ * sends only PageView; its hook into this sink (Contact, Lead) stays OFF
+ * until the event scheme is agreed with the targetologist.
  */
 
 /** Where on the page the interaction happened. */
