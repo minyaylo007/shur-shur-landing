@@ -8,8 +8,8 @@ import {
   CONSENT_EVENT,
   CONSENT_OPEN_EVENT,
   CONSENT_STORAGE_KEY,
+  adsAllowed,
   parseConsent,
-  readConsent,
   saveConsent,
 } from "@/lib/consent";
 import {
@@ -19,6 +19,7 @@ import {
   trackMetaPageView,
   type PixelWindow,
 } from "@/lib/meta-pixel";
+import { readZone } from "@/lib/zone";
 
 const SERVER = "\u0000server";
 
@@ -39,6 +40,10 @@ function subscribeConsent(onChange: () => void): () => void {
   };
 }
 
+// The zone cookie is set by the proxy before the page arrives and does not
+// change while it is open: nothing to subscribe to.
+const subscribeNothing = () => () => {};
+
 interface ConsentLayerProps {
   dict: Dictionary["consent"];
 }
@@ -47,9 +52,13 @@ interface ConsentLayerProps {
  * Everything the site does before a visitor touches anything, in one place:
  *   1. remembers the first-touch source for this tab (lib/attribution —
  *      sessionStorage, campaign names and the landing path);
- *   2. asks about advertising cookies, with two EQUAL buttons — saying no is
- *      exactly as easy as saying yes, and no answer means no;
- *   3. starts the Meta Pixel only after «allow» (lib/meta-pixel), and counts
+ *   2. in the `eu` zone (lib/zone) asks about advertising cookies, with two
+ *      EQUAL buttons — saying no is exactly as easy as saying yes, and no
+ *      answer means no. Outside it the banner does not come up by itself,
+ *      advertising is on until refused, and the footer's «cookie settings»
+ *      brings the same banner back to refuse;
+ *   3. starts the Meta Pixel only when advertising is allowed — «allow» in
+ *      the `eu` zone, no refusal elsewhere (lib/meta-pixel) — and counts
  *      a PageView per client-side path change — `usePathname()` has no
  *      search and no hash, so `#anchor` jumps never count.
  *
@@ -61,6 +70,7 @@ export function ConsentLayer({ dict }: ConsentLayerProps) {
   // server (and in the first client render) «unknown», so the static HTML
   // never carries the banner and hydration never mismatches.
   const stored = useSyncExternalStore(subscribeConsent, readConsentRaw, () => SERVER);
+  const zone = useSyncExternalStore(subscribeNothing, readZone, () => null);
   const [reopened, setReopened] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const pathname = usePathname();
@@ -72,7 +82,8 @@ export function ConsentLayer({ dict }: ConsentLayerProps) {
     return () => window.removeEventListener(CONSENT_OPEN_EVENT, reopen);
   }, []);
 
-  // The first load with a stored «allow» starts the pixel (one PageView);
+  // The first load with advertising allowed — a stored «allow», or the
+  // `other` zone with no refusal — starts the pixel (one PageView);
   // every later client-side path change — the language switcher's
   // router.push — is one more. Same path again (StrictMode, a remount of the
   // [locale] layout) counts nothing: lib/meta-pixel remembers the last path.
@@ -82,8 +93,7 @@ export function ConsentLayer({ dict }: ConsentLayerProps) {
       trackMetaPageView(win, pathname);
       return;
     }
-    const choice = readConsent();
-    if (choice?.ads) {
+    if (adsAllowed()) {
       startMetaPixel({ pixelId: configuredPixelId(), adsAllowed: true, win, doc: document, path: pathname });
     }
   }, [pathname]);
@@ -100,7 +110,7 @@ export function ConsentLayer({ dict }: ConsentLayerProps) {
     setReopened(false);
   };
 
-  const undecided = stored !== SERVER && parseConsent(stored) === null && !dismissed;
+  const undecided = stored !== SERVER && zone === "eu" && parseConsent(stored) === null && !dismissed;
   if (!reopened && !undecided) return null;
 
   const buttonClass =
