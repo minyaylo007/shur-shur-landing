@@ -5,7 +5,15 @@ import type { AnalyticsEvent } from "./analytics";
  * «allow advertising cookies». No choice, or «only necessary» → no script
  * tag, no `fbq`, no request to Meta.
  *
- * What it sends, as of 30.09.2026: `PageView` and nothing else.
+ * What it sends (event scheme from the targetologist, 01.10.2026):
+ *   - `PageView` — see below;
+ *   - `Lead` — once, on the thank-you page, after an ACCEPTED form, with
+ *     `eventID` = the server's lead id (`trackMetaLead`, components/thanks);
+ *   - `Contact` — a click on a contact channel, carrying the channel name
+ *     and nothing else (`sendToPixel` via the analytics sink);
+ *   - Meta's automatic button events (autoConfig, see `startMetaPixel`).
+ *
+ * PageView:
  *   - once on the first load (after consent);
  *   - once per client-side path change (the language switcher's
  *     `router.push`) — ConsentLayer feeds `usePathname()` to
@@ -42,6 +50,8 @@ type Fbq = ((...args: unknown[]) => void) & {
 export interface PixelState {
   granted: boolean;
   lastPath: string | null;
+  /** Lead ids already sent from this page. */
+  leads?: string[];
 }
 
 export interface PixelWindow {
@@ -59,13 +69,12 @@ export interface PixelDocument {
 export const META_PIXEL_SRC = "https://connect.facebook.net/en_US/fbevents.js";
 
 /**
- * `contact_click → Contact` and `audit_submit → Lead` — written and OFF.
- * The event scheme (which action is a Lead, which is a Contact, value and
- * dedup with the server-side Conversions API) is not agreed with the
- * targetologist yet; an unagreed Lead would train the ad optimiser on the
- * wrong signal. Flip only after that agreement.
+ * `contact_click → Contact` through the analytics sink — ON since the
+ * targetologist's scheme of 01.10.2026. Lead does NOT ride this sink: it is
+ * sent by the thank-you page (`trackMetaLead`), so `audit_submit` maps to
+ * nothing here — otherwise one lead would be counted twice.
  */
-export const CONVERSION_EVENTS_ENABLED = false;
+export const CONVERSION_EVENTS_ENABLED = true;
 
 /** A pixel id is digits. Anything else is a misconfiguration, not an id. */
 export function normalizePixelId(raw: string | undefined): string | null {
@@ -83,16 +92,45 @@ export function configuredPixelId(): string | null {
 }
 
 /**
- * Maps a site event to a pixel call. Unknown events are ignored. Only
- * reachable when CONVERSION_EVENTS_ENABLED. Nothing personal is ever passed —
- * only the channel name and the server's random lead id (eventID = the id
- * the ledger gets, so a later Conversions API event deduplicates).
+ * Maps a site event to a pixel call. Only `contact_click` maps (→ Contact,
+ * the channel name and nothing else); every other event — `audit_submit`
+ * included, see CONVERSION_EVENTS_ENABLED — is ignored.
  */
 export function sendToPixel(fbq: Fbq, event: AnalyticsEvent): void {
   if (event.name === "contact_click") {
     fbq("track", "Contact", { content_category: event.channel });
-  } else if (event.name === "audit_submit" && event.lead_id) {
-    fbq("track", "Lead", {}, { eventID: event.lead_id });
+  }
+}
+
+/**
+ * The one Lead of an accepted form, on the thank-you page. `eventID` is the
+ * server's random lead id — the id the ledger gets, so a later Conversions
+ * API event deduplicates; no custom data at all. Same consent as PageView:
+ * no granted pixel → nothing. The caller guarantees «once» by taking the id
+ * out of sessionStorage (lib/thanks); the same id is also never sent twice
+ * from one page. Returns true when a Lead was queued.
+ */
+export function trackMetaLead(win: PixelWindow, leadId: string): boolean {
+  const state = win.__shurPixel;
+  if (!state?.granted || !win.fbq || !leadId || state.leads?.includes(leadId)) return false;
+  state.leads = [...(state.leads ?? []), leadId];
+  win.fbq("track", "Lead", {}, { eventID: leadId });
+  return true;
+}
+
+/**
+ * A page's arrival: count it if the pixel already runs, start the pixel if
+ * advertising is allowed and it does not run yet. Shared by ConsentLayer and
+ * the thank-you page, so whichever effect comes first, the result is one
+ * start and one PageView (`lastPath` dedups the second caller).
+ */
+export function pixelArrive(win: PixelWindow, doc: PixelDocument, path: string, adsAllowed: () => boolean): void {
+  if (win.__shurPixel) {
+    trackMetaPageView(win, path);
+    return;
+  }
+  if (adsAllowed()) {
+    startMetaPixel({ pixelId: configuredPixelId(), adsAllowed: true, win, doc, path });
   }
 }
 
@@ -159,10 +197,10 @@ export function startMetaPixel(options: {
   doc.head.appendChild(script);
 
   fbq("consent", "grant");
-  // Meta's automatic events off, before `init` as Meta requires: without this
-  // the pixel sends SubscribedButtonClick on every button press, with the
-  // button's text — events nobody agreed to (seen in the live check, 30.09).
-  fbq("set", "autoConfig", false, pixelId);
+  // Meta's automatic events (autoConfig) stay at Meta's default — ON — by
+  // the targetologist's scheme of 01.10.2026: SubscribedButtonClick goes out
+  // with the text of the SITE's button pressed (our copy, not the visitor's
+  // input). Switched off 30.09 before the scheme existed.
   fbq("init", pixelId);
   trackMetaPageView(win, path);
 
