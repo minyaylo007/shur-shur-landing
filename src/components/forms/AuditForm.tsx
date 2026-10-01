@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
 import { leadSchema } from "@/lib/validation";
@@ -11,6 +12,7 @@ import { track } from "@/lib/analytics";
 import { attributionForSubmit } from "@/lib/attribution";
 import { adsAllowed } from "@/lib/consent";
 import { privacyPath } from "@/lib/legal";
+import { afterLeadResponse, sessionStore } from "@/lib/thanks";
 import { CHANNEL_ICONS, CherryIcon, PhoneIcon } from "@/components/ui/icons";
 
 type Status = "idle" | "submitting" | "success" | "error";
@@ -64,6 +66,7 @@ export function AuditForm({
   const igRef = useRef<HTMLInputElement>(null);
   const contactRef = useRef<HTMLInputElement>(null);
   const id = useId();
+  const router = useRouter();
 
   useEffect(() => {
     if (mountedAt.current === null) mountedAt.current = Date.now();
@@ -128,11 +131,23 @@ export function AuditForm({
         | null;
       // The server's id for this lead — the pixel's event id (dedup with the server side).
       const leadId = typeof data?.lead_id === "string" ? data.lead_id : undefined;
-      if (response.ok && data?.ok) {
+      /* Accepted (HTTP ok AND `ok: true`) → the lead id goes to
+         sessionStorage, one-shot, and the visitor to /<locale>/thanks, where
+         the pixel's Lead fires (lib/thanks, scheme of 01.10.2026). The URL
+         carries nothing. Anything else stays here with its error. */
+      const accepted = afterLeadResponse({
+        responseOk: response.ok,
+        data,
+        locale,
+        storage: sessionStore(),
+        navigate: (path) => router.push(path),
+      });
+      if (accepted) {
         /* v3 §12: the page's second conversion. Fired on the ACCEPTED
            submission, not on the click — a rejected, rate-limited or
-           timed-out request is not a lead. */
+           timed-out request is not a lead. Not a pixel Lead (see above). */
         track({ name: "audit_submit", locale, placement: "contact_section", lead_id: leadId });
+        // The success card stays as the fallback while the next page loads.
         setStatus("success");
         return;
       }

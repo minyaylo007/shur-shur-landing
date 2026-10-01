@@ -24,6 +24,8 @@ export const critical = [
   "tests/lead-attribution.test.ts", //  заявка доходит при любом учёте; HMAC; рынок; пиксель без согласия молчит; PII не в URL/логах
   "tests/market-landings.test.ts", //   рынок заявки по пути; черновики посадочных не в индексе; RTL; ширина телефона
   "tests/privacy.test.ts", //           политика с заглушкой не индексируется; уведомление под каждой формой
+  "tests/consent-zone.test.ts", //      баннер в ЕС и по умолчанию; вне ЕС пиксель сразу; отказ главнее зоны
+  "tests/thanks-lead.test.ts", //      принятая заявка → /thanks; Lead ровно один с eventID; Contact; URL без данных
 ];
 
 export default defineConfig({
@@ -35,6 +37,10 @@ export default defineConfig({
         resolve: { alias },
         test: { name: "looks", include: ["tests/**/*.test.ts"], exclude: critical },
       },
+      /* The lead ledger and ads analytics service (ads-engine/, runs on
+         ace-main, not on Vercel). Its tests touch no site code, so they ride
+         with the full run only: `npm test` stays the site's fast lane. */
+      { test: { name: "ads", include: ["ads-engine/test/**/*.test.ts"] } },
     ],
   },
 });

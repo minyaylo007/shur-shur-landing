@@ -1,0 +1,22 @@
+# SHUR-SHUR ads-engine: приём лидов (POST /v1/leads) + служебный бот.
+# Пользовательский юнит: ~/.config/systemd/user/. Слушает ТОЛЬКО 127.0.0.1:8014.
+# Остановить (откат): systemctl --user disable --now ihor-shur-ads.service ihor-shur-ads-daily.timer
+[Unit]
+Description=SHUR-SHUR ads-engine (lead intake + ops bot)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ihor/shur-ads/app
+EnvironmentFile=/opt/ihor/shur-ads/env
+Environment=SHUR_ADS_DATA_DIR=/opt/ihor/shur-ads/data
+Environment=SHUR_ADS_PORT=8014
+ExecStart=/usr/bin/node /opt/ihor/shur-ads/app/src/cli.ts serve
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+MemoryMax=256M
+
+[Install]
+WantedBy=default.target

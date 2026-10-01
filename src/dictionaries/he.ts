@@ -191,6 +191,10 @@ export const he: Dictionary = {
     allowAds: "לאשר עוגיות פרסום",
     settings: "הגדרות עוגיות",
   },
+  thanks: {
+    metaTitle: "הבקשה התקבלה — SHUR-SHUR",
+    home: "לדף הראשי",
+  },
   notFound: {
     metaTitle: "הדף לא נמצא — SHUR-SHUR",
     heading: "הדף הזה לא קיים",

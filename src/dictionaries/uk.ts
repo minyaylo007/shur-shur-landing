@@ -250,6 +250,11 @@ const dict = {
     allowAds: "Дозволити рекламні cookie",
     settings: "Налаштування cookie",
   },
+  /* Сторінка подяки після прийнятої заявки (01.10.2026). Заголовок і текст — audit.form.successTitle/successText. */
+  thanks: {
+    metaTitle: "Заявку прийнято — SHUR-SHUR",
+    home: "На головну",
+  },
   notFound: {
     metaTitle: "Сторінку не знайдено — SHUR-SHUR",
     heading: "ТАКОЇ СТОРІНКИ НЕМАЄ",

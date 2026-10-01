@@ -1,0 +1,22 @@
+{
+  "_comment": "Копия кладётся в /opt/ihor/shur-ads/limits.json. Лимиты 0 = повышения бюджета запрещены. Валюта — валюта кабинета.",
+  "mode": "observe",
+  "monthlyCapTotal": 0,
+  "markets": {
+    "suceava": { "monthlyCap": 0, "targetCpql": 0 },
+    "tel_aviv": { "monthlyCap": 0, "targetCpql": 0 },
+    "other": { "monthlyCap": 0, "targetCpql": 0 }
+  },
+  "maxStepPct": 20,
+  "minSpend": 50,
+  "minLeads": 10,
+  "minHoursBetweenChanges": 72,
+  "evalDays": 14,
+  "conversionLagDays": 3,
+  "learningDays": 7,
+  "staleHours": 36,
+  "spendWithoutLeadsAlert": 50,
+  "alertWindowDays": 3,
+  "smallSample": 30,
+  "fx": {}
+}

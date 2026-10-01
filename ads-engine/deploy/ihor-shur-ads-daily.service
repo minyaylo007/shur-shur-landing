@@ -1,0 +1,15 @@
+# Ежедневный прогон: сбор Meta → повторы CAPI → правила → отчёт и тревоги.
+# Запускается таймером ihor-shur-ads-daily.timer.
+[Unit]
+Description=SHUR-SHUR ads-engine daily run (collect + rules + report)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ihor/shur-ads/app
+EnvironmentFile=/opt/ihor/shur-ads/env
+Environment=SHUR_ADS_DATA_DIR=/opt/ihor/shur-ads/data
+ExecStart=/usr/bin/node /opt/ihor/shur-ads/app/src/cli.ts daily
+TimeoutStartSec=15min
+UMask=0077
+NoNewPrivileges=yes
+MemoryMax=256M

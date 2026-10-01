@@ -1,0 +1,10 @@
+[Unit]
+Description=SHUR-SHUR ads-engine daily run, 07:30 Kyiv
+
+[Timer]
+OnCalendar=*-*-* 07:30:00 Europe/Kyiv
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

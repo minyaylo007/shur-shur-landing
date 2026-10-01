@@ -1,7 +1,12 @@
+import { readZone, type ConsentZone } from "./zone";
+
 /**
  * The visitor's cookie choice: «only necessary» or «allow advertising
- * cookies». The default — no record, storage blocked, anything unreadable —
- * is «no»: nothing advertising loads until a visitor says yes.
+ * cookies». Without a choice the consent zone decides (lib/zone, owner's
+ * decision 30.09.2026): in the `eu` zone — and whenever the zone is unknown —
+ * the answer is «no» and nothing advertising loads until a visitor says yes;
+ * in the `other` zone it is «yes» until the visitor refuses. An explicit
+ * choice, either way, always beats the zone.
  *
  * Storing the choice itself is strictly necessary (without it the banner
  * would ask on every page), so it needs no consent of its own. localStorage,
@@ -43,9 +48,14 @@ export function readConsent(): ConsentChoice | null {
   }
 }
 
-/** True only after an explicit «allow». */
+/** The actual state: the visitor's own choice, else the zone's default. */
+export function effectiveAds(choice: ConsentChoice | null, zone: ConsentZone): boolean {
+  return choice ? choice.ads : zone === "other";
+}
+
+/** Is advertising allowed right now? What the pixel and the lead's `consent.ads` follow. */
 export function adsAllowed(): boolean {
-  return readConsent()?.ads === true;
+  return effectiveAds(readConsent(), readZone());
 }
 
 export function saveConsent(ads: boolean): ConsentChoice {
