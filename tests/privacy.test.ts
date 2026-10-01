@@ -6,6 +6,7 @@ import { getDictionary } from "../src/dictionaries";
 import { FILL_MARK, getPrivacy, privacyIndexable, privacyPath } from "../src/content/privacy";
 import { generateMetadata } from "../src/app/[locale]/privacy/page";
 import sitemap from "../src/app/sitemap";
+import { ZONE_COOKIE } from "../src/lib/zone";
 
 /* Privacy and cookie policy (task 29.09.2026, item 4). Critical because the
    form collects personal data and ads will run in the EU: a policy that is
@@ -49,6 +50,17 @@ describe("what the policy has to say", () => {
     for (const needle of ["Vercel", "Telegram", "Meta", "ANSPDCP", "dataprotection.ro", "gov.il", "_fbp"]) {
       expect(text).toContain(needle);
     }
+  });
+
+  // Since 01.10.2026 the pixel runs at once outside the EU zone and sends
+  // Lead and Contact: the policy must say so in every language, by the names
+  // the code uses (lib/zone, lib/meta-pixel).
+  it.each(locales)("%s: explains the consent zone and the Lead/Contact events", (locale) => {
+    const text = JSON.stringify(getPrivacy(locale));
+    for (const needle of [ZONE_COOKIE, "PageView", "Lead", "Contact"]) {
+      expect(text).toContain(needle);
+    }
+    expect(text).not.toMatch(/hash|хеш|גיבוב/i); // nothing of the form goes to Meta, hashed or not
   });
 
   it("every locale has the same sections, so no language loses a right", () => {
