@@ -121,6 +121,8 @@ export const ro: Dictionary = {
       successText: "Ne uităm pe profil și revenim la tine.",
       successAgain: "Trimite încă una",
       retry: "Încearcă din nou",
+      privacyNote: "Folosim aceste date doar ca să îți răspundem. Cum le prelucrăm:", // ждёт проверки носителем
+      privacyLink: "politica de confidențialitate", // ждёт проверки носителем
       failures: {
         rate_limited: {
           title: "Cererea ta a ajuns deja la noi",
@@ -161,6 +163,7 @@ export const ro: Dictionary = {
     city: "Cernăuți, Ucraina",
     rights: "Toate drepturile rezervate",
     madeIn: "Făcut cu cireșe la Cernăuți",
+    privacy: "Politica de confidențialitate", // ждёт проверки носителем
   },
   contactBar: {
     open: "Să discutăm proiectul",

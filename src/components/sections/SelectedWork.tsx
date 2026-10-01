@@ -13,7 +13,7 @@ interface SelectedWorkProps {
 
 /* Every tile is 9:16, because every source file is. Fixing the ratio on the
    wrapper means the grid never shifts while media loads (brief §26, CLS). */
-function Tile({ item, locale, index }: { item: WorkItem; locale: Locale; index: number }) {
+export function Tile({ item, locale, index }: { item: WorkItem; locale: Locale; index: number }) {
   return (
     <Reveal delay={Math.min(index, 3) * 0.06} as="li">
       <figure className="group relative aspect-9/16 overflow-hidden rounded-lg bg-cherry-black/40">
