@@ -400,11 +400,9 @@ describe("Meta Pixel — nothing without consent, one PageView per page", () => 
     expect(pageViews(win)).toHaveLength(1);
     // Meta's own History listener is off: our path dedup is the only source.
     expect(win.fbq!.disablePushState).toBe(true);
-    // Automatic events (SubscribedButtonClick…) off, and before init.
-    const queue = win.fbq!.queue!;
-    const autoConfig = queue.findIndex((c) => c[0] === "set" && c[1] === "autoConfig" && c[2] === false);
-    expect(autoConfig).toBeGreaterThanOrEqual(0);
-    expect(autoConfig).toBeLessThan(queue.findIndex((c) => c[0] === "init"));
+    // Automatic events ON by the targetologist's scheme (01.10.2026): no
+    // «set autoConfig false» anywhere in the queue.
+    expect(win.fbq!.queue!.some((c) => c[0] === "set" && c[1] === "autoConfig")).toBe(false);
   });
 
   it("StrictMode double effect, remount, second «allow» on the same path → still one init, one PageView", () => {
@@ -447,29 +445,27 @@ describe("Meta Pixel — nothing without consent, one PageView per page", () => 
     expect(win.fbq).toBeUndefined();
   });
 
-  it("only PageView for now: Contact/Lead are switched off, the existing sink is untouched", () => {
-    expect(CONVERSION_EVENTS_ENABLED).toBe(false);
+  it("the sink: Contact on a channel click; audit_submit is NOT a Lead here (the thank-you page sends it); the earlier sink still runs", () => {
+    expect(CONVERSION_EVENTS_ENABLED).toBe(true);
     const { doc, win } = fakes();
     const earlier: AnalyticsEvent[] = [];
-    const sink = (e: AnalyticsEvent) => void earlier.push(e);
-    win.shurTrack = sink;
+    win.shurTrack = (e: AnalyticsEvent) => void earlier.push(e);
     start(win, doc);
-    expect(win.shurTrack).toBe(sink);
-    win.shurTrack({ name: "audit_submit", locale: "ro", placement: "contact_section", lead_id: "0b8e2f4c" });
-    win.shurTrack({ name: "contact_click", channel: "whatsapp", locale: "ro", placement: "footer" });
-    expect(calls(win, "track")).toEqual([["track", "PageView"]]);
+    win.shurTrack!({ name: "audit_submit", locale: "ro", placement: "contact_section", lead_id: "0b8e2f4c" });
+    win.shurTrack!({ name: "contact_click", channel: "whatsapp", locale: "ro", placement: "footer" });
+    expect(calls(win, "track")).toEqual([
+      ["track", "PageView"],
+      ["track", "Contact", { content_category: "whatsapp" }],
+    ]);
     expect(earlier).toHaveLength(2);
   });
 
-  it("the mapping stays written for later: Lead with eventID = lead_id, Contact by channel, nothing personal", () => {
+  it("the mapping: Contact carries the channel name only; audit_submit maps to nothing", () => {
     const sent: unknown[][] = [];
     const fbq = (...args: unknown[]) => void sent.push(args);
     sendToPixel(fbq, { name: "audit_submit", locale: "ro", placement: "contact_section", lead_id: "L1" });
     sendToPixel(fbq, { name: "contact_click", channel: "whatsapp", locale: "ro", placement: "footer" });
-    expect(sent).toEqual([
-      ["track", "Lead", {}, { eventID: "L1" }],
-      ["track", "Contact", { content_category: "whatsapp" }],
-    ]);
+    expect(sent).toEqual([["track", "Contact", { content_category: "whatsapp" }]]);
   });
 
   it("SSR: no window — the consent layer renders to nothing and does not throw", () => {

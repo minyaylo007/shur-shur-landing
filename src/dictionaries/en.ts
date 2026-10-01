@@ -180,6 +180,10 @@ export const en: Dictionary = {
     allowAds: "Allow advertising cookies",
     settings: "Cookie settings",
   },
+  thanks: {
+    metaTitle: "Request received — SHUR-SHUR",
+    home: "Back to the main page",
+  },
   notFound: {
     metaTitle: "Page not found — SHUR-SHUR",
     heading: "NO SUCH PAGE",

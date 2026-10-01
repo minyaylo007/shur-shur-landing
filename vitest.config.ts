@@ -23,6 +23,7 @@ export const critical = [
   "tests/build-fingerprint.test.ts", // выкат и откат можно ИЗМЕРИТЬ
   "tests/lead-attribution.test.ts", //  заявка доходит при любом учёте; HMAC; рынок; пиксель без согласия молчит; PII не в URL/логах
   "tests/consent-zone.test.ts", //      баннер в ЕС и по умолчанию; вне ЕС пиксель сразу; отказ главнее зоны
+  "tests/thanks-lead.test.ts", //      принятая заявка → /thanks; Lead ровно один с eventID; Contact; URL без данных
 ];
 
 export default defineConfig({

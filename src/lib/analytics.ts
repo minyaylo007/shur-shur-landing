@@ -21,9 +21,9 @@ import type { Locale } from "./i18n";
  * and every event below starts flowing, with no component touched.
  *
  * 29.09.2026: the first such sink is written — the Meta Pixel in
- * lib/meta-pixel. 30.09.2026: the pixel runs after «allow» (ConsentLayer) but
- * sends only PageView; its hook into this sink (Contact, Lead) stays OFF
- * until the event scheme is agreed with the targetologist.
+ * lib/meta-pixel. 30.09.2026: the pixel runs after «allow» (ConsentLayer).
+ * 01.10.2026 (targetologist's scheme): `contact_click` reaches it as Contact;
+ * `audit_submit` does not — the Lead is sent by the thank-you page.
  */
 
 /** Where on the page the interaction happened. */

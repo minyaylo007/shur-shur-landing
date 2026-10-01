@@ -14,9 +14,9 @@ import {
 } from "@/lib/consent";
 import {
   configuredPixelId,
+  pixelArrive,
   revokeMetaPixel,
   startMetaPixel,
-  trackMetaPageView,
   type PixelWindow,
 } from "@/lib/meta-pixel";
 import { readZone } from "@/lib/zone";
@@ -88,14 +88,7 @@ export function ConsentLayer({ dict }: ConsentLayerProps) {
   // router.push — is one more. Same path again (StrictMode, a remount of the
   // [locale] layout) counts nothing: lib/meta-pixel remembers the last path.
   useEffect(() => {
-    const win = window as PixelWindow;
-    if (win.__shurPixel) {
-      trackMetaPageView(win, pathname);
-      return;
-    }
-    if (adsAllowed()) {
-      startMetaPixel({ pixelId: configuredPixelId(), adsAllowed: true, win, doc: document, path: pathname });
-    }
+    pixelArrive(window as PixelWindow, document, pathname, adsAllowed);
   }, [pathname]);
 
   const choose = (ads: boolean) => {

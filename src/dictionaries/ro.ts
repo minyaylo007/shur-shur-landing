@@ -181,6 +181,10 @@ export const ro: Dictionary = {
     allowAds: "Permite cookie-urile publicitare",
     settings: "Setări cookie",
   },
+  thanks: {
+    metaTitle: "Cererea a fost primită — SHUR-SHUR",
+    home: "Înapoi la pagina principală",
+  },
   notFound: {
     metaTitle: "Pagina nu a fost găsită — SHUR-SHUR",
     heading: "PAGINA NU EXISTĂ",

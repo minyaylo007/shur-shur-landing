@@ -554,10 +554,12 @@ describe("§12 — the analytics layer is wired, with no provider shipped", () =
        tell «we already have your five requests» from «Telegram did not take
        it» — so the accepted branch is the two-part condition below, and that
        is where the event must sit. Same claim, current shape: a rejected,
-       rate-limited or timed-out request fires nothing. */
-    expect(src).toMatch(
-      /if \(response\.ok && data\?\.ok\) \{[\s\S]{0,400}?track\(\{ name: "audit_submit"/,
-    );
+       rate-limited or timed-out request fires nothing.
+       01.10.2026: the two-part condition moved into lib/thanks
+       `afterLeadResponse` (tested in thanks-lead.test.ts); the event sits in
+       its `accepted` branch. */
+    expect(src).toMatch(/const accepted = afterLeadResponse\(\{\s*responseOk: response\.ok,\s*data,/);
+    expect(src).toMatch(/if \(accepted\) \{[\s\S]{0,400}?track\(\{ name: "audit_submit"/);
     // …and nowhere else: one call site, inside that branch.
     expect(src.match(/name: "audit_submit"/g)).toHaveLength(1);
   });
