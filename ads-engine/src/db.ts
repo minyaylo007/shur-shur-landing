@@ -125,10 +125,40 @@ CREATE TABLE IF NOT EXISTS kv (
 );
 `;
 
+/* Contract v1.1 (03.10.2026): delivery to the lead chat. delivered_at NULL =
+   the site took the lead with `delivery: "pending"` and has not yet reported
+   Telegram success; the redelivery loop (delivery.ts) owns it from then on.
+   Rows that predate these columns came in under v1, where the site wrote the
+   ledger only AFTER Telegram had the lead — so they are delivered by
+   definition, and the backfill says so; otherwise the first retry pass after
+   the upgrade would re-send every old lead to the chat. */
+const DELIVERY_COLUMNS: [string, string][] = [
+  ["delivered_at", "TEXT"],
+  ["delivered_by", "TEXT"],
+  ["delivery_attempts", "INTEGER NOT NULL DEFAULT 0"],
+  ["next_attempt_at", "TEXT"],
+  ["delivery_gave_up_at", "TEXT"],
+];
+
+function migrate(db: Db): void {
+  const have = new Set(
+    (db.prepare("PRAGMA table_info(leads)").all() as { name: string }[]).map((c) => c.name),
+  );
+  if (have.has("delivered_at")) return;
+  tx(db, () => {
+    for (const [name, type] of DELIVERY_COLUMNS) {
+      if (!have.has(name)) db.exec(`ALTER TABLE leads ADD COLUMN ${name} ${type}`);
+    }
+    db.exec("UPDATE leads SET delivered_at = received_at, delivered_by = 'v1' WHERE delivered_at IS NULL");
+    db.exec("CREATE INDEX IF NOT EXISTS leads_undelivered ON leads(next_attempt_at) WHERE delivered_at IS NULL");
+  });
+}
+
 export function openDb(dataDir: string | ":memory:"): Db {
   if (dataDir === ":memory:") {
     const db = new DatabaseSync(":memory:");
     db.exec(SCHEMA);
+    migrate(db);
     return db;
   }
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -139,6 +169,7 @@ export function openDb(dataDir: string | ":memory:"): Db {
   const db = new DatabaseSync(file);
   db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 

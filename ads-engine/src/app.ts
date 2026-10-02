@@ -12,6 +12,7 @@ import { runRules, type EngineContext } from "./rules.ts";
 import { buildReport, alerts } from "./report.ts";
 import { GoogleAdsStubReader } from "./google.ts";
 import type { Status } from "./funnel.ts";
+import { redeliverDue, type RedeliveryPass } from "./delivery.ts";
 import { log } from "./log.ts";
 
 /* Wiring: picks live or dry implementations from the config. Tests build the
@@ -83,6 +84,18 @@ export function createApp(config: Config, o: Overrides = {}): App {
     report: async () => buildReport(db, limits, config.dataDir, { modes: m, mode, now: o.now?.() }),
   });
   return app;
+}
+
+/** One redelivery pass (delivery.ts) with this app's wiring. */
+export function redeliver(app: App, now?: () => Date): Promise<RedeliveryPass> {
+  return redeliverDue({
+    db: app.db,
+    siteUrl: app.config.siteUrl,
+    secret: app.config.hmacSecret,
+    fetchFn: app.fetchFn,
+    now,
+    alert: (text) => app.bot.sendText(text),
+  });
 }
 
 export interface DailySummary {

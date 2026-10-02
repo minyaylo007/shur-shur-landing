@@ -40,6 +40,9 @@ jobs:
       # виден в `ps` любому процессу на раннере.
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      # Журнал заявок (ads-engine на ace-main): адрес и общий HMAC-секрет.
+      LEDGER_URL: ${{ secrets.LEDGER_URL }}
+      LEDGER_HMAC_SECRET: ${{ secrets.LEDGER_HMAC_SECRET }}
     steps:
       # Проверяем ВСЁ до первой записи. Если секрета нет, а мы уже успели снять
       # прежнее значение, боевое окружение осталось бы хуже, чем было.
@@ -48,7 +51,7 @@ jobs:
           set -euo pipefail
           missing=""
           for n in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID \
-                   TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+                   TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID LEDGER_URL LEDGER_HMAC_SECRET; do
             if [ -z "${!n-}" ]; then
               missing="$missing $n"
             fi
@@ -57,7 +60,7 @@ jobs:
             echo "::error::Пусто или не задано:$missing — синхронизация остановлена, в боевом окружении ничего не менялось"
             exit 1
           fi
-          echo "Все пять значений на месте (перечислены только имена)"
+          echo "Все семь значений на месте (перечислены только имена)"
 
       - name: Привязать проект Vercel
         run: |
@@ -100,6 +103,8 @@ jobs:
 
           sync_one TELEGRAM_BOT_TOKEN
           sync_one TELEGRAM_CHAT_ID
+          sync_one LEDGER_URL
+          sync_one LEDGER_HMAC_SECRET
 
       # Отчёт о том, ЧТО теперь лежит в боевом окружении: список имён. Значения
       # Vercel в нём не печатает — колонка value для секретов всегда Encrypted.

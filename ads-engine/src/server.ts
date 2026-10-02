@@ -3,14 +3,17 @@ import type { App } from "./app.ts";
 import { HOST } from "./config.ts";
 import { verify } from "./hmac.ts";
 import { parseLead, ingestLead } from "./leads.ts";
+import { markDelivered } from "./delivery.ts";
 import { isStopped } from "./safety.ts";
 import { freshness } from "./meta/insights.ts";
 import { log } from "./log.ts";
 
-/* HTTP surface: POST /v1/leads (contract v1) and GET /healthz. Nothing else.
-   The body is read raw (≤ 32 KiB) because the signature covers raw bytes. */
+/* HTTP surface: POST /v1/leads (contract v1), POST /v1/leads/<id>/delivered
+   (v1.1: the site's «Telegram has it», same HMAC) and GET /healthz. Nothing
+   else. The body is read raw (≤ 32 KiB) because the signature covers raw bytes. */
 
 const MAX_BODY = 32 * 1024;
+const DELIVERED_PATH = /^\/v1\/leads\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/delivered$/i;
 
 function send(res: ServerResponse, status: number, body: unknown) {
   const text = JSON.stringify(body);
@@ -55,9 +58,15 @@ export function handler(app: App, nowSeconds: () => number = () => Math.floor(Da
           rules_mode: app.engine().mode,
           stopped: isStopped(app.config.dataDir).stopped,
           meta_data_age_hours: f.ageHours === null ? null : Math.round(f.ageHours * 10) / 10,
+          undelivered_leads: (
+            app.db
+              .prepare("SELECT COUNT(*) AS n FROM leads WHERE delivered_at IS NULL")
+              .get() as { n: number }
+          ).n,
         });
       }
-      if (path !== "/v1/leads") return send(res, 404, { ok: false, error: "not_found" });
+      const mark = DELIVERED_PATH.exec(path);
+      if (path !== "/v1/leads" && !mark) return send(res, 404, { ok: false, error: "not_found" });
       if (req.method !== "POST") return send(res, 405, { ok: false, error: "method_not_allowed" });
       if (!app.config.hmacSecret) {
         log("lead.rejected", { reason: "not_configured", missing: "LEDGER_HMAC_SECRET" });
@@ -84,6 +93,18 @@ export function handler(app: App, nowSeconds: () => number = () => Math.floor(Da
       } catch {
         log("lead.rejected", { reason: "invalid_json" });
         return send(res, 400, { ok: false, error: "invalid_json" });
+      }
+      if (mark) {
+        // v1.1: the signed body must name the same lead as the path.
+        const leadId = mark[1].toLowerCase();
+        const named = (body as { lead_id?: unknown } | null)?.lead_id;
+        if (typeof named !== "string" || named.toLowerCase() !== leadId) {
+          return send(res, 400, { ok: false, error: "invalid_input", field: "lead_id" });
+        }
+        const r = markDelivered(app.db, leadId, "site");
+        log("lead.delivered_mark", { lead_id: leadId, result: r });
+        if (r === "unknown") return send(res, 404, { ok: false, error: "unknown_lead" });
+        return send(res, 200, { ok: true, lead_id: leadId, already: r === "already" });
       }
       const parsed = parseLead(body);
       if (!parsed.ok) {

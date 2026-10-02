@@ -25,7 +25,9 @@ curl -s http://127.0.0.1:8014/healthz    # режимы, свежесть дан
 
 ```
 node src/cli.ts status | daily | collect | report | rules
-node src/cli.ts leads 20                        # id, дата, рынок, статус — без имён и контактов
+node src/cli.ts leads 20                        # id, дата, рынок, статус, доставка — без имён и контактов
+node src/cli.ts redeliver                       # один проход повторной доставки (serve делает его раз в 30 с)
+node src/cli.ts delete-lead <полный lead_id>    # удалить одну заявку целиком, напр. тестовую
 node src/cli.ts set 1a2b3c4d qualified
 node src/cli.ts set 1a2b3c4d lost --reason too_expensive
 node src/cli.ts set 1a2b3c4d won --amount 1500 --currency EUR
@@ -37,13 +39,14 @@ node src/cli.ts stop "причина" | resume
 
 `LEDGER_HMAC_SECRET` · `SHUR_OPS_BOT_TOKEN` · `SHUR_OPS_CHAT_ID` · `META_ACCESS_TOKEN` ·
 `META_AD_ACCOUNT_ID` · `META_DATASET_ID` · `META_CAPI_ENABLED` · `META_CAPI_TEST_EVENT_CODE` ·
-`SHUR_ADS_RULES_MODE` · `SHUR_ADS_PORT` · `SHUR_ADS_DATA_DIR` · `SHUR_ADS_LIMITS_FILE` · `SHUR_ADS_FIXTURES`.
+`SHUR_ADS_RULES_MODE` · `SHUR_SITE_URL` · `SHUR_ADS_PORT` · `SHUR_ADS_DATA_DIR` · `SHUR_ADS_LIMITS_FILE` · `SHUR_ADS_FIXTURES`.
 
 Нет ключа — часть работает «сухо», а не падает:
 
 | часть | без ключа | с ключом |
 |---|---|---|
 | приём `/v1/leads` | 503 `not_configured` | HMAC-SHA256(`ts.тело`), окно ±300 с |
+| повторная доставка | `SHUR_SITE_URL=off` — выключена | по умолчанию `https://shur-shur.com`, тот же секрет |
 | служебный бот | пишет в `data/telegram-outbox.jsonl` | long polling отдельного бота, только чат `SHUR_OPS_CHAT_ID` |
 | Meta Insights | фикстуры (вымышленный кабинет, EUR, Europe/Bucharest) | Graph API **v26.0** (сверено 29.09.2026), только GET |
 | Conversions API | выключен | только при `META_CAPI_ENABLED=1` и `consent.ads=true` |
@@ -55,6 +58,14 @@ node src/cli.ts stop "причина" | resume
    же ответ), дубль — тот же нормализованный контакт за 30 дней, спам-метки (нет контакта,
    ссылка в имени, ≥3 ссылок, ≥5 заявок с контакта за сутки). Имя и контакт — только в базе;
    в журнал, в служебный чат, в отчёты они не попадают.
+   **Договор v1.1 (02.10.2026) — заявка не теряется.** Сайт пишет заявку сюда ПЕРВОЙ с
+   `delivery: "pending"`, потом шлёт в Telegram и при успехе ставит отметку
+   `POST /v1/leads/<id>/delivered` (тело `{lead_id}`, та же подпись). Telegram упал, а журнал
+   заявку принял — посетитель видит «принято». Заявку без отметки через 2 минуты журнал сам
+   пересылает через сайт (`POST <SHUR_SITE_URL>/api/lead/redeliver`, та же подпись; токен бота
+   заявок живёт только на Vercel). Без дублей: каждую попытку забирает один условный UPDATE.
+   Паузы 1, 2, 5, 10, 30 мин, дальше раз в час; через 24 ч — стоп и id заявки в служебный чат.
+   Заявка без поля `delivery` (договор v1) считается доставленной.
 2. **Воронка** `new → contacted → qualified → proposal → won | lost`. Отказ — с причиной
    (дорого, не наш сегмент, не отвечает, выбрал другого, спам, другое), сделка — с суммой и
    валютой. Кнопки в служебном боте или CLI.
@@ -93,8 +104,10 @@ systemctl --user disable --now ihor-shur-ads.service ihor-shur-ads-daily.timer
 установки лежит в `/opt/ihor/shur-ads/app.old`; вернуть — поменять местами каталоги и
 `systemctl --user restart ihor-shur-ads`. Данные не трогаются.
 
-Публичный блок Caddy — только заготовка `deploy/caddy/shur-ads.caddy`; в `/etc/caddy` не
-ставится этой задачей (ставится по OWNER-RULES п.21, когда сайт начнёт слать заявки).
+Публичный адрес — `shur-ads.central-aparts.store` (Route 53, A → 95.216.10.169). Блок Caddy
+`deploy/caddy/shur-ads.caddy` стоит в `/etc/caddy/shur/` и подключён строкой
+`import shur/*.caddy`; наружу только POST `/v1/leads` и отметка доставки, остальное 404.
+Меняется только по OWNER-RULES п.21 (копия Caddyfile, validate, только reload, сверка всех хостов).
 
 ## Что проверено тестами, а что ждёт настоящих доступов
 

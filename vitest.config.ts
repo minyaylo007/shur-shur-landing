@@ -24,6 +24,7 @@ export const critical = [
   "tests/lead-attribution.test.ts", //  заявка доходит при любом учёте; HMAC; рынок; пиксель без согласия молчит; PII не в URL/логах
   "tests/consent-zone.test.ts", //      баннер в ЕС и по умолчанию; вне ЕС пиксель сразу; отказ главнее зоны
   "tests/thanks-lead.test.ts", //      принятая заявка → /thanks; Lead ровно один с eventID; Contact; URL без данных
+  "tests/lead-ledger-first.test.ts", // журнал первым: Telegram упал → 200 и ретрай; оба упали → 502; повторная доставка
 ];
 
 export default defineConfig({

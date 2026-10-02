@@ -1,11 +1,13 @@
-# ЗАГОТОВКА. В /etc/caddy не кладётся и не подключается этой задачей.
-# Когда сайт на Vercel начнёт слать заявки сюда, блок ставится по процедуре
-# OWNER-RULES п.21 (копия Caddyfile, validate, только reload, сверка чужих сайтов).
-# Наружу открыт только POST /v1/leads; /healthz и всё остальное — 404.
+# Журнал заявок SHUR-SHUR наружу. Лежит в /etc/caddy/shur/shur-ads.caddy,
+# подключён одной строкой `import shur/*.caddy` в /etc/caddy/Caddyfile.
+# Ставится и меняется по OWNER-RULES п.21: копия Caddyfile, validate, только reload,
+# сверка кодов всех хостов до и после, откат при любом отличии.
+# Наружу открыты только POST /v1/leads и POST /v1/leads/<uuid>/delivered (договор v1.1);
+# /healthz и всё остальное — 404. Подпись HMAC проверяет сам ads-engine.
 shur-ads.central-aparts.store {
 	@leads {
 		method POST
-		path /v1/leads
+		path_regexp ^/v1/leads(/[0-9a-fA-F-]{36}/delivered)?$
 	}
 	handle @leads {
 		request_body {
