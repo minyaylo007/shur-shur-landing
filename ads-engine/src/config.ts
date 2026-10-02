@@ -85,6 +85,8 @@ export interface Config {
   port: number;
   dataDir: string;
   hmacSecret: string | undefined;
+  /** Site origin for lead redelivery (POST <siteUrl>/api/lead/redeliver). */
+  siteUrl: string | undefined;
   opsBotToken: string | undefined;
   opsChatId: string | undefined;
   metaToken: string | undefined;
@@ -112,6 +114,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: Number(env.SHUR_ADS_PORT || 8014),
     dataDir,
     hmacSecret: env.LEDGER_HMAC_SECRET || undefined,
+    // "off" switches redelivery off; unset = the production site.
+    siteUrl: env.SHUR_SITE_URL === "off" ? undefined : env.SHUR_SITE_URL || "https://shur-shur.com",
     opsBotToken: env.SHUR_OPS_BOT_TOKEN || undefined,
     opsChatId: env.SHUR_OPS_CHAT_ID || undefined,
     metaToken: env.META_ACCESS_TOKEN || undefined,
@@ -132,6 +136,7 @@ export function modes(c: Config) {
     meta: c.metaToken && c.metaAdAccountId ? "live" : "fixtures",
     capi: c.capiEnabled && c.metaToken && c.metaDatasetId ? "on" : "off",
     ingest: c.hmacSecret ? "on" : "not_configured",
+    redelivery: c.hmacSecret && c.siteUrl ? "on" : "off",
     writes: "simulator",
   } as const;
 }

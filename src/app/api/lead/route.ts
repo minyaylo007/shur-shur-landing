@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { compactAttribution, marketOf } from "@/lib/attribution";
-import { sendLeadToLedger } from "@/lib/ledger";
+import { markLeadDelivered, sendLeadToLedger } from "@/lib/ledger";
 import { leadSchema, isSpam } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { sendLeadToTelegram, TelegramNotConfiguredError } from "@/lib/telegram";
@@ -49,6 +49,27 @@ export async function POST(request: Request) {
   const attribution = compactAttribution(parsed.data.attribution);
   const market = marketOf(attribution);
 
+  /* Contract v1.1 (03.10.2026): the ledger FIRST, Telegram second. A lead
+     the ledger has taken is no longer lost when Telegram is down: the visitor
+     gets 200, and the ledger (a server that never sleeps) re-sends it to the
+     lead chat after 2 minutes unless the site marks it delivered. Awaited (a
+     serverless function may be frozen the moment it answers), bounded at 2 s
+     and unable to throw; not configured = skipped, behaviour as in v1. */
+  const ledger = await sendLeadToLedger({
+    lead_id: leadId,
+    created_at: new Date().toISOString(),
+    kind: parsed.data.kind,
+    locale,
+    market,
+    name: parsed.data.name,
+    contact: parsed.data.contact,
+    message: parsed.data.message,
+    ig_handle: parsed.data.igHandle,
+    attribution,
+    consent: parsed.data.consent,
+    delivery: "pending",
+  });
+
   try {
     await sendLeadToTelegram({
       kind: parsed.data.kind,
@@ -76,25 +97,18 @@ export async function POST(request: Request) {
         error instanceof Error ? error.message : error,
       );
     }
+    if (ledger === "sent") {
+      console.error(`[lead] held by the ledger, redelivery pending (lead_id=${leadId})`);
+      return NextResponse.json({ ok: true, lead_id: leadId });
+    }
     return NextResponse.json({ ok: false, error: "delivery_failed" }, { status: 502 });
   }
 
-  /* Best-effort second copy. Awaited (a serverless function may be frozen
-     the moment it answers) but bounded at 2 s and unable to throw: whatever
-     the ledger does, the visitor gets the same answer. */
-  await sendLeadToLedger({
-    lead_id: leadId,
-    created_at: new Date().toISOString(),
-    kind: parsed.data.kind,
-    locale,
-    market,
-    name: parsed.data.name,
-    contact: parsed.data.contact,
-    message: parsed.data.message,
-    ig_handle: parsed.data.igHandle,
-    attribution,
-    consent: parsed.data.consent,
-  });
+  // Telegram has it: stop the ledger from re-sending. One more try on a failed
+  // mark — a lost mark means the same lead in the chat twice, 2 minutes apart.
+  if (ledger === "sent" && (await markLeadDelivered(leadId)) === "failed") {
+    await markLeadDelivered(leadId);
+  }
 
   return NextResponse.json({ ok: true, lead_id: leadId });
 }

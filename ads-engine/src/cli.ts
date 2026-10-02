@@ -1,5 +1,6 @@
 import { loadConfig, HOST } from "./config.ts";
-import { createApp, runDaily } from "./app.ts";
+import { createApp, runDaily, redeliver } from "./app.ts";
+import { deleteLead } from "./delivery.ts";
 import { listen } from "./server.ts";
 import { collect } from "./meta/insights.ts";
 import { setStatus, resolveLeadId, FunnelError, LOST_REASONS, type Status, type LostReason } from "./funnel.ts";
@@ -18,7 +19,9 @@ const USAGE = `Команды:
   collect                       только сбор Meta Insights
   report                        напечатать отчёт
   rules                         прогнать правила
-  leads [N]                     последние N заявок (без имён и контактов)
+  leads [N]                     последние N заявок (без имён и контактов), с отметкой доставки
+  redeliver                     один проход повторной доставки (то, что serve делает раз в 30 с)
+  delete-lead <lead_id>         удалить одну заявку целиком (полный UUID), напр. тестовую
   set <id> <статус> [--reason R] [--amount N --currency EUR]
                                 статусы: new contacted qualified proposal won lost
                                 причины: ${Object.keys(LOST_REASONS).join(", ")}
@@ -26,6 +29,9 @@ const USAGE = `Команды:
   approve <id> | reject <id>    решение по действию в режиме approve
   stop [причина] | resume       аварийная остановка / снять
   status                        режимы и состояние`;
+
+const REDELIVERY_TICK_MS = 30_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(name);
@@ -45,8 +51,14 @@ async function main(argv: string[]) {
       const ac = new AbortController();
       log("serve.start", { host: HOST, port: app.config.port, ...app.modes, rules_mode: app.engine().mode });
       const polling = app.modes.telegram === "live" ? app.bot.poll(ac.signal) : Promise.resolve();
+      // Contract v1.1: leads the site could not hand to Telegram, every 30 s.
+      const tick = () =>
+        redeliver(app).catch((e) => log("redelivery.error", { error: e instanceof Error ? e.message.slice(0, 200) : "unknown" }));
+      const redelivery = setInterval(tick, REDELIVERY_TICK_MS);
+      void tick();
       const shutdown = () => {
         log("serve.stop", {});
+        clearInterval(redelivery);
         ac.abort();
         server.close(() => process.exit(0));
         setTimeout(() => process.exit(0), 3000).unref();
@@ -72,11 +84,26 @@ async function main(argv: string[]) {
     case "leads": {
       const rows = app.db
         .prepare(
-          "SELECT lead_id, created_at, market, kind, status, is_duplicate AS dup, is_spam AS spam FROM leads ORDER BY created_at DESC LIMIT ?",
+          "SELECT lead_id, created_at, market, kind, status, is_duplicate AS dup, is_spam AS spam, COALESCE(delivered_by, CASE WHEN delivery_gave_up_at IS NULL THEN 'ждёт' ELSE 'не доставлена' END) AS delivered FROM leads ORDER BY created_at DESC LIMIT ?",
         )
         .all(Number(args[0] ?? 20));
       console.table(rows);
       return 0;
+    }
+    case "redeliver":
+      console.log(JSON.stringify(await redeliver(app), null, 2));
+      return 0;
+    case "delete-lead": {
+      // Full id only: a prefix that happens to match is not a delete target.
+      const id = (args[0] ?? "").toLowerCase();
+      if (!UUID.test(id)) {
+        console.error("delete-lead: нужен полный lead_id (UUID)");
+        return 2;
+      }
+      const n = deleteLead(app.db, id);
+      log("lead.deleted", { lead_id: id, rows: n, actor: `cli:${process.env.USER ?? "?"}` });
+      console.log(n === 1 ? `удалена: ${id}` : `не найдена: ${id}`);
+      return n === 1 ? 0 : 1;
     }
     case "set": {
       const [id, to] = args;

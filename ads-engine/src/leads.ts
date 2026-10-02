@@ -37,9 +37,14 @@ export interface LeadInput {
   ig_handle: string | null;
   attribution: Attribution;
   consent: { ads: boolean };
+  /** v1.1: "pending" = Telegram has not seen it yet. Absent = v1, the site
+      wrote the ledger after Telegram, so it is delivered already. */
+  delivery: "pending" | null;
 }
 
 export const DUPLICATE_WINDOW_DAYS = 30;
+/** A pending lead without the site's «delivered» mark is re-sent after this. */
+export const REDELIVERY_AFTER_MS = 2 * 60_000;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LIMITS = { name: 100, contact: 100, message: 1000, ig_handle: 61 } as const;
 const ATTRIBUTION_MAX = 300;
@@ -105,6 +110,10 @@ export function parseLead(body: unknown): ParseResult {
     }
   }
 
+  if (b.delivery !== undefined && b.delivery !== null && b.delivery !== "pending") {
+    return { ok: false, field: "delivery" };
+  }
+
   const consent = b.consent as Record<string, unknown> | undefined;
   if (typeof consent !== "object" || consent === null || typeof consent.ads !== "boolean") {
     return { ok: false, field: "consent" };
@@ -127,6 +136,7 @@ export function parseLead(body: unknown): ParseResult {
       ...fields,
       attribution,
       consent: { ads: consent.ads },
+      delivery: b.delivery === "pending" ? "pending" : null,
     },
   };
 }
@@ -190,11 +200,12 @@ export function ingestLead(
       spam: spam !== null,
     };
     const at = now.toISOString();
+    const pending = lead.delivery === "pending";
     db.prepare(
       `INSERT INTO leads(lead_id, received_at, created_at, kind, locale, market, name, contact, message,
          ig_handle, contact_hash, attribution, consent_ads, is_duplicate, duplicate_of, is_spam, spam_reason,
-         status, lost_reason, status_at, result_json)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         status, lost_reason, status_at, result_json, delivered_at, delivered_by, next_attempt_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(
       lead.lead_id,
       at,
@@ -217,6 +228,9 @@ export function ingestLead(
       spam ? "spam" : null,
       at,
       JSON.stringify(result),
+      pending ? null : at,
+      pending ? null : "v1",
+      pending ? new Date(now.getTime() + REDELIVERY_AFTER_MS).toISOString() : null,
     );
     db.prepare(
       "INSERT INTO lead_events(lead_id, at, from_status, to_status, actor, reason) VALUES(?,?,?,?,?,?)",

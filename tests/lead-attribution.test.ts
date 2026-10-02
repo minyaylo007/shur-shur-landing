@@ -175,7 +175,7 @@ describe("the lead reaches Telegram whatever the ledger does", () => {
     expect(logged.join("\n")).toContain("ledger unreachable: TimeoutError");
   });
 
-  it("Telegram down is still a 502 — the ledger does not turn a lost lead into a success", async () => {
+  it("Telegram AND the ledger down is still a 502 — nobody holds the lead (v1.1: ledger tried first)", async () => {
     const calls: string[] = [];
     vi.stubGlobal(
       "fetch",
@@ -186,7 +186,8 @@ describe("the lead reaches Telegram whatever the ledger does", () => {
     );
     const response = await POST(leadRequest());
     expect(response.status).toBe(502);
-    expect(calls.some((url) => url.startsWith("https://ledger."))).toBe(false);
+    expect(calls[0]).toBe("https://ledger.test.invalid/v1/leads");
+    expect(calls.some((url) => url.includes("/delivered"))).toBe(false);
   });
 });
 

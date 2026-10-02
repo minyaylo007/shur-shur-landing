@@ -21,6 +21,8 @@ export interface LeadMessage {
   locale: string;
   /** Where the lead came from (lib/attribution). Omitted = no source line. */
   source?: LeadSource;
+  /** Re-sent by the ledger after Telegram failed at submit time. */
+  redelivered?: boolean;
 }
 
 export interface LeadSource {
@@ -70,6 +72,9 @@ export function formatLeadMessage(lead: LeadMessage): string {
   }
   lines.push("", `<i>Мова сторінки: ${escapeHtml(lead.locale)}</i>`);
   if (lead.source) lines.push(formatSource(lead.source));
+  if (lead.redelivered) {
+    lines.push("<i>⏳ Доставлено повторно: у момент заявки Telegram був недоступний</i>");
+  }
   return lines.join("\n");
 }
 
