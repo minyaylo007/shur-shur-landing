@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run --project critical",
     "test:all": "vitest run",
+    "check:live": "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright} node scripts/check-live.mjs",
     "ads": "node ads-engine/src/cli.ts",
     "ads:typecheck": "tsc -p ads-engine/tsconfig.json"
   },

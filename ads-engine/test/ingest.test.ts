@@ -15,8 +15,8 @@ import { testApp, leadBody, signedHeaders, captureLog, SECRET, CHAT } from "./he
 let server: Server | undefined;
 afterEach(() => new Promise<void>((r) => (server ? server.close(() => r()) : r())));
 
-async function start(env: Record<string, string> = {}) {
-  const app = testApp({ env });
+async function start(env: Record<string, string> = {}, opts: { fileDb?: boolean } = {}) {
+  const app = testApp({ env, ...opts });
   server = await listen(app, 0);
   const { address, port } = server.address() as AddressInfo;
   expect(address).toBe("127.0.0.1");
@@ -149,7 +149,7 @@ describe("POST /v1/leads", () => {
   });
 
   it("keeps the data directory 700 and the database 600", async () => {
-    const { app } = await start();
+    const { app } = await start({}, { fileDb: true }); // the one test that needs the file on disk
     expect(statSync(app.config.dataDir).mode & 0o777).toBe(0o700);
     expect(statSync(join(app.config.dataDir, "ledger.sqlite")).mode & 0o777).toBe(0o600);
   });

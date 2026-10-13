@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -21,8 +21,14 @@ export function tmpDir(): string {
   return mkdtempSync(join(tmpdir(), "shur-ads-test-"));
 }
 
+/**
+ * A full app on a throwaway data dir. The ledger is IN MEMORY unless `fileDb`
+ * is asked for: the file database (WAL + fsync on a loaded machine) was most
+ * of a 26 s ads run (measured 13.10.2026). The data dir itself stays on disk —
+ * the stop file, reports and the Telegram outbox are files by design.
+ */
 export function testApp(
-  opts: { env?: Record<string, string>; limits?: Partial<Limits>; reader?: AdsReader; fetchFn?: typeof fetch; now?: Date } = {},
+  opts: { env?: Record<string, string>; limits?: Partial<Limits>; reader?: AdsReader; fetchFn?: typeof fetch; now?: Date; fileDb?: boolean } = {},
 ): App & { tg: FakeTelegram } {
   const dir = tmpDir();
   const limitsFile = join(dir, "limits.json");
@@ -34,10 +40,13 @@ export function testApp(
     SHUR_OPS_CHAT_ID: CHAT,
     ...(opts.env ?? {}),
   });
+  // openDb(dataDir) used to create the directory as a side effect; the stop
+  // file, reports and outbox still expect it to exist.
+  mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
   const tg = new FakeTelegram();
   const now = opts.now ?? NOW;
   const app = createApp(config, {
-    db: openDb(config.dataDir),
+    db: opts.fileDb ? openDb(config.dataDir) : openDb(":memory:"),
     telegram: tg,
     reader: opts.reader,
     fetchFn: opts.fetchFn,
