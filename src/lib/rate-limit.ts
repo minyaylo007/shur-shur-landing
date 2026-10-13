@@ -12,6 +12,8 @@ const LIMIT = 5; // max requests per window
 const MAX_KEYS = 10_000; // hard cap — bounds memory against rotating spoofed XFF
 
 const hits = new Map<string, number[]>();
+const SWEEP_EVERY = 1_000; // inserts between stale-key sweeps once the map is large
+let insertsSinceSweep = 0;
 
 export interface RateLimitOptions {
   limit?: number;
@@ -46,8 +48,13 @@ export function rateLimit(key: string, options: RateLimitOptions = {}): RateLimi
   }
   hits.set(key, recent);
 
-  // Opportunistic cleanup of fully-stale keys.
-  if (hits.size > 5000) {
+  // Opportunistic cleanup of fully-stale keys — amortized. A full scan on
+  // EVERY insert above 5 000 keys made the limiter quadratic under a
+  // rotating-XFF flood (10 000 inserts ≈ 25 M stamp checks): the cap test
+  // alone took 4–14 s on a loaded box and timed out at 5 s. One sweep per
+  // 1 000 inserts keeps the memory bound and the intent, at 1/1000 the cost.
+  if (hits.size > 5000 && ++insertsSinceSweep >= SWEEP_EVERY) {
+    insertsSinceSweep = 0;
     for (const [k, stamps] of hits) {
       if (stamps.every((t) => t <= windowStart)) hits.delete(k);
     }
