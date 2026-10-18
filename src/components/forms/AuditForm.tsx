@@ -11,6 +11,7 @@ import { failureOf, LEAD_FAILURES, type LeadFailure } from "@/lib/lead-failure";
 import { track } from "@/lib/analytics";
 import { attributionForSubmit } from "@/lib/attribution";
 import { adsAllowed } from "@/lib/consent";
+import { privacyPath } from "@/lib/legal";
 import { afterLeadResponse, sessionStore } from "@/lib/thanks";
 import { CHANNEL_ICONS, CherryIcon, PhoneIcon } from "@/components/ui/icons";
 
@@ -319,6 +320,19 @@ export function AuditForm({
               : dict.submit}
         </button>
       ) : null}
+
+      {/* The notice under the button (GDPR art. 13): why these details are
+          asked for, and where the whole story is. Not a consent checkbox —
+          answering a request someone sent is not based on consent. */}
+      <p className="text-xs text-ink-500">
+        {dict.privacyNote}{" "}
+        <a
+          href={privacyPath(locale)}
+          className="font-semibold text-cherry-900 underline underline-offset-4 hover:text-juice-500"
+        >
+          {dict.privacyLink}
+        </a>
+      </p>
 
       {/*
         One failure, one story. The route answers four different things — the

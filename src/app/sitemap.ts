@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 import { locales, defaultLocale } from "@/lib/i18n";
 import { site } from "@/lib/site";
+import { privacyIndexable, privacyPath } from "@/content/privacy";
+import { landingList, landingIndexable, landingPath } from "@/lib/markets";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();
@@ -11,7 +13,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     locales.map((locale) => [locale, `${site.siteUrl}/${locale}`]),
   );
 
-  return locales.map((locale) => ({
+  const home: MetadataRoute.Sitemap = locales.map((locale) => ({
     url: `${site.siteUrl}/${locale}`,
     lastModified,
     changeFrequency: "monthly",
@@ -19,4 +21,25 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: locale === defaultLocale ? 1 : 0.9,
     alternates: { languages },
   }));
+
+  /* Drafts stay out: a policy page joins only once it has no «[ЗАПОЛНИТЬ: …]»
+     left, a market landing only once the owner flips `approved` in
+     lib/markets. The same two switches decide their robots meta. */
+  const privacy: MetadataRoute.Sitemap = locales.filter(privacyIndexable).map((locale) => ({
+    url: `${site.siteUrl}${privacyPath(locale)}`,
+    lastModified,
+    changeFrequency: "yearly",
+    priority: 0.2,
+  }));
+
+  const landings: MetadataRoute.Sitemap = landingList
+    .filter(landingIndexable)
+    .map((landing) => ({
+      url: `${site.siteUrl}${landingPath(landing)}`,
+      lastModified,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    }));
+
+  return [...home, ...privacy, ...landings];
 }

@@ -214,5 +214,16 @@ function readFbpCookie(): string | undefined {
 /** The attribution a form submitted right now should carry. Browser only. */
 export function attributionForSubmit(consentAds: boolean): Attribution | undefined {
   if (typeof window === "undefined") return undefined;
-  return pickAttribution(readStoredAttribution(), consentAds, consentAds ? readFbpCookie() : undefined);
+  // Storage blocked or never written: the page the form sits on is still a
+  // true landing path — on /ro/suceava it is what makes the lead «suceava».
+  const stored = readStoredAttribution() ?? safeCapture();
+  return pickAttribution(stored, consentAds, consentAds ? readFbpCookie() : undefined);
+}
+
+function safeCapture(): Attribution | null {
+  try {
+    return captureAttribution(window.location.href, document.referrer, Date.now());
+  } catch {
+    return null;
+  }
 }

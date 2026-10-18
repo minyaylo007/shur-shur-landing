@@ -1,6 +1,7 @@
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
+import { privacyPath } from "@/lib/legal";
 import { readyChannel } from "@/lib/channels";
 import { ContactLink } from "@/components/conversion/ContactLink";
 import { Logo } from "@/components/ui/Logo";
@@ -114,6 +115,13 @@ export function Footer({ locale, nav, footer, consentSettings }: FooterProps) {
               label={consentSettings}
               className="cursor-pointer underline underline-offset-4 transition-colors hover:text-juice-300"
             />
+            {" · "}
+            <a
+              href={privacyPath(locale)}
+              className="underline underline-offset-4 transition-colors hover:text-juice-300"
+            >
+              {footer.privacy}
+            </a>
           </p>
           <p className="inline-flex items-center gap-1.5">
             {footer.madeIn}

@@ -121,6 +121,8 @@ export const en: Dictionary = {
       successText: "We will look at the profile and get back to you.",
       successAgain: "Send another one",
       retry: "Try again",
+      privacyNote: "We use these details only to answer your request. How we handle them:",
+      privacyLink: "privacy policy",
       failures: {
         rate_limited: {
           title: "We already have your request",
@@ -161,6 +163,7 @@ export const en: Dictionary = {
     city: "Chernivtsi, Ukraine",
     rights: "All rights reserved",
     madeIn: "Made with cherries in Chernivtsi",
+    privacy: "Privacy policy",
   },
   contactBar: {
     open: "Discuss a project",

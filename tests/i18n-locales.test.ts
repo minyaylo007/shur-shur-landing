@@ -214,7 +214,9 @@ describe("routing — all four locales are prerendered", () => {
   });
 
   it("sitemap lists every locale with a full hreflang map", () => {
-    const entries = sitemap();
+    // The locale home pages lead the list; approved landings and finished
+    // policy pages follow them (tests/market-landings, tests/privacy).
+    const entries = sitemap().slice(0, locales.length);
     expect(entries.map((entry) => entry.url)).toEqual(
       locales.map((locale) => `${site.siteUrl}/${locale}`),
     );
