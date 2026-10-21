@@ -1,0 +1,42 @@
+name: Vercel Web Analytics
+
+# Включает или выключает Vercel Web Analytics у проекта (счётчик посещений без
+# cookies, компонент — src/components/analytics/SiteAnalytics.tsx).
+#
+# Зачем сценарий: токен Vercel есть только в секретах GitHub, а без включения
+# в проекте /_vercel/insights/script.js отвечает 404 и счётчик молчит.
+# Откат — тот же сценарий с action=disable.
+#
+# Запуск ТОЛЬКО вручную: Actions → Vercel Web Analytics → Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "enable — включить, disable — выключить"
+        type: choice
+        options: [enable, disable]
+        default: enable
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-web-analytics
+  cancel-in-progress: false
+
+jobs:
+  toggle:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      ACTION: ${{ inputs.action }}
+    steps:
+      # Команда `project web-analytics` появилась в CLI 65 — версия закреплена.
+      - name: Переключить Web Analytics
+        run: |
+          npx --yes vercel@65.0.0 project web-analytics "$ACTION" "$VERCEL_PROJECT_ID" \
+            --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" --yes --json
