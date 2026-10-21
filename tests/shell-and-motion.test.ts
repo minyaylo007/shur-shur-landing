@@ -117,7 +117,14 @@ describe("motion discipline (brief §14)", () => {
       expect(file).not.toMatch(/require\(["'](gsap|lenis)/i);
     }
     const pkg = JSON.parse(read("../package.json")) as { dependencies: Record<string, string> };
-    expect(Object.keys(pkg.dependencies).sort()).toEqual(["next", "react", "react-dom", "zod"]);
+    // @vercel/analytics: cookieless visitor count, not a visual effect.
+    expect(Object.keys(pkg.dependencies).sort()).toEqual([
+      "@vercel/analytics",
+      "next",
+      "react",
+      "react-dom",
+      "zod",
+    ]);
   });
 });
 
