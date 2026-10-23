@@ -1,0 +1,15 @@
+# SHUR-SHUR: сторож журнала → дирижёр shur (OWNER-RULES п.42). Без модели.
+# Один прогон: журнал ihor-shur-*, тревоги ads-engine, упавшие GitHub Actions,
+# живой сайт. Подробности — в шапке logwatch.mjs.
+# Ставит ops/logwatch/install.sh. Откат: systemctl --user disable --now ihor-shur-logwatch.timer
+[Unit]
+Description=SHUR-SHUR log watcher (journal, alerts, GitHub Actions, live site) -> conductor
+
+[Service]
+Type=oneshot
+Environment=SHUR_LOGWATCH_DIR=/opt/ihor/shur/logwatch
+ExecStart=/usr/bin/node /opt/ihor/shur/logwatch/logwatch.mjs
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=yes
+MemoryMax=256M

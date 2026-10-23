@@ -120,7 +120,7 @@ export async function runDaily(app: App): Promise<DailySummary> {
   const capiRetry = await retryFailed(app.db, app.capi, app.fetchFn, now);
   const rules = await runRules(app.engine());
   const report = buildReport(app.db, app.limits, app.config.dataDir, { modes: app.modes, mode: app.engine().mode, now });
-  const al = alerts(app.db, app.limits, app.config.dataDir, now);
+  const al = alerts(app.db, app.limits, app.config.dataDir, now, app.modes.meta);
 
   let delivered: string;
   if (app.telegram.mode === "dry") {
