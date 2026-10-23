@@ -43,12 +43,14 @@ jobs:
           let records = 0;
           let shape = "";
           let lines = 0;
+          let returned = 0;
           const top = new Set();
           for (const line of fs.readFileSync("logs.jsonl", "utf8").split("\n")) {
             if (!line.trim()) continue;
             let r;
             try { r = JSON.parse(line); } catch { continue; }
             lines++;
+            if (r.type === "summary") { returned = Number(r.recordsReturned ?? 0); continue; }
             // Only key NAMES (and the line type) — never values: the repo is public.
             Object.keys(r).forEach((k) => top.add(k + (k === "type" ? "=" + String(r.type).slice(0, 20) : "")));
             const rec = r.record ?? r.log ?? r;
@@ -63,6 +65,11 @@ jobs:
           }
           console.log(`строк JSON: ${lines} (ключи: ${[...top].sort().join(",") || "—"}); записей с уровнем за 33 мин: ${records}; поля записи: ${shape || "—"}`);
           for (const [k, n] of counts) console.log(`  ${k} ×${n}`);
+          // Blind is worse than loud: records came back but none parsed → the CLI format changed.
+          if (returned > 0 && records === 0) {
+            console.log(`::error::Vercel вернул ${returned} записей, разбор не нашёл ни одной с уровнем — формат CLI изменился`);
+            process.exit(1);
+          }
           if (counts.size) {
             console.log("::error::ошибки функций Vercel за 33 мин — подробности: vercel logs --environment production --since 30m --query level:error");
             process.exit(1);
