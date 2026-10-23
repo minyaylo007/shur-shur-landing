@@ -98,6 +98,15 @@ describe("alerts and the daily report", () => {
     expect(a).toMatch(/связь сайт → учёт/);
   });
 
+  it("fixtures mode: no spend alerts, the stop flag still alerts", () => {
+    const app = testApp();
+    seedCampaign(app.db, { id: "c1", name: "sv_a", market: "suceava", daily: 30, spendPerDay: 30, days: 10, today: TODAY });
+    markCollected(app.db, NOW);
+    expect(alerts(app.db, app.limits, app.config.dataDir, NOW, "fixtures")).toEqual([]);
+    setStop(app.config.dataDir, "тест", "t");
+    expect(alerts(app.db, app.limits, app.config.dataDir, NOW, "fixtures").join("\n")).toMatch(/Аварийная остановка/);
+  });
+
   it("fresh data and leads → no alerts", () => {
     const app = testApp();
     seedCampaign(app.db, { id: "c1", name: "sv_a", market: "suceava", daily: 30, spendPerDay: 30, days: 10, today: TODAY });
@@ -130,7 +139,8 @@ describe("alerts and the daily report", () => {
     expect(s.delivered).toBe(file);
     expect(readFileSync(file, "utf8")).toContain("SHUR-SHUR");
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(existsSync(join(app.config.dataDir, "reports", "2026-09-29-alerts.txt"))).toBe(true);
+    // Fixture spend is fake: no "spend without leads" false alarm every day.
+    expect(existsSync(join(app.config.dataDir, "reports", "2026-09-29-alerts.txt"))).toBe(false);
     expect(app.tg.calls).toEqual([]);
   });
 });

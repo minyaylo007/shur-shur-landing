@@ -43,7 +43,10 @@ function marketBlock(m: MarketMetrics): string {
   ].join("\n");
 }
 
-export function alerts(db: Db, limits: Limits, dataDir: string, now = new Date()): string[] {
+/** `metaMode: "fixtures"` — spend comes from fake fixture rows, so spend-based
+   alerts would raise the same false alarm every day. They are skipped; the
+   stop flag and data freshness still alert. */
+export function alerts(db: Db, limits: Limits, dataDir: string, now = new Date(), metaMode = "live"): string[] {
   const out: string[] = [];
   const stop = isStopped(dataDir);
   if (stop.stopped) out.push(`⛔ Аварийная остановка включена: ${stop.reason}`);
@@ -51,6 +54,7 @@ export function alerts(db: Db, limits: Limits, dataDir: string, now = new Date()
   if (f.ageHours === null) out.push("⚠ Данные Meta ни разу не собирались");
   else if (f.ageHours > limits.staleHours) out.push(`⚠ Данные Meta не обновлялись ${Math.floor(f.ageHours)} ч (порог ${limits.staleHours} ч)`);
   if (f.lastRunOk === false) out.push("⚠ Последний сбор данных Meta завершился ошибкой");
+  if (metaMode === "fixtures") return out;
 
   const today = dateInZone(now, "UTC");
   const feedSince = addDays(today, -(limits.evalDays - 1));
@@ -87,7 +91,7 @@ export function buildReport(
   const actions = db
     .prepare("SELECT id, rule, status, reason, result FROM actions WHERE created_at >= ? ORDER BY id DESC LIMIT 10")
     .all(new Date(now.getTime() - 86400_000).toISOString()) as { id: number; rule: string; status: string; reason: string; result: string | null }[];
-  const al = alerts(db, limits, dataDir, now);
+  const al = alerts(db, limits, dataDir, now, opts.modes.meta);
 
   const header = [
     `📊 SHUR-SHUR · реклама и лиды · ${since}…${until}`,
