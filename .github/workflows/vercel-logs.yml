@@ -1,7 +1,8 @@
 name: Vercel logs
 
-# Ошибки функций Vercel за последний час → упавший запуск. Логи функций на Hobby
-# живут ~1 ч и дренажей нет, поэтому раз в час читаем их CLI (`vercel logs`,
+# Ошибки функций Vercel за последние полчаса → упавший запуск. Логи функций на Hobby
+# живут меньше часа (окно 65 мин API отклоняет: «hobby plan does not retain»,
+# 23.10.2026) и дренажей нет, поэтому каждые 30 мин читаем окно 33 мин CLI (`vercel logs`,
 # runtime, production) и падаем, если есть level error/fatal. Упавший запуск
 # ловит сторож журнала на сервере (ops/logwatch) и пишет дирижёру shur.
 #
@@ -10,7 +11,7 @@ name: Vercel logs
 # Отключить: Actions → Vercel logs → Disable workflow.
 on:
   schedule:
-    - cron: "7 * * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -31,20 +32,27 @@ jobs:
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
       # `vercel logs` с --json/--since/--environment — CLI 65; версия закреплена.
-      - name: Ошибки функций за час
+      - name: Ошибки функций за 33 мин
         run: |
           npx --yes vercel@65.2.0 logs --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" \
-            --token "$VERCEL_TOKEN" --environment production --since 65m --limit 10000 --json \
+            --token "$VERCEL_TOKEN" --environment production --since 33m --limit 10000 --json \
             > logs.jsonl 2> logs.err || { echo "::error::vercel logs не отработал (код $?)"; tail -c 600 logs.err | sed -E 's/[A-Za-z0-9_-]{24,}/<…>/g'; exit 1; }
           node - <<'EOF'
           const fs = require("node:fs");
           const counts = new Map();
           let records = 0;
           let shape = "";
+          let lines = 0;
+          let returned = 0;
+          const top = new Set();
           for (const line of fs.readFileSync("logs.jsonl", "utf8").split("\n")) {
             if (!line.trim()) continue;
             let r;
             try { r = JSON.parse(line); } catch { continue; }
+            lines++;
+            if (r.type === "summary") { returned = Number(r.recordsReturned ?? 0); continue; }
+            // Only key NAMES (and the line type) — never values: the repo is public.
+            Object.keys(r).forEach((k) => top.add(k + (k === "type" ? "=" + String(r.type).slice(0, 20) : "")));
             const rec = r.record ?? r.log ?? r;
             const level = String(rec.level ?? "").toLowerCase();
             if (!level) continue;
@@ -55,10 +63,15 @@ jobs:
             const key = `${level} ${path}`;
             counts.set(key, (counts.get(key) ?? 0) + 1);
           }
-          console.log(`записей за час: ${records}; поля записи: ${shape || "—"}`);
+          console.log(`строк JSON: ${lines} (ключи: ${[...top].sort().join(",") || "—"}); записей с уровнем за 33 мин: ${records}; поля записи: ${shape || "—"}`);
           for (const [k, n] of counts) console.log(`  ${k} ×${n}`);
+          // Blind is worse than loud: records came back but none parsed → the CLI format changed.
+          if (returned > 0 && records === 0) {
+            console.log(`::error::Vercel вернул ${returned} записей, разбор не нашёл ни одной с уровнем — формат CLI изменился`);
+            process.exit(1);
+          }
           if (counts.size) {
-            console.log("::error::ошибки функций Vercel за час — подробности: vercel logs --environment production --since 1h --query level:error");
+            console.log("::error::ошибки функций Vercel за 33 мин — подробности: vercel logs --environment production --since 30m --query level:error");
             process.exit(1);
           }
           EOF
