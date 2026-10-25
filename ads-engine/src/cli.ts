@@ -9,6 +9,7 @@ import { buildReport } from "./report.ts";
 import { runRules, decide } from "./rules.ts";
 import { setStop, clearStop, isStopped } from "./safety.ts";
 import { log } from "./log.ts";
+import { pickupMetaKey } from "./meta-key.ts";
 
 /* node ads-engine/src/cli.ts <command>. The CLI never prints names or
    contacts: `leads` lists id, date, market, kind, status only. */
@@ -17,6 +18,7 @@ const USAGE = `Команды:
   serve                         приём лидов на ${HOST}:PORT + служебный бот (long polling)
   daily                         сбор Meta → правила → отчёт (то, что делает таймер)
   cabinet                       снимок для кабинета хозяйки → сайт (daily делает это сам)
+  meta-key                      забрать ключ Meta, переданный в кабинете, в env (daily делает это сам)
   collect                       только сбор Meta Insights
   report                        напечатать отчёт
   rules                         прогнать правила
@@ -45,7 +47,26 @@ async function main(argv: string[]) {
     console.log(USAGE);
     return 0;
   }
-  const app = createApp(loadConfig());
+  let config = loadConfig();
+  if (cmd === "daily" || cmd === "meta-key") {
+    // Her Meta key from the cabinet first, so this very run already uses it.
+    const got = await pickupMetaKey({
+      siteUrl: config.siteUrl,
+      secret: config.cabinetSecret,
+      cryptKey: config.cabinetMetaKey,
+      envFile: config.envFile,
+    });
+    if (got.values) {
+      Object.assign(process.env, got.values);
+      config = loadConfig();
+    }
+    if (cmd === "meta-key") {
+      const names = got.values ? ` → ${Object.keys(got.values).join(", ")} в ${config.envFile}` : "";
+      console.log(`ключ Meta: ${got.outcome}${names}`);
+      return got.outcome === "failed" || got.outcome === "refused" ? 1 : 0;
+    }
+  }
+  const app = createApp(config);
   switch (cmd) {
     case "serve": {
       const server = await listen(app);

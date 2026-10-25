@@ -1,4 +1,5 @@
-import { randomBytes } from "node:crypto";
+import { createDecipheriv, randomBytes } from "node:crypto";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /*
@@ -8,7 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *  - ingest and setup-link refuse anything not signed with CABINET_HMAC_SECRET (401);
  *  - a snapshot carrying a field with personal data, or a contact-looking
  *    string, is refused whole and never stored;
- *  - the setup link works once: the second use, a stale or a foreign token fail.
+ *  - the setup link works once: the second use, a stale or a foreign token fail;
+ *  - her Meta key is write-only: no site response carries it, it is stored
+ *    encrypted, handed out only signed and only as ciphertext, then erased.
  */
 
 const redirectMock = vi.fn((url: string) => {
@@ -27,7 +30,12 @@ const { POST: INGEST } = await import("../src/app/api/cabinet/ingest/route");
 const { POST: SETUP_LINK } = await import("../src/app/api/cabinet/setup-link/route");
 const { POST: SETUP } = await import("../src/app/api/cabinet/setup/route");
 const { POST: LOGIN } = await import("../src/app/api/cabinet/login/route");
-const { default: CabinetPage } = await import("../src/app/cabinet/page");
+const { default: CabinetPageComponent } = await import("../src/app/cabinet/page");
+const { POST: META } = await import("../src/app/api/cabinet/meta/route");
+const { POST: META_PICKUP } = await import("../src/app/api/cabinet/meta-pickup/route");
+const { META_STORE_KEY, META_AAD, envelopeDigest, saveMeta } = await import("../src/lib/cabinet/meta");
+
+const CabinetPage = (m?: string) => CabinetPageComponent({ searchParams: Promise.resolve(m ? { m } : {}) });
 
 const SECRET = "cabinet-test-secret";
 let store: ReturnType<typeof useMemoryStore>;
@@ -75,8 +83,11 @@ async function issueLink(token: string, expiresAt = Date.now() + 3600_000) {
   expect(res.status).toBe(200);
 }
 
+const META_KEY = randomBytes(32);
+
 beforeEach(() => {
   process.env.CABINET_HMAC_SECRET = SECRET;
+  process.env.CABINET_META_KEY = META_KEY.toString("base64");
   store = useMemoryStore();
   cookieJar.clear();
   redirectMock.mockClear();
@@ -87,6 +98,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.CABINET_HMAC_SECRET;
+  delete process.env.CABINET_META_KEY;
 });
 
 describe("cabinet: closed without a session", () => {
@@ -277,5 +289,111 @@ describe("cabinet: login attempts are limited", () => {
     store.set(AUTH_KEY, { text: JSON.stringify(state), etag: "z" });
     const res = await LOGIN(form("/api/cabinet/login", { password: "correct-password" }));
     expect(res.headers.get("location")).toContain("e=limit");
+  });
+});
+
+describe("cabinet: her Meta key is write-only", () => {
+  const PASS = "correct horse battery";
+  const KEY = "EAAG" + randomBytes(90).toString("base64url");
+  const FIELDS = { meta_token: KEY, meta_account: "act_1234567890", meta_dataset: "9876543210" };
+
+  /** Everything a site answer can carry: status, headers, body. */
+  async function wire(res: Response): Promise<string> {
+    return `${res.status} ${JSON.stringify([...res.headers])} ${await res.clone().text()}`;
+  }
+  function leaks(text: string): boolean {
+    // The key, any 12-char piece of it, or its base64 — none may come back.
+    const pieces = [KEY, Buffer.from(KEY).toString("base64")];
+    for (let i = 0; i + 12 <= KEY.length; i += 6) pieces.push(KEY.slice(i, i + 12));
+    return pieces.some((p) => text.includes(p));
+  }
+  async function setUp(fields: Record<string, string> = FIELDS) {
+    const token = randomBytes(32).toString("base64url");
+    await issueLink(token);
+    const res = await SETUP(form("/api/cabinet/setup", { t: token, password: PASS, repeat: PASS, ...fields }));
+    return { token, res };
+  }
+  const take = async () => (await (await META_PICKUP(signed("/api/cabinet/meta-pickup", { action: "take" }))).json()).pending;
+  const decrypt = (e: { iv: string; tag: string; ct: string }) => {
+    const d = createDecipheriv("aes-256-gcm", META_KEY, Buffer.from(e.iv, "base64"));
+    d.setAAD(Buffer.from(META_AAD));
+    d.setAuthTag(Buffer.from(e.tag, "base64"));
+    return JSON.parse(Buffer.concat([d.update(Buffer.from(e.ct, "base64")), d.final()]).toString("utf8"));
+  };
+
+  it("no site response carries the key: setup, cabinet page, pickup, ack", async () => {
+    const { res } = await setUp();
+    expect(res.headers.get("location")).toMatch(/\/cabinet\?m=saved$/);
+    expect(leaks(await wire(res))).toBe(false);
+    expect(leaks(store.get(META_STORE_KEY)!.text)).toBe(false);
+    expect(leaks(store.get(AUTH_KEY)!.text)).toBe(false);
+
+    cookieJar.set(auth.SESSION_COOKIE, /shur_cabinet=([^;]+)/.exec(res.headers.get("set-cookie")!)![1]);
+    const html = renderToStaticMarkup(await CabinetPage("saved"));
+    expect(html).toContain("ждёт переноса");
+    expect(leaks(html)).toBe(false);
+
+    const taken = await META_PICKUP(signed("/api/cabinet/meta-pickup", { action: "take" }));
+    expect(taken.status).toBe(200);
+    expect(leaks(await wire(taken))).toBe(false);
+    // What it hands out is the ciphertext of exactly her key — only ace-main can open it.
+    const { pending } = await taken.json();
+    expect(decrypt(pending)).toEqual({ token: KEY, ad_account_id: "1234567890", dataset_id: "9876543210" });
+
+    const ack = await META_PICKUP(signed("/api/cabinet/meta-pickup", { action: "ack", digest: envelopeDigest(pending) }));
+    expect(leaks(await wire(ack))).toBe(false);
+    expect((await ack.json()).result).toBe("erased");
+  });
+
+  it("after the ack the copy on the site is gone", async () => {
+    await setUp();
+    const pending = await take();
+    await META_PICKUP(signed("/api/cabinet/meta-pickup", { action: "ack", digest: envelopeDigest(pending) }));
+    expect(JSON.parse(store.get(META_STORE_KEY)!.text).pending).toBeNull();
+    expect(store.get(META_STORE_KEY)!.text).not.toContain(pending.ct);
+    expect(await take()).toBeNull();
+  });
+
+  it("an ack for an older envelope does not erase a key handed in since", async () => {
+    await setUp();
+    const old = await take();
+    await saveMeta({ token: KEY + "x", ad_account_id: "1234567890", dataset_id: "9876543210" });
+    const ack = await META_PICKUP(signed("/api/cabinet/meta-pickup", { action: "ack", digest: envelopeDigest(old) }));
+    expect((await ack.json()).result).toBe("changed");
+    expect(JSON.parse(store.get(META_STORE_KEY)!.text).pending).not.toBeNull();
+  });
+
+  it("pickup without signature or with another secret → 401, no ciphertext", async () => {
+    await setUp();
+    const bare = await META_PICKUP(
+      new Request("https://shur-shur.com/api/cabinet/meta-pickup", { method: "POST", body: '{"action":"take"}' }),
+    );
+    expect(bare.status).toBe(401);
+    const foreign = await META_PICKUP(signed("/api/cabinet/meta-pickup", { action: "take" }, "ledger-secret"));
+    expect(foreign.status).toBe(401);
+    expect(await foreign.text()).not.toMatch(/"ct"/);
+  });
+
+  it("the cabinet form without a session stores nothing", async () => {
+    const res = await META(form("/api/cabinet/meta", FIELDS));
+    expect(res.headers.get("location")).toMatch(/\/cabinet\/login$/);
+    expect(store.has(META_STORE_KEY)).toBe(false);
+  });
+
+  it("a malformed key does not spend the link and is not stored", async () => {
+    const { token, res } = await setUp({ ...FIELDS, meta_dataset: "not-a-number" });
+    expect(res.headers.get("location")).toContain("e=meta_invalid");
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(leaks(await wire(res))).toBe(false);
+    expect(await auth.setupLinkValid(token)).toBe(true);
+    expect(store.has(META_STORE_KEY)).toBe(false);
+  });
+
+  it("no CABINET_META_KEY → key refused, link kept, nothing stored in clear", async () => {
+    delete process.env.CABINET_META_KEY;
+    const { token, res } = await setUp();
+    expect(res.headers.get("location")).toContain("e=meta_down");
+    expect(await auth.setupLinkValid(token)).toBe(true);
+    expect(store.has(META_STORE_KEY)).toBe(false);
   });
 });

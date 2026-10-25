@@ -320,6 +320,14 @@ Sync Vercel env → Deploy (`ref=main`) → отправить в форму н�
   `node ops/cabinet/setup-link.mjs` пишет ссылку в `/opt/ihor/shur/private/cabinet-setup.txt`
   (600) и ничего не печатает. Новая ссылка отменяет прежнюю; новый пароль завершает все входы.
 - **Вход** — 5 попыток с IP за 10 мин (на экземпляр) и 30 неудач в час на всех.
+- **Ключ Meta хозяйки** (токен системного пользователя ads_read, ID аккаунта, ID пикселя) —
+  поля на `/cabinet/setup` (необязательные) и форма в самом кабинете. Только на запись:
+  сайт сразу шифрует (AES-256-GCM, `CABINET_META_KEY` — только в production Vercel и в
+  `/opt/ihor/shur-ads/env`) и расшифровать не умеет. `daily` (вручную —
+  `node src/cli.ts meta-key`) забирает шифротекст подписанным запросом
+  (`/api/cabinet/meta-pickup`), пишет `META_ACCESS_TOKEN`/`META_AD_ACCOUNT_ID`/`META_DATASET_ID`
+  в env (600) и подтверждает — копия на сайте стирается. Значения не печатаются нигде.
+  Служба `ihor-shur-ads.service` (CAPI) новый ключ увидит после своего перезапуска.
 
 ### Порядок деплоя
 

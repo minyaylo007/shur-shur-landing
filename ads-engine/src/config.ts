@@ -102,6 +102,10 @@ export interface Config {
   cabinetSecret: string | undefined;
   /** The conductor's conclusions for the cabinet, markdown. Missing file — no block. */
   cabinetInsightsFile: string;
+  /** Opens her Meta key handed in on the site (meta-key.ts). Same value in Vercel. */
+  cabinetMetaKey: string | undefined;
+  /** This service's own env file: the Meta key from the cabinet is written here. */
+  envFile: string;
 }
 
 /** The service only ever binds loopback (PORTS.md rule): not configurable. */
@@ -132,6 +136,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     modeOverride: (mode as RulesMode | undefined) || undefined,
     cabinetSecret: env.CABINET_HMAC_SECRET || undefined,
     cabinetInsightsFile: env.SHUR_CABINET_INSIGHTS_FILE || join(dataDir, "..", "cabinet-insights.md"),
+    cabinetMetaKey: env.CABINET_META_KEY || undefined,
+    envFile: env.SHUR_ADS_ENV_FILE || join(dataDir, "..", "env"),
   };
 }
 

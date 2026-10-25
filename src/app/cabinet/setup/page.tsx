@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { MIN_PASSWORD, setupLinkValid } from "@/lib/cabinet/auth";
+import { MetaFields } from "../meta-fields";
 
 const MESSAGES: Record<string, string> = {
   weak_password: `Пароль — не короче ${MIN_PASSWORD} символов.`,
   mismatch: "Пароли не совпали.",
   limit: "Слишком много попыток. Подождите немного.",
   down: "Кабинет временно недоступен. Попробуйте позже.",
+  meta_invalid: "Ключ Meta, ID аккаунта или ID пикселя не похожи на настоящие. Проверьте и введите ещё раз (или оставьте все три поля пустыми).",
+  meta_down: "Ключ Meta сейчас не принимается. Задайте пароль без него — подключить можно будет из кабинета.",
 };
 
 export default async function CabinetSetup({ searchParams }: { searchParams: Promise<{ t?: string; e?: string }> }) {
@@ -64,6 +67,10 @@ export default async function CabinetSetup({ searchParams }: { searchParams: Pro
             className="mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2"
           />
         </label>
+        <fieldset className="space-y-4 border-t border-paper-200 pt-4">
+          <legend className="pr-2 text-sm font-medium">Подключить рекламу Meta (можно позже, из кабинета)</legend>
+          <MetaFields />
+        </fieldset>
         {message ? (
           <p role="alert" className="text-sm text-cherry-600">
             {message}
