@@ -71,6 +71,15 @@ body {
   overflow-x: clip;
 }
 
+/* The owner's cabinet (/cabinet*) is paper and ink, not the landing's cherry
+   field. The bare `body` rule above is unlayered, so it beats Tailwind's
+   `bg-*`/`text-*` utilities on <body>; this rule is unlayered too and more
+   specific, so it wins. Only the cabinet layout sets the class. */
+body.cabinet {
+  background: var(--color-paper-50);
+  color: var(--color-ink-900);
+}
+
 /* Display tracking. Unbounded/Rubik are set tight (-0.02em) for Latin and
    Cyrillic caps; Hebrew letterforms are wide, square and non-connecting, and
    the same negative tracking visibly crowds them. RTL therefore gets neutral

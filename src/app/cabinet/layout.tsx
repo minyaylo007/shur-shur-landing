@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export default function CabinetLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" className={latinFontClass}>
-      <body className="min-h-screen bg-paper-50 font-body text-ink-900 antialiased">
+      <body className="cabinet min-h-screen font-body antialiased">
         <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">{children}</main>
       </body>
     </html>

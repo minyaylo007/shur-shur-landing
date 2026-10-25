@@ -296,7 +296,7 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
         <form method="post" action="/api/cabinet/meta" className="mt-4 space-y-4">
           {meta?.pendingSince || meta?.takenAt ? null : <MetaGuide />}
           <MetaFields required />
-          <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-2 text-cream-type">
+          <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-3 font-semibold text-cream-type shadow-sm hover:bg-cherry-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cherry-deep">
             Проверить и сохранить
           </button>
         </form>

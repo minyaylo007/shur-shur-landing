@@ -20,7 +20,7 @@ export default async function CabinetLogin({ searchParams }: { searchParams: Pro
             required
             autoComplete="current-password"
             autoFocus
-            className="mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2"
+            className="mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2 text-ink-900 placeholder:text-ink-500"
           />
         </label>
         {message ? (
@@ -28,7 +28,7 @@ export default async function CabinetLogin({ searchParams }: { searchParams: Pro
             {message}
           </p>
         ) : null}
-        <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-2 text-cream-type">
+        <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-3 font-semibold text-cream-type shadow-sm hover:bg-cherry-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cherry-deep">
           Войти
         </button>
       </form>

@@ -234,7 +234,7 @@ export function MetaGuide() {
               {step.link ? (
                 <p>
                   Откройте:{" "}
-                  <a href={step.link.href} target="_blank" rel="noopener noreferrer" className="underline">
+                  <a href={step.link.href} target="_blank" rel="noopener noreferrer" className="font-medium text-cherry-700 underline">
                     {step.link.label}
                   </a>
                 </p>
@@ -246,8 +246,8 @@ export function MetaGuide() {
               <p className="text-ink-700">
                 <span className="font-medium">Если не видите кнопку:</span> {step.stuck}
               </p>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={done[i]} onChange={(e) => tick(i, e.target.checked)} />
+              <label className="flex items-center gap-2 font-medium">
+                <input type="checkbox" className="h-5 w-5 accent-cherry-deep" checked={done[i]} onChange={(e) => tick(i, e.target.checked)} />
                 <span>сделала</span>
               </label>
             </div>
