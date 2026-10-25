@@ -25,6 +25,7 @@ export const critical = [
   "tests/consent-zone.test.ts", //      баннер в ЕС и по умолчанию; вне ЕС пиксель сразу; отказ главнее зоны
   "tests/thanks-lead.test.ts", //      принятая заявка → /thanks; Lead ровно один с eventID; Contact; URL без данных
   "tests/lead-ledger-first.test.ts", // журнал первым: Telegram упал → 200 и ретрай; оба упали → 502; повторная доставка
+  "tests/cabinet-access.test.ts", //   кабинет: без cookie закрыт; подпись; ПД в снимке нет; ссылка setup одноразовая
 ];
 
 export default defineConfig({

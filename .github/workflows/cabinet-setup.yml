@@ -1,0 +1,95 @@
+name: Cabinet setup
+
+# Готовит боевое окружение для кабинета хозяйки (/cabinet):
+#  1. приватное хранилище Vercel Blob «shur-cabinet» (снимок статистики и хэш
+#     пароля), подключённое к production — Vercel сам заводит в проекте
+#     BLOB_READ_WRITE_TOKEN;
+#  2. CABINET_HMAC_SECRET из секретов GitHub → production Vercel (тот же ключ
+#     лежит в /opt/ihor/shur-ads/env на ace-main).
+#
+# Повторный запуск безопасен: хранилище, уже подключённое к проекту, не
+# создаётся второй раз; ключ подписи переписывается тем же значением.
+#
+# Запуск ТОЛЬКО вручную: Actions → Cabinet setup → Run workflow. Переменные
+# подхватит только НОВЫЙ выкат: после сценария — Deploy (ref=main).
+#
+# Репозиторий ПУБЛИЧНЫЙ: вывод CLI про хранилище в лог не идёт целиком —
+# только итог и id хранилища; значения переменных не печатаются нигде.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cabinet-setup
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      CABINET_HMAC_SECRET: ${{ secrets.CABINET_HMAC_SECRET }}
+      VERCEL_CLI: vercel@65.2.0
+    steps:
+      - name: Доступы и секреты на месте
+        run: |
+          set -euo pipefail
+          missing=""
+          for n in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID CABINET_HMAC_SECRET; do
+            if [ -z "${!n-}" ]; then missing="$missing $n"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Пусто или не задано:$missing — ничего не менялось"
+            exit 1
+          fi
+
+      - name: Привязать проект Vercel
+        run: |
+          set -euo pipefail
+          npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN" > /dev/null
+          rm -f .vercel/.env.production.local
+
+      - name: Приватное хранилище Blob
+        run: |
+          set -euo pipefail
+          existing=$(npx --yes "$VERCEL_CLI" env ls production --token="$VERCEL_TOKEN" 2>/dev/null | awk '{print $1}')
+          if printf '%s\n' "$existing" | grep -xF BLOB_READ_WRITE_TOKEN > /dev/null; then
+            echo "· BLOB_READ_WRITE_TOKEN в production уже есть — хранилище подключено, не создаю"
+            exit 0
+          fi
+          set +e
+          npx --yes "$VERCEL_CLI" blob create-store shur-cabinet --access private --region fra1 \
+            --yes --environment production --token="$VERCEL_TOKEN" > store.log 2>&1
+          code=$?
+          set -e
+          # Только id хранилища и строки об ошибке — без остального вывода.
+          grep -oE 'store_[A-Za-z0-9]+' store.log | head -n1 | sed 's/^/· хранилище: /' || true
+          if [ "$code" -ne 0 ]; then
+            echo "::error::create-store завершился с кодом $code"
+            grep -iE 'error|requires|confirm|dashboard|plan|limit' store.log \
+              | sed -E 's/[A-Za-z0-9_]{24,}/<…>/g' | head -n 10
+            exit 1
+          fi
+          echo "· приватное хранилище создано и подключено к production"
+
+      - name: Ключ подписи в production
+        run: |
+          set -euo pipefail
+          existing=$(npx --yes "$VERCEL_CLI" env ls production --token="$VERCEL_TOKEN" 2>/dev/null | awk '{print $1}')
+          if printf '%s\n' "$existing" | grep -xF CABINET_HMAC_SECRET > /dev/null; then
+            npx --yes "$VERCEL_CLI" env rm CABINET_HMAC_SECRET production --yes --token="$VERCEL_TOKEN" > /dev/null
+          fi
+          printf '%s' "$CABINET_HMAC_SECRET" | npx --yes "$VERCEL_CLI" env add CABINET_HMAC_SECRET production --token="$VERCEL_TOKEN" > /dev/null
+          echo "· CABINET_HMAC_SECRET заведён в production"
+
+      - name: Что теперь в боевом окружении
+        run: |
+          set -euo pipefail
+          npx --yes "$VERCEL_CLI" env ls production --token="$VERCEL_TOKEN" | awk 'NR>1 {print $1}' | grep -E '^(BLOB_|CABINET_)' || true
+          echo '⚠️ Переменные подхватит только НОВЫЙ выкат: запустите Deploy (ref=main).' >> "$GITHUB_STEP_SUMMARY"

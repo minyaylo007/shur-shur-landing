@@ -301,6 +301,26 @@ Sync Vercel env → Deploy (`ref=main`) → отправить в форму н�
 `TELEGRAM_BOT_TOKEN` в репозитории → прогнать Sync Vercel env → прогнать Deploy
 (`ref=main`). Три шага, кода трогать не нужно.
 
+### Кабинет хозяйки — `/cabinet`, `.github/workflows/cabinet-setup.yml`
+
+Закрытая страница статистики (только просмотр, по-русски, noindex, не в sitemap).
+
+- **Данные** — один снимок JSON (`src/lib/cabinet/snapshot.ts`, строгая схема: лишнее
+  поле или строка, похожая на e-mail/телефон, — отказ целиком). Собирает ads-engine после
+  ежедневного отчёта (`ads-engine/src/cabinet.ts`, вручную — `node src/cli.ts cabinet`),
+  копия — `/opt/ihor/shur-ads/data/cabinet-snapshot.json`. Повторная отправка файла:
+  `node ops/cabinet/push.mjs <файл>`. Пока Meta на фикстурах, снимок помечен `test_data`,
+  и страница показывает плашку «реклама ещё не подключена», а не выдуманные цифры.
+- **Выводы** — markdown в `/opt/ihor/shur-ads/cabinet-insights.md`; дата — время правки файла.
+- **Хранилище** — приватный Vercel Blob `shur-cabinet`: снимок и состояние входа (хэш
+  scrypt, ключ сессий, хэш ссылки установки). Пароль и токен ссылки не хранятся.
+- **Ключ подписи** `CABINET_HMAC_SECRET` — в `/opt/ihor/shur-ads/env`, в секретах GitHub
+  и в production Vercel (заводит сценарий Cabinet setup). Отдельный от ключа заявок.
+- **Пароль** — хозяйка задаёт сама по одноразовой ссылке (7 дней):
+  `node ops/cabinet/setup-link.mjs` пишет ссылку в `/opt/ihor/shur/private/cabinet-setup.txt`
+  (600) и ничего не печатает. Новая ссылка отменяет прежнюю; новый пароль завершает все входы.
+- **Вход** — 5 попыток с IP за 10 мин (на экземпляр) и 30 неудач в час на всех.
+
 ### Порядок деплоя
 
 1. PR с зелёным CI → merge в `main`.

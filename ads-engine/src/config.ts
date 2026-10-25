@@ -98,6 +98,10 @@ export interface Config {
   limitsFile: string | undefined;
   /** Env var modes overrides limits.mode so a unit drop-in can switch it. */
   modeOverride: RulesMode | undefined;
+  /** Signs the cabinet snapshot (POST <siteUrl>/api/cabinet/ingest). No key — no push. */
+  cabinetSecret: string | undefined;
+  /** The conductor's conclusions for the cabinet, markdown. Missing file — no block. */
+  cabinetInsightsFile: string;
 }
 
 /** The service only ever binds loopback (PORTS.md rule): not configurable. */
@@ -126,6 +130,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     fixturesFile: env.SHUR_ADS_FIXTURES || join(here, "fixtures", "meta-insights.json"),
     limitsFile: env.SHUR_ADS_LIMITS_FILE || join(dataDir, "..", "limits.json"),
     modeOverride: (mode as RulesMode | undefined) || undefined,
+    cabinetSecret: env.CABINET_HMAC_SECRET || undefined,
+    cabinetInsightsFile: env.SHUR_CABINET_INSIGHTS_FILE || join(dataDir, "..", "cabinet-insights.md"),
   };
 }
 
@@ -137,6 +143,7 @@ export function modes(c: Config) {
     capi: c.capiEnabled && c.metaToken && c.metaDatasetId ? "on" : "off",
     ingest: c.hmacSecret ? "on" : "not_configured",
     redelivery: c.hmacSecret && c.siteUrl ? "on" : "off",
+    cabinet: c.cabinetSecret && c.siteUrl ? "on" : "off",
     writes: "simulator",
   } as const;
 }

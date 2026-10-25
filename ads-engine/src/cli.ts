@@ -1,5 +1,5 @@
 import { loadConfig, HOST } from "./config.ts";
-import { createApp, runDaily, redeliver } from "./app.ts";
+import { createApp, runDaily, redeliver, pushCabinet } from "./app.ts";
 import { deleteLead } from "./delivery.ts";
 import { listen } from "./server.ts";
 import { collect } from "./meta/insights.ts";
@@ -16,6 +16,7 @@ import { log } from "./log.ts";
 const USAGE = `Команды:
   serve                         приём лидов на ${HOST}:PORT + служебный бот (long polling)
   daily                         сбор Meta → правила → отчёт (то, что делает таймер)
+  cabinet                       снимок для кабинета хозяйки → сайт (daily делает это сам)
   collect                       только сбор Meta Insights
   report                        напечатать отчёт
   rules                         прогнать правила
@@ -71,6 +72,9 @@ async function main(argv: string[]) {
     }
     case "daily":
       console.log(JSON.stringify(await runDaily(app), null, 2));
+      return 0;
+    case "cabinet":
+      console.log(await pushCabinet(app));
       return 0;
     case "collect":
       console.log(JSON.stringify(await collect(app.db, app.reader), null, 2));
