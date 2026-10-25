@@ -1,7 +1,7 @@
 /* Her Meta key: three write-only fields, shared by the setup page and the
    cabinet. Never pre-filled — nothing she typed is ever sent back. */
 
-const input = "mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2";
+const input = "mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2 text-ink-900 placeholder:text-ink-500";
 
 export function MetaFields({ required = false }: { required?: boolean }) {
   return (

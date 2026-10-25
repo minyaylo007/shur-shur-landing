@@ -29,7 +29,7 @@ export default async function CabinetSetup({ searchParams }: { searchParams: Pro
           Ссылка для установки пароля одноразовая и живёт 7 дней. Эта уже использована или устарела — попросите новую.
         </p>
         <p className="mt-4">
-          <Link href="/cabinet/login" className="underline">
+          <Link href="/cabinet/login" className="font-medium text-cherry-700 underline">
             Войти с паролем
           </Link>
         </p>
@@ -54,7 +54,7 @@ export default async function CabinetSetup({ searchParams }: { searchParams: Pro
             required
             minLength={MIN_PASSWORD}
             autoComplete="new-password"
-            className="mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2"
+            className="mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2 text-ink-900 placeholder:text-ink-500"
           />
         </label>
         <label className="block">
@@ -65,7 +65,7 @@ export default async function CabinetSetup({ searchParams }: { searchParams: Pro
             required
             minLength={MIN_PASSWORD}
             autoComplete="new-password"
-            className="mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2"
+            className="mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2 text-ink-900 placeholder:text-ink-500"
           />
         </label>
         <fieldset className="space-y-4 border-t border-paper-200 pt-4">
@@ -82,7 +82,7 @@ export default async function CabinetSetup({ searchParams }: { searchParams: Pro
             {message}
           </p>
         ) : null}
-        <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-2 text-cream-type">
+        <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-3 font-semibold text-cream-type shadow-sm hover:bg-cherry-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cherry-deep">
           Проверить и сохранить
         </button>
       </form>
