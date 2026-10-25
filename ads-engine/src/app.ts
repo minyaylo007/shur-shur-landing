@@ -13,6 +13,7 @@ import { buildReport, alerts } from "./report.ts";
 import { GoogleAdsStubReader } from "./google.ts";
 import type { Status } from "./funnel.ts";
 import { redeliverDue, type RedeliveryPass } from "./delivery.ts";
+import { buildSnapshot, pushSnapshot, type PushOutcome } from "./cabinet.ts";
 import { log } from "./log.ts";
 
 /* Wiring: picks live or dry implementations from the config. Tests build the
@@ -105,6 +106,22 @@ export interface DailySummary {
   rules: { proposals: number; recorded: number };
   delivered: "telegram" | string;
   alerts: number;
+  cabinet: PushOutcome;
+}
+
+/** Build the owner's cabinet snapshot from the ledger and push it to the site. */
+export function pushCabinet(app: App, now?: Date): Promise<PushOutcome> {
+  const snapshot = buildSnapshot(app.db, {
+    metaMode: app.modes.meta,
+    insightsFile: app.config.cabinetInsightsFile,
+    now,
+  });
+  return pushSnapshot(snapshot, {
+    siteUrl: app.config.siteUrl,
+    secret: app.config.cabinetSecret,
+    dataDir: app.config.dataDir,
+    fetchFn: app.fetchFn,
+  });
 }
 
 /** The daily timer job: collect → CAPI retries → rules → report → alerts. */
@@ -136,6 +153,14 @@ export async function runDaily(app: App): Promise<DailySummary> {
     if (al.length) await app.bot.sendText(["🚨 Предупреждения", ...al].join("\n"));
     delivered = "telegram";
   }
+  // After the report: a cabinet failure must not cost the owner her report.
+  let cabinet: PushOutcome;
+  try {
+    cabinet = await pushCabinet(app, now);
+  } catch (e) {
+    log("cabinet.failed", { error: e instanceof Error ? e.name : "unknown" });
+    cabinet = "failed";
+  }
   log("daily.done", { collect_ok: c.ok, rows: c.rows, proposals: rules.proposals, alerts: al.length, delivered: app.telegram.mode });
   return {
     collect: { ok: c.ok, rows: c.rows, mode: c.mode, error: c.error },
@@ -144,5 +169,6 @@ export async function runDaily(app: App): Promise<DailySummary> {
     rules: { proposals: rules.proposals, recorded: rules.recorded.length },
     delivered,
     alerts: al.length,
+    cabinet,
   };
 }

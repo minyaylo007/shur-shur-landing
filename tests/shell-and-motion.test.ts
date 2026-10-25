@@ -118,8 +118,10 @@ describe("motion discipline (brief §14)", () => {
     }
     const pkg = JSON.parse(read("../package.json")) as { dependencies: Record<string, string> };
     // @vercel/analytics: cookieless visitor count, not a visual effect.
+    // @vercel/blob: the owner's cabinet storage (server only), not a visual effect.
     expect(Object.keys(pkg.dependencies).sort()).toEqual([
       "@vercel/analytics",
+      "@vercel/blob",
       "next",
       "react",
       "react-dom",

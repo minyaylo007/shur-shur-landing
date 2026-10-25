@@ -13,6 +13,19 @@ const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
   },
+  /* The private cabinet: never indexed, never cached by anyone on the way. */
+  async headers() {
+    const closed = [
+      { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+      { key: "Cache-Control", value: "private, no-store" },
+      { key: "Referrer-Policy", value: "no-referrer" },
+    ];
+    return [
+      { source: "/cabinet", headers: closed },
+      { source: "/cabinet/:path*", headers: closed },
+      { source: "/api/cabinet/:path*", headers: closed },
+    ];
+  },
   async redirects() {
     return [
       {
