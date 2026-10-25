@@ -1,10 +1,12 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { isSignedIn, SESSION_COOKIE } from "@/lib/cabinet/auth";
-import { metaStatus } from "@/lib/cabinet/meta";
+import { metaStatus, type MetaStatus } from "@/lib/cabinet/meta";
 import { hasRealAds, snapshotSchema, type Snapshot } from "@/lib/cabinet/snapshot";
 import { cabinetStore, SNAPSHOT_KEY } from "@/lib/cabinet/store";
 import { MetaFields } from "./meta-fields";
+import { MetaGuide } from "./meta-guide";
+import { META_MESSAGES } from "./meta-messages";
 
 /* The cabinet itself. No session → the login page. Numbers come from the
    last snapshot only; an empty or fixture snapshot shows an honest plate,
@@ -145,12 +147,6 @@ function Markdown({ text }: { text: string }) {
   );
 }
 
-const META_MESSAGES: Record<string, string> = {
-  saved: "Ключ принят и зашифрован. Сервер рекламы заберёт его при ближайшем обновлении.",
-  invalid: "Ключ, ID аккаунта или ID пикселя не похожи на настоящие — ничего не сохранено.",
-  down: "Ключ сейчас не принимается — ничего не сохранено. Попробуйте позже.",
-};
-
 const kyiv = (ms: number) => new Date(ms).toLocaleString("ru-RU", { timeZone: "Europe/Kyiv" });
 
 export default async function Cabinet({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
@@ -172,13 +168,13 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
     down = true;
   }
 
-  let meta: { pendingSince: number | null; takenAt: number | null } | null = null;
+  let meta: MetaStatus | null = null;
   try {
     meta = await metaStatus();
   } catch {
     meta = null;
   }
-  const metaMessage = m ? META_MESSAGES[m] : undefined;
+  const metaMessage = m && m !== "saved" ? META_MESSAGES[m] : undefined;
 
   const realAds = hasRealAds(snapshot);
   const days = realAds ? snapshot!.ads.days : [];
@@ -278,26 +274,33 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
         </div>
       </section>
 
-      <section className="mt-10 max-w-sm">
+      <section className="mt-10 max-w-xl">
         <h2 className="font-display text-xl">Подключение Meta</h2>
+        {m === "saved" && meta?.accountName ? (
+          <p role="status" className="mt-2 font-medium">
+            Подключено: {meta.accountName}
+          </p>
+        ) : null}
         <p className="mt-2 text-sm text-ink-700">
           {meta?.pendingSince
-            ? `Ключ передан ${kyiv(meta.pendingSince)} (Киев), ждёт переноса на сервер рекламы.`
+            ? `Ключ проверен и передан ${kyiv(meta.pendingSince)} (Киев)${meta.accountName ? ` — аккаунт «${meta.accountName}»` : ""}; сервер рекламы заберёт его при ближайшем обновлении.`
             : meta?.takenAt
-              ? `Ключ перенесён на сервер рекламы ${kyiv(meta.takenAt)} (Киев); здесь его копии нет.`
-              : "Ключ ещё не передан."}
+              ? `Ключ перенесён на сервер рекламы ${kyiv(meta.takenAt)} (Киев)${meta.accountName ? ` — аккаунт «${meta.accountName}»` : ""}; здесь его копии нет.`
+              : "Ключ ещё не передан. Пройдите шаги по порядку — это займёт минут 15."}
         </p>
         {metaMessage ? (
-          <p role="status" className="mt-2 text-sm text-cherry-600">
+          <p role="alert" className="mt-2 text-sm text-cherry-600">
             {metaMessage}
           </p>
         ) : null}
         <form method="post" action="/api/cabinet/meta" className="mt-4 space-y-4">
+          {meta?.pendingSince || meta?.takenAt ? null : <MetaGuide />}
           <MetaFields required />
           <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-2 text-cream-type">
-            {meta?.pendingSince || meta?.takenAt ? "Заменить ключ" : "Передать ключ"}
+            Проверить и сохранить
           </button>
         </form>
+        <p className="mt-4 text-sm text-ink-700">Если застряли — напишите Игорю.</p>
       </section>
     </div>
   );

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { isSignedIn, SESSION_COOKIE } from "@/lib/cabinet/auth";
+import { checkMetaKey } from "@/lib/cabinet/meta-check";
 import { metaConfigured, readMetaFields, saveMeta } from "@/lib/cabinet/meta";
 
 export const runtime = "nodejs";
 
 /* The cabinet form posts her Meta key here (signed-in only). Write-only: the
-   key is encrypted and stored, the answer is a redirect with a status word —
+   key is checked with one read request to Meta, then encrypted and stored, the answer is a redirect with a status word —
    nothing of what she typed comes back. */
 
 function back(request: Request, m: string): NextResponse {
@@ -33,15 +34,21 @@ export async function POST(request: Request) {
   try {
     meta = readMetaFields(await request.formData());
   } catch {
-    return back(request, "invalid");
+    return back(request, "token_format");
   }
-  if (!meta.given || !meta.input) return back(request, "invalid");
+  if (!meta.given) return back(request, "token_format");
+  if (!meta.input) return back(request, meta.error);
   if (!metaConfigured()) {
     console.error("[cabinet] meta key refused: missing env CABINET_META_KEY");
     return back(request, "down");
   }
+  const check = await checkMetaKey(meta.input);
+  if (!check.ok) {
+    console.info(`[cabinet] meta key refused: ${check.reason}`);
+    return back(request, check.reason);
+  }
   try {
-    await saveMeta(meta.input);
+    await saveMeta(meta.input, check.accountName);
   } catch (error) {
     console.error(`[cabinet] meta key store failed: ${error instanceof Error ? error.name : "unknown"}`);
     return back(request, "down");

@@ -7,7 +7,7 @@ export function MetaFields({ required = false }: { required?: boolean }) {
   return (
     <>
       <label className="block">
-        <span className="text-sm text-ink-700">Ключ Meta (токен системного пользователя, право ads_read)</span>
+        <span className="text-sm text-ink-700">Ключ доступа (на экране Meta — «маркер», token; шаг 4)</span>
         <input
           type="password"
           name="meta_token"
@@ -18,7 +18,7 @@ export function MetaFields({ required = false }: { required?: boolean }) {
         />
       </label>
       <label className="block">
-        <span className="text-sm text-ink-700">ID рекламного аккаунта</span>
+        <span className="text-sm text-ink-700">Номер рекламного аккаунта (ID; шаг 5)</span>
         <input
           type="text"
           name="meta_account"
@@ -30,7 +30,7 @@ export function MetaFields({ required = false }: { required?: boolean }) {
         />
       </label>
       <label className="block">
-        <span className="text-sm text-ink-700">ID пикселя</span>
+        <span className="text-sm text-ink-700">Номер пикселя (ID; шаг 5)</span>
         <input
           type="text"
           name="meta_dataset"

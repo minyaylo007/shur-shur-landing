@@ -313,6 +313,19 @@ describe("cabinet: her Meta key is write-only", () => {
     const res = await SETUP(form("/api/cabinet/setup", { t: token, password: PASS, repeat: PASS, ...fields }));
     return { token, res };
   }
+  /* Meta itself: one GET for the account name. Tests answer instead of it. */
+  let graph: { url: string; auth: string | null }[] = [];
+  let graphAnswer: () => Response = () => Response.json({ name: "SHUR Ads", id: "act_1234567890" });
+  beforeEach(() => {
+    graph = [];
+    graphAnswer = () => Response.json({ name: "SHUR Ads", id: "act_1234567890" });
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      graph.push({ url: String(url), auth: new Headers(init?.headers).get("authorization") });
+      return graphAnswer();
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
   const take = async () => (await (await META_PICKUP(signed("/api/cabinet/meta-pickup", { action: "take" }))).json()).pending;
   const decrypt = (e: { iv: string; tag: string; ct: string }) => {
     const d = createDecipheriv("aes-256-gcm", META_KEY, Buffer.from(e.iv, "base64"));
@@ -330,7 +343,12 @@ describe("cabinet: her Meta key is write-only", () => {
 
     cookieJar.set(auth.SESSION_COOKIE, /shur_cabinet=([^;]+)/.exec(res.headers.get("set-cookie")!)![1]);
     const html = renderToStaticMarkup(await CabinetPage("saved"));
-    expect(html).toContain("ждёт переноса");
+    expect(html).toContain("Подключено: SHUR Ads");
+    expect(leaks(html)).toBe(false);
+    // The check went to Meta with the key in the header, never in the URL.
+    expect(graph).toHaveLength(1);
+    expect(graph[0].url).toMatch(/^https:\/\/graph\.facebook\.com\/v\d+\.\d+\/act_1234567890\?fields=name$/);
+    expect(graph[0].auth).toBe(`Bearer ${KEY}`);
     expect(leaks(html)).toBe(false);
 
     const taken = await META_PICKUP(signed("/api/cabinet/meta-pickup", { action: "take" }));
@@ -382,8 +400,18 @@ describe("cabinet: her Meta key is write-only", () => {
 
   it("a malformed key does not spend the link and is not stored", async () => {
     const { token, res } = await setUp({ ...FIELDS, meta_dataset: "not-a-number" });
-    expect(res.headers.get("location")).toContain("e=meta_invalid");
+    expect(res.headers.get("location")).toContain("e=meta_dataset_format");
     expect(res.headers.get("set-cookie")).toBeNull();
+    expect(leaks(await wire(res))).toBe(false);
+    expect(await auth.setupLinkValid(token)).toBe(true);
+    expect(store.has(META_STORE_KEY)).toBe(false);
+  });
+
+  it("Meta refuses the key → plain reason, link kept, nothing stored, key not echoed", async () => {
+    graphAnswer = () =>
+      Response.json({ error: { code: 190, error_subcode: 463, message: `Session has expired ${KEY}` } }, { status: 400 });
+    const { token, res } = await setUp();
+    expect(res.headers.get("location")).toContain("e=meta_expired");
     expect(leaks(await wire(res))).toBe(false);
     expect(await auth.setupLinkValid(token)).toBe(true);
     expect(store.has(META_STORE_KEY)).toBe(false);

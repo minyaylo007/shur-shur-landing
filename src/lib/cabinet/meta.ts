@@ -35,7 +35,12 @@ export type MetaInput = z.infer<typeof metaInputSchema>;
 const envelopeSchema = z.object({ iv: z.string(), tag: z.string(), ct: z.string(), saved_at: z.number() });
 export type MetaEnvelope = z.infer<typeof envelopeSchema>;
 
-const stateSchema = z.object({ pending: envelopeSchema.nullable(), taken_at: z.number().nullable() });
+const stateSchema = z.object({
+  pending: envelopeSchema.nullable(),
+  taken_at: z.number().nullable(),
+  /** What Meta called the account when the key was checked — shown, not secret. */
+  account_name: z.string().nullable().default(null),
+});
 type MetaState = z.infer<typeof stateSchema>;
 
 export class MetaNotConfiguredError extends Error {
@@ -61,16 +66,36 @@ export function metaConfigured(): boolean {
   }
 }
 
-/** Form fields → input. Every field empty = she gave no key (not an error). */
-export function readMetaFields(form: FormData): { given: false } | { given: true; input: MetaInput | null } {
+/** Which field is wrong — the page explains each in plain words. */
+export type MetaFieldError = "token_format" | "account_format" | "dataset_format";
+
+export type MetaFields =
+  | { given: false }
+  | { given: true; input: MetaInput; error?: undefined }
+  | { given: true; input: null; error: MetaFieldError };
+
+const FIELD_ERROR: Record<keyof MetaInput, MetaFieldError> = {
+  token: "token_format",
+  ad_account_id: "account_format",
+  dataset_id: "dataset_format",
+};
+
+/**
+ * Form fields → input. Every field empty = she gave no key (not an error).
+ * Spaces and line breaks from copy-paste are dropped; the account id is
+ * taken with or without «act_».
+ */
+export function readMetaFields(form: FormData): MetaFields {
   const text = (name: string) => {
     const v = form.get(name);
-    return typeof v === "string" ? v.trim() : "";
+    return typeof v === "string" ? v.replace(/\s+/g, "") : "";
   };
   const raw = { token: text("meta_token"), ad_account_id: text("meta_account"), dataset_id: text("meta_dataset") };
   if (!raw.token && !raw.ad_account_id && !raw.dataset_id) return { given: false };
   const parsed = metaInputSchema.safeParse(raw);
-  return { given: true, input: parsed.success ? parsed.data : null };
+  if (parsed.success) return { given: true, input: parsed.data };
+  const field = parsed.error.issues[0]?.path[0] as keyof MetaInput | undefined;
+  return { given: true, input: null, error: FIELD_ERROR[field ?? "token"] };
 }
 
 function encrypt(input: MetaInput, nowMs: number): MetaEnvelope {
@@ -88,23 +113,30 @@ function encrypt(input: MetaInput, nowMs: number): MetaEnvelope {
 
 async function readState(): Promise<{ state: MetaState; etag: string | undefined }> {
   const stored = await cabinetStore().read(META_STORE_KEY);
-  if (!stored) return { state: { pending: null, taken_at: null }, etag: undefined };
+  if (!stored) return { state: { pending: null, taken_at: null, account_name: null }, etag: undefined };
   const parsed = stateSchema.safeParse(JSON.parse(stored.text));
   if (!parsed.success) throw new Error("cabinet meta state is malformed");
   return { state: parsed.data, etag: stored.etag };
 }
 
 /** A newer key replaces one that was not taken yet. */
-export async function saveMeta(input: MetaInput, nowMs = Date.now()): Promise<void> {
+export async function saveMeta(input: MetaInput, accountName: string | null = null, nowMs = Date.now()): Promise<void> {
   const envelope = encrypt(input, nowMs);
   const { state } = await readState();
-  await cabinetStore().write(META_STORE_KEY, JSON.stringify({ pending: envelope, taken_at: state.taken_at }));
+  const next: MetaState = { pending: envelope, taken_at: state.taken_at, account_name: accountName };
+  await cabinetStore().write(META_STORE_KEY, JSON.stringify(next));
 }
 
-/** For the page: dates only, never a character of the key. */
-export async function metaStatus(): Promise<{ pendingSince: number | null; takenAt: number | null }> {
+export interface MetaStatus {
+  pendingSince: number | null;
+  takenAt: number | null;
+  accountName: string | null;
+}
+
+/** For the page: dates and the account name only, never a character of the key. */
+export async function metaStatus(): Promise<MetaStatus> {
   const { state } = await readState();
-  return { pendingSince: state.pending?.saved_at ?? null, takenAt: state.taken_at };
+  return { pendingSince: state.pending?.saved_at ?? null, takenAt: state.taken_at, accountName: state.account_name };
 }
 
 /** ads-engine (signed): the ciphertext, or null when nothing waits. */
@@ -126,7 +158,8 @@ export async function ackMeta(digest: string, nowMs = Date.now()): Promise<"eras
     if (!state.pending) return "none";
     if (envelopeDigest(state.pending) !== digest) return "changed";
     try {
-      await cabinetStore().write(META_STORE_KEY, JSON.stringify({ pending: null, taken_at: nowMs }), etag);
+      const next: MetaState = { pending: null, taken_at: nowMs, account_name: state.account_name };
+      await cabinetStore().write(META_STORE_KEY, JSON.stringify(next), etag);
       return "erased";
     } catch (error) {
       if (!(error instanceof StoreConflictError)) throw error;

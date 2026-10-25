@@ -140,6 +140,12 @@ export async function setupLinkValid(token: string | undefined, nowMs = Date.now
   return !!state.setup && state.setup.expiresAt > nowMs && sameHex(state.setup.tokenHash, hashSetupToken(token));
 }
 
+export function passwordProblem(password: string, repeat: string): "weak_password" | "mismatch" | null {
+  if (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) return "weak_password";
+  if (password !== repeat) return "mismatch";
+  return null;
+}
+
 export type SetupOutcome = { ok: true; session: string } | { ok: false; error: "bad_link" | "weak_password" | "mismatch" };
 
 /**
@@ -156,8 +162,8 @@ export async function completeSetup(
   if (!state.setup || state.setup.expiresAt <= nowMs || !sameHex(state.setup.tokenHash, hashSetupToken(token))) {
     return { ok: false, error: "bad_link" };
   }
-  if (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) return { ok: false, error: "weak_password" };
-  if (password !== repeat) return { ok: false, error: "mismatch" };
+  const problem = passwordProblem(password, repeat);
+  if (problem) return { ok: false, error: problem };
 
   const sessionKey = randomBytes(32).toString("hex");
   const next: AuthState = {
