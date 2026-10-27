@@ -140,10 +140,30 @@ const DELIVERY_COLUMNS: [string, string][] = [
   ["delivery_gave_up_at", "TEXT"],
 ];
 
+function columns(db: Db, table: string): Set<string> {
+  return new Set((db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name));
+}
+
+/* 27.10.2026: fixture rows lived next to live ones in insights/budgets, and the
+   report, alerts and cabinet summed both. Each row now carries the reader mode
+   that wrote it, and every read filters by the current Meta mode. Old rows are
+   marked by the collector run that wrote them (fetched_at = collector_runs.at). */
+function migrateMode(db: Db): void {
+  for (const table of ["insights", "budgets"]) {
+    if (columns(db, table).has("mode")) continue;
+    tx(db, () => {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN mode TEXT NOT NULL DEFAULT 'live'`);
+      db.exec(
+        `UPDATE ${table} SET mode = 'fixtures'
+          WHERE fetched_at IN (SELECT at FROM collector_runs WHERE mode = 'fixtures')`,
+      );
+    });
+  }
+}
+
 function migrate(db: Db): void {
-  const have = new Set(
-    (db.prepare("PRAGMA table_info(leads)").all() as { name: string }[]).map((c) => c.name),
-  );
+  migrateMode(db);
+  const have = columns(db, "leads");
   if (have.has("delivered_at")) return;
   tx(db, () => {
     for (const [name, type] of DELIVERY_COLUMNS) {
