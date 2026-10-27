@@ -70,7 +70,7 @@ const dict = {
      No city badge, no row of competing contact links. */
   hero: {
     titleLines: ["ЗНІМАЄМО", "КОНТЕНТ,", "ЯКИЙ ПРОДАЄ"],
-    subtitle: "Зйомка, монтаж, соцмережі, реклама.",
+    subtitle: "Зйомка, монтаж, соцмережі й реклама — у Чернівцях і дистанційно.",
     cta: "Обговорити проєкт",
     secondary: "Дивитись роботи",
     direct: "Написати в Direct",
