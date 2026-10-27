@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import type { Db } from "../db.ts";
-import { tx } from "../db.ts";
+import { tx, kvGet, kvSet } from "../db.ts";
 import type { Market } from "../config.ts";
 import { deriveMarket } from "../leads.ts";
 import { addDays, dateInZone } from "../time.ts";
-import { GraphReader, type FetchLike } from "./graph.ts";
+import { GraphError, GraphReader, type FetchLike } from "./graph.ts";
 import { log } from "../log.ts";
 
 /* Insights collector. Read-only by construction: the reader interface has no
@@ -15,6 +15,11 @@ import { log } from "../log.ts";
 export type Level = "campaign" | "adset" | "ad";
 export const LEVELS: Level[] = ["campaign", "adset", "ad"];
 export const REREAD_DAYS = 7;
+/* The whole account, not a recent window: Meta keeps insights for 37 months,
+   so the first run per reader mode reads ~36 of them, in 90-day pieces so no
+   single request asks for too much. After that, the 7-day re-read. */
+export const ALL_TIME_DAYS = 1095;
+export const CHUNK_DAYS = 90;
 
 export interface AccountInfo {
   currency: string;
@@ -34,6 +39,11 @@ export interface InsightRow {
   impressions: number;
   clicks: number;
   platform_leads: number;
+  /** Messaging conversations started (Direct / Messenger / WhatsApp), 7-day click window. */
+  conversations: number;
+  /** Instant-form (on-Facebook) leads; platform_leads counts pixel leads too. */
+  form_leads: number;
+  landing_views: number;
 }
 
 export interface BudgetRow {
@@ -73,6 +83,22 @@ function leadsFromActions(actions: { action_type: string; value: string }[] | un
   return LEAD_ACTIONS.slice(1).reduce((s, k) => s + (by.get(k) ?? 0), 0);
 }
 
+function actionValue(actions: { action_type: string; value: string }[] | undefined, ...types: string[]): number {
+  for (const t of types) {
+    const hit = actions?.find((a) => a.action_type === t);
+    if (hit) return Number(hit.value) || 0;
+  }
+  return 0;
+}
+
+/* Every delivery status: without this filter account-level insights may leave
+   out archived and deleted ads, and the history ends where the oldest
+   still-visible campaign starts. */
+const ALL_STATUSES = [
+  "ACTIVE", "PAUSED", "DELETED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED", "PENDING_BILLING_INFO",
+  "CAMPAIGN_PAUSED", "ARCHIVED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES",
+];
+
 interface RawInsight {
   date_start: string;
   campaign_id: string;
@@ -93,6 +119,8 @@ export class MetaHttpReader implements AdsReader {
   private readonly graph: GraphReader;
   private readonly accountId: string;
   private cachedAccount: AccountInfo | undefined;
+  /** False once Meta refused the status filter: read without it from then on. */
+  private statusFilter = true;
 
   constructor(token: string, adAccountId: string, fetchFn?: FetchLike) {
     this.graph = new GraphReader(token, fetchFn);
@@ -121,13 +149,28 @@ export class MetaHttpReader implements AdsReader {
       "clicks",
       "actions",
     ].join(",");
-    const raw = await this.graph.getAll<RawInsight>(`${this.accountId}/insights`, {
+    const params: Record<string, string> = {
       level,
       fields,
       time_increment: "1",
       time_range: JSON.stringify({ since, until }),
       limit: "500",
-    });
+    };
+    const path = `${this.accountId}/insights`;
+    let raw: RawInsight[] | undefined;
+    if (this.statusFilter) {
+      try {
+        raw = await this.graph.getAll<RawInsight>(path, {
+          ...params,
+          filtering: JSON.stringify([{ field: "ad.effective_status", operator: "IN", value: ALL_STATUSES }]),
+        });
+      } catch (error) {
+        if (!(error instanceof GraphError && error.code === 100)) throw error;
+        log("collect.status_filter_refused", { level });
+        this.statusFilter = false;
+      }
+    }
+    raw ??= await this.graph.getAll<RawInsight>(path, params);
     return raw.map((r) => ({
       level,
       object_id: level === "campaign" ? r.campaign_id : level === "adset" ? r.adset_id! : r.ad_id!,
@@ -142,6 +185,9 @@ export class MetaHttpReader implements AdsReader {
       impressions: Number(r.impressions ?? 0),
       clicks: Number(r.clicks ?? 0),
       platform_leads: leadsFromActions(r.actions),
+      conversations: actionValue(r.actions, "onsite_conversion.messaging_conversation_started_7d"),
+      form_leads: actionValue(r.actions, "onsite_conversion.lead_grouped", "leadgen_grouped"),
+      landing_views: actionValue(r.actions, "landing_page_view"),
     }));
   }
 
@@ -175,10 +221,12 @@ export class MetaHttpReader implements AdsReader {
 /* Fixture mode: no token, same pipeline. Days are offsets from “today” in the
    fixture account's zone, so the dry run looks fresh instead of raising a
    stale-data alert forever. Every fixture id is fake. */
+type MessagingFields = "conversations" | "form_leads" | "landing_views";
+
 interface FixtureFile {
   account: AccountInfo;
   budgets: (Omit<BudgetRow, "created_time"> & { created_days_ago: number })[];
-  rows: (Omit<InsightRow, "date"> & { day_offset: number })[];
+  rows: (Omit<InsightRow, "date" | MessagingFields> & Partial<Pick<InsightRow, MessagingFields>> & { day_offset: number })[];
 }
 
 export class FixtureReader implements AdsReader {
@@ -204,7 +252,7 @@ export class FixtureReader implements AdsReader {
     const today = this.today();
     return this.data.rows
       .filter((r) => r.level === level)
-      .map(({ day_offset, ...r }) => ({ ...r, date: addDays(today, day_offset) }))
+      .map(({ day_offset, ...r }) => ({ conversations: 0, form_leads: 0, landing_views: 0, ...r, date: addDays(today, day_offset) }))
       .filter((r) => r.date >= since && r.date <= until);
   }
 
@@ -239,11 +287,21 @@ export async function collect(
     const have = db.prepare("SELECT COUNT(*) AS n FROM insights WHERE source = ? AND mode = ?").get(reader.source, reader.mode) as {
       n: number;
     };
-    const since = addDays(today, -(have.n === 0 ? (opts.backfillDays ?? 30) : REREAD_DAYS));
+    // A ledger that only ever read a recent window (before 27.10.2026) reads the whole account once.
+    const allTimeKey = `meta_all_time:${reader.source}:${reader.mode}`;
+    const firstRun = have.n === 0 || !kvGet(db, allTimeKey);
+    const since = addDays(today, -(firstRun ? (opts.backfillDays ?? ALL_TIME_DAYS) : REREAD_DAYS));
     const until = today;
 
     const byLevel = new Map<Level, InsightRow[]>();
-    for (const level of LEVELS) byLevel.set(level, await reader.insights(level, since, until));
+    for (const level of LEVELS) {
+      const list: InsightRow[] = [];
+      for (let from = since; from <= until; from = addDays(from, CHUNK_DAYS)) {
+        const to = addDays(from, CHUNK_DAYS - 1);
+        list.push(...(await reader.insights(level, from, to < until ? to : until)));
+      }
+      byLevel.set(level, list);
+    }
     const budgets = await reader.budgets();
 
     let rows = 0;
@@ -255,9 +313,10 @@ export async function collect(
         until,
       );
       const ins = db.prepare(
-        `INSERT INTO insights(source, level, object_id, date, campaign_id, campaign_name, adset_id, ad_id,
-           object_name, market, spend, currency, timezone, impressions, clicks, platform_leads, fetched_at, mode)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT OR REPLACE INTO insights(source, level, object_id, date, campaign_id, campaign_name, adset_id, ad_id,
+           object_name, market, spend, currency, timezone, impressions, clicks, platform_leads,
+           conversations, form_leads, landing_views, fetched_at, mode)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       );
       for (const list of byLevel.values()) {
         for (const r of list) {
@@ -278,6 +337,9 @@ export async function collect(
             r.impressions,
             r.clicks,
             r.platform_leads,
+            r.conversations,
+            r.form_leads,
+            r.landing_views,
             at,
             reader.mode,
           );
@@ -303,6 +365,7 @@ export async function collect(
           reader.mode,
         );
       }
+      if (firstRun) kvSet(db, allTimeKey, since);
       db.prepare("INSERT INTO collector_runs(at, source, mode, ok, rows) VALUES(?,?,?,?,?)").run(
         at,
         reader.source,

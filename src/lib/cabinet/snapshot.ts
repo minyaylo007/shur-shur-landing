@@ -29,6 +29,21 @@ export const adsDaySchema = z.strictObject({
   leads: count,
 });
 
+/** One campaign over all time the ledger has (paused and finished ones too). */
+export const allTimeCampaignSchema = z.strictObject({
+  campaign: z.string().min(1).max(200),
+  status: z.string().regex(/^[A-Z_]{1,40}$/).nullable(),
+  spend: money,
+  impressions: count,
+  clicks: count,
+  /** Direct / Messenger conversations started after a click (Meta, 7 days). */
+  conversations: count,
+  /** Meta instant-form leads. */
+  form_leads: count,
+  landing_views: count,
+  leads: count,
+});
+
 export const siteDaySchema = z.strictObject({
   date,
   /** null = no source for this counter yet; shown as «нет данных», never 0. */
@@ -48,6 +63,12 @@ export const snapshotSchema = z.strictObject({
   ads: z.strictObject({
     connected: z.boolean(),
     days: z.array(adsDaySchema).max(5000),
+    all_time: z
+      .strictObject({
+        since: date,
+        campaigns: z.array(allTimeCampaignSchema).max(500),
+      })
+      .optional(),
   }),
   site: z.strictObject({
     days: z.array(siteDaySchema).max(400),
@@ -70,6 +91,7 @@ const PHONE = /\+\s*\d(?:[\s().-]*\d){7,}|\d{10,}/;
 export function personalDataHits(snapshot: Snapshot): string[] {
   const texts: [string, string][] = [
     ...snapshot.ads.days.map((d, i): [string, string] => [`ads.days[${i}].campaign`, d.campaign]),
+    ...(snapshot.ads.all_time?.campaigns ?? []).map((c, i): [string, string] => [`ads.all_time.campaigns[${i}].campaign`, c.campaign]),
     ...(snapshot.insights ? [["insights.markdown", snapshot.insights.markdown] as [string, string]] : []),
   ];
   return texts.filter(([, text]) => EMAIL.test(text) || PHONE.test(text)).map(([where]) => where);

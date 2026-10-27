@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *    string, is refused whole and never stored;
  *  - the setup link works once: the second use, a stale or a foreign token fail;
  *  - her Meta key is write-only: no site response carries it, it is stored
- *    encrypted, handed out only signed and only as ciphertext, then erased.
+ *    encrypted, handed out only signed and only as ciphertext, then erased;
+ *  - her ops-bot token, the same: no response carries it (27.10.2026).
  */
 
 const redirectMock = vi.fn((url: string) => {
@@ -35,6 +36,9 @@ const { default: SetupPage } = await import("../src/app/cabinet/setup/page");
 const { POST: META } = await import("../src/app/api/cabinet/meta/route");
 const { POST: META_PICKUP } = await import("../src/app/api/cabinet/meta-pickup/route");
 const { META_STORE_KEY, META_AAD, envelopeDigest, saveMeta } = await import("../src/lib/cabinet/meta");
+const { POST: OPS_BOT } = await import("../src/app/api/cabinet/ops-bot/route");
+const { POST: OPS_PICKUP } = await import("../src/app/api/cabinet/ops-pickup/route");
+const { OPS_BOT_STORE_KEY, OPS_BOT_AAD } = await import("../src/lib/cabinet/ops-bot");
 
 const CabinetPage = (m?: string) => CabinetPageComponent({ searchParams: Promise.resolve(m ? { m } : {}) });
 
@@ -472,5 +476,105 @@ describe("cabinet: her Meta key is write-only", () => {
     expect(res.headers.get("location")).toContain("e=meta_down");
     expect(await auth.setupLinkValid(token)).toBe(true);
     expect(store.has(META_STORE_KEY)).toBe(false);
+  });
+});
+
+describe("cabinet: her ops-bot token is write-only", () => {
+  const PASS = "correct horse battery";
+  const TOKEN = "7123456789:" + randomBytes(27).toString("base64url").slice(0, 35);
+  const CHAT = 123456789;
+
+  async function wire(res: Response): Promise<string> {
+    return `${res.status} ${JSON.stringify([...res.headers])} ${await res.clone().text()}`;
+  }
+  function leaks(text: string): boolean {
+    // The token, its secret half, any 10-char piece of it, or its base64.
+    const secret = TOKEN.split(":")[1];
+    const pieces = [TOKEN, secret, Buffer.from(TOKEN).toString("base64")];
+    for (let i = 0; i + 10 <= secret.length; i += 5) pieces.push(secret.slice(i, i + 10));
+    return pieces.some((p) => text.includes(p));
+  }
+  /** A signed-in session: the setup link with a password and no Meta key. */
+  async function session(): Promise<string> {
+    const t = randomBytes(32).toString("base64url");
+    await issueLink(t);
+    const res = await SETUP(form("/api/cabinet/setup", { t, password: PASS, repeat: PASS }));
+    return /shur_cabinet=([^;]+)/.exec(res.headers.get("set-cookie")!)![1];
+  }
+  function botForm(cookie: string | null, fields: Record<string, string>): Request {
+    return new Request("https://shur-shur.com/api/cabinet/ops-bot", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", ...(cookie ? { cookie: `${auth.SESSION_COOKIE}=${cookie}` } : {}) },
+      body: new URLSearchParams(fields).toString(),
+    });
+  }
+  /* Telegram itself: getMe proves the token, getUpdates finds her /start. */
+  let calls: string[] = [];
+  beforeEach(() => {
+    calls = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      const u = String(url);
+      calls.push(u.replace(/bot[^/]+\//, "bot<token>/"));
+      if (!u.startsWith(`https://api.telegram.org/bot${TOKEN}/`)) return Response.json({ ok: false, description: "Unauthorized" }, { status: 401 });
+      if (u.endsWith("/getMe")) return Response.json({ ok: true, result: { id: 7123456789, is_bot: true, username: "shur_ops_bot" } });
+      if (u.endsWith("/getUpdates"))
+        return Response.json({ ok: true, result: [{ update_id: 1, message: { chat: { id: CHAT, type: "private" }, from: { first_name: "Test" }, text: "/start" } }] });
+      return Response.json({ ok: false }, { status: 404 });
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const decrypt = (e: { iv: string; tag: string; ct: string }) => {
+    const d = createDecipheriv("aes-256-gcm", META_KEY, Buffer.from(e.iv, "base64"));
+    d.setAAD(Buffer.from(OPS_BOT_AAD));
+    d.setAuthTag(Buffer.from(e.tag, "base64"));
+    return JSON.parse(Buffer.concat([d.update(Buffer.from(e.ct, "base64")), d.final()]).toString("utf8"));
+  };
+
+  it("no site response carries the token: form redirect, cabinet page, pickup, ack", async () => {
+    const cookie = await session();
+    const res = await OPS_BOT(botForm(cookie, { bot_token: TOKEN, bot_chat: "" }));
+    expect(res.headers.get("location")).toMatch(/\/cabinet\?o=saved#ops-bot$/);
+    expect(leaks(await wire(res))).toBe(false);
+    expect(leaks(store.get(OPS_BOT_STORE_KEY)!.text)).toBe(false);
+    expect(calls).toEqual(["https://api.telegram.org/bot<token>/getMe", "https://api.telegram.org/bot<token>/getUpdates"]);
+
+    cookieJar.set(auth.SESSION_COOKIE, cookie);
+    const html = renderToStaticMarkup(await CabinetPageComponent({ searchParams: Promise.resolve({ o: "saved" }) }));
+    expect(html).toContain("@shur_ops_bot");
+    expect(leaks(html)).toBe(false);
+
+    const taken = await OPS_PICKUP(signed("/api/cabinet/ops-pickup", { action: "take" }));
+    expect(taken.status).toBe(200);
+    expect(leaks(await wire(taken))).toBe(false);
+    const { pending } = await taken.json();
+    // Only the ciphertext, of exactly her token and the chat she wrote /start in.
+    expect(decrypt(pending)).toEqual({ token: TOKEN, chat_id: String(CHAT) });
+
+    const ack = await OPS_PICKUP(signed("/api/cabinet/ops-pickup", { action: "ack", digest: envelopeDigest(pending) }));
+    expect(leaks(await wire(ack))).toBe(false);
+    expect((await ack.json()).result).toBe("erased");
+    expect(JSON.parse(store.get(OPS_BOT_STORE_KEY)!.text).pending).toBeNull();
+  });
+
+  it("a refused or malformed token is not echoed and not stored", async () => {
+    const cookie = await session();
+    const wrong = "7123456789:" + "Z".repeat(35);
+    const tries: Record<string, string>[] = [{ bot_token: wrong }, { bot_token: TOKEN + "!!" }, { bot_token: TOKEN, bot_chat: "abc" }];
+    for (const fields of tries) {
+      const res = await OPS_BOT(botForm(cookie, fields));
+      expect(res.headers.get("location")).toMatch(/\/cabinet\?o=bot_(refused|token_format|chat_format)#ops-bot$/);
+      expect(leaks(await wire(res))).toBe(false);
+      expect(await wire(res)).not.toContain("Z".repeat(20));
+    }
+    expect(store.has(OPS_BOT_STORE_KEY)).toBe(false);
+  });
+
+  it("without a session or a signature nothing is stored or handed out", async () => {
+    const res = await OPS_BOT(botForm(null, { bot_token: TOKEN }));
+    expect(res.headers.get("location")).toMatch(/\/cabinet\/login$/);
+    expect(store.has(OPS_BOT_STORE_KEY)).toBe(false);
+    const foreign = await OPS_PICKUP(signed("/api/cabinet/ops-pickup", { action: "take" }, "ledger-secret"));
+    expect(foreign.status).toBe(401);
   });
 });

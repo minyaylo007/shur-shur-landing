@@ -9,7 +9,11 @@ import type { FetchLike } from "./meta/graph.ts";
    it back; this module takes the ciphertext with a request signed by
    CABINET_HMAC_SECRET, opens it here, writes META_ACCESS_TOKEN /
    META_AD_ACCOUNT_ID / META_DATASET_ID into the 600 env file, and only then
-   acks — the site erases its copy. Values never reach a log: names only. */
+   acks — the site erases its copy. Values never reach a log: names only.
+
+   The ops-bot token (the Telegram bot for reports and /client) comes the same
+   way through its own slot: /api/cabinet/ops-pickup, its own AAD, written as
+   SHUR_OPS_BOT_TOKEN / SHUR_OPS_CHAT_ID. */
 
 export const META_AAD = "shur-cabinet-meta-v1";
 export const ENV_NAMES = { token: "META_ACCESS_TOKEN", ad_account_id: "META_AD_ACCOUNT_ID", dataset_id: "META_DATASET_ID" } as const;
@@ -37,21 +41,48 @@ interface Envelope {
   ct: string;
 }
 
-const SHAPE = {
-  token: /^[A-Za-z0-9_\-.|]{40,1024}$/,
-  ad_account_id: /^\d{5,25}$/,
-  dataset_id: /^\d{5,25}$/,
+/** One sealed slot on the site: where to take it, its AAD, field shapes → env names. */
+interface Slot {
+  /** Log prefix. */
+  name: string;
+  path: string;
+  aad: string;
+  fields: Record<string, { re: RegExp; env: string }>;
+}
+
+const META_SLOT: Slot = {
+  name: "meta_key",
+  path: "/api/cabinet/meta-pickup",
+  aad: META_AAD,
+  fields: {
+    token: { re: /^[A-Za-z0-9_\-.|]{40,1024}$/, env: ENV_NAMES.token },
+    ad_account_id: { re: /^\d{5,25}$/, env: ENV_NAMES.ad_account_id },
+    dataset_id: { re: /^\d{5,25}$/, env: ENV_NAMES.dataset_id },
+  },
 };
 
-function open(envelope: Envelope, key: Buffer): Record<keyof typeof ENV_NAMES, string> {
+export const OPS_BOT_AAD = "shur-cabinet-ops-bot-v1";
+const OPS_BOT_SLOT: Slot = {
+  name: "ops_bot",
+  path: "/api/cabinet/ops-pickup",
+  aad: OPS_BOT_AAD,
+  fields: {
+    token: { re: /^\d{5,15}:[A-Za-z0-9_-]{30,50}$/, env: "SHUR_OPS_BOT_TOKEN" },
+    chat_id: { re: /^-?\d{3,20}$/, env: "SHUR_OPS_CHAT_ID" },
+  },
+};
+
+function open(slot: Slot, envelope: Envelope, key: Buffer): Record<string, string> {
   const d = createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64"));
-  d.setAAD(Buffer.from(META_AAD));
+  d.setAAD(Buffer.from(slot.aad));
   d.setAuthTag(Buffer.from(envelope.tag, "base64"));
   const plain = JSON.parse(Buffer.concat([d.update(Buffer.from(envelope.ct, "base64")), d.final()]).toString("utf8"));
-  for (const [field, re] of Object.entries(SHAPE)) {
+  const values: Record<string, string> = {};
+  for (const [field, { re, env }] of Object.entries(slot.fields)) {
     if (typeof plain?.[field] !== "string" || !re.test(plain[field])) throw new Error(`bad field ${field}`);
+    values[env] = plain[field];
   }
-  return plain;
+  return values;
 }
 
 /** Replace (or append) the three lines, keep every other line; 600, atomic. */
@@ -85,10 +116,10 @@ interface PickupAnswer {
   result?: string;
 }
 
-async function post(cfg: MetaKeyConfig, payload: unknown): Promise<{ status: number; answer: PickupAnswer | null }> {
+async function post(slot: Slot, cfg: MetaKeyConfig, payload: unknown): Promise<{ status: number; answer: PickupAnswer | null }> {
   const body = JSON.stringify(payload);
   const ts = String(Math.floor(Date.now() / 1000));
-  const res = await (cfg.fetchFn ?? fetch)(`${cfg.siteUrl!.replace(/\/+$/, "")}/api/cabinet/meta-pickup`, {
+  const res = await (cfg.fetchFn ?? fetch)(`${cfg.siteUrl!.replace(/\/+$/, "")}${slot.path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shur-Timestamp": ts, "X-Shur-Signature": sign(cfg.secret!, ts, body) },
     body,
@@ -103,48 +134,52 @@ async function post(cfg: MetaKeyConfig, payload: unknown): Promise<{ status: num
   return { status: res.status, answer };
 }
 
-export async function pickupMetaKey(cfg: MetaKeyConfig): Promise<MetaKeyResult> {
+export function pickupMetaKey(cfg: MetaKeyConfig): Promise<MetaKeyResult> {
+  return pickup(META_SLOT, cfg);
+}
+
+/** Her ops-bot token from the cabinet → SHUR_OPS_BOT_TOKEN / SHUR_OPS_CHAT_ID. */
+export function pickupOpsBot(cfg: MetaKeyConfig): Promise<MetaKeyResult> {
+  return pickup(OPS_BOT_SLOT, cfg);
+}
+
+async function pickup(slot: Slot, cfg: MetaKeyConfig): Promise<MetaKeyResult> {
   const key = Buffer.from(cfg.cryptKey ?? "", "base64");
   if (!cfg.siteUrl || !cfg.secret || key.length !== 32) {
     const missing = [cfg.siteUrl ? null : "SHUR_SITE_URL", cfg.secret ? null : "CABINET_HMAC_SECRET", key.length === 32 ? null : "CABINET_META_KEY"];
-    log("meta_key.skipped", { missing: missing.filter(Boolean).join(",") });
+    log(`${slot.name}.skipped`, { missing: missing.filter(Boolean).join(",") });
     return { outcome: "skipped" };
   }
   try {
-    const taken = await post(cfg, { action: "take" });
+    const taken = await post(slot, cfg, { action: "take" });
     if (taken.status !== 200) {
-      log("meta_key.refused", { status: taken.status });
+      log(`${slot.name}.refused`, { status: taken.status });
       return { outcome: "refused" };
     }
     const envelope = taken.answer?.pending ?? null;
     if (!envelope) return { outcome: "none" };
 
-    let plain: Record<keyof typeof ENV_NAMES, string>;
+    let values: Record<string, string>;
     try {
-      plain = open(envelope, key);
+      values = open(slot, envelope, key);
     } catch (e) {
       // Wrong CABINET_META_KEY or a damaged envelope: keep the site copy.
-      log("meta_key.unreadable", { error: e instanceof Error ? e.name : "unknown" });
+      log(`${slot.name}.unreadable`, { error: e instanceof Error ? e.name : "unknown" });
       return { outcome: "failed" };
     }
-    const values = {
-      [ENV_NAMES.token]: plain.token,
-      [ENV_NAMES.ad_account_id]: plain.ad_account_id,
-      [ENV_NAMES.dataset_id]: plain.dataset_id,
-    };
     writeEnvValues(cfg.envFile, values);
-    log("meta_key.written", { file: cfg.envFile, names: Object.keys(values).join(",") });
+    log(`${slot.name}.written`, { file: cfg.envFile, names: Object.keys(values).join(",") });
 
     const digest = createHash("sha256").update(envelope.ct).digest("hex");
-    const ack = await post(cfg, { action: "ack", digest });
+    const ack = await post(slot, cfg, { action: "ack", digest });
     if (ack.status !== 200) {
-      log("meta_key.ack_failed", { status: ack.status });
+      log(`${slot.name}.ack_failed`, { status: ack.status });
       return { outcome: "taken_not_erased", values };
     }
-    log("meta_key.site_copy", { result: String(ack.answer?.result ?? "?") });
+    log(`${slot.name}.site_copy`, { result: String(ack.answer?.result ?? "?") });
     return { outcome: ack.answer?.result === "erased" ? "taken" : "taken_not_erased", values };
   } catch (e) {
-    log("meta_key.unreachable", { error: e instanceof Error ? e.name : "unknown" });
+    log(`${slot.name}.unreachable`, { error: e instanceof Error ? e.name : "unknown" });
     return { outcome: "failed" };
   }
 }
