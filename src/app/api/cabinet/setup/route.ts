@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { completeSetup, passwordProblem, SESSION_COOKIE, sessionCookieOptions, setupLinkValid } from "@/lib/cabinet/auth";
 import { checkMetaKey } from "@/lib/cabinet/meta-check";
 import { metaConfigured, readMetaFields, saveMeta } from "@/lib/cabinet/meta";
+import { pixelHintQuery } from "@/app/cabinet/meta-messages";
 import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -45,9 +46,9 @@ export async function POST(request: Request) {
   // A key that cannot be kept must not cost her the link: refuse first.
   let accountName: string | null = null;
   if (meta.given) {
-    const retry = (word: string) => {
+    const retry = (word: string, extra = "") => {
       console.info(`[cabinet] setup refused: meta_${word}`);
-      return back(request, `/cabinet/setup?e=meta_${word}&t=${encodeURIComponent(token)}`);
+      return back(request, `/cabinet/setup?e=meta_${word}&t=${encodeURIComponent(token)}${extra}`);
     };
     if (!meta.input) return retry(meta.error);
     if (!metaConfigured()) return retry("down");
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     const problem = passwordProblem(password, repeat);
     if (problem) return back(request, `/cabinet/setup?e=${problem}&t=${encodeURIComponent(token)}`);
     const check = await checkMetaKey(meta.input);
-    if (!check.ok) return retry(check.reason);
+    if (!check.ok) return retry(check.reason, "pixels" in check ? pixelHintQuery(check.pixels) : "");
     accountName = check.accountName;
   }
 
