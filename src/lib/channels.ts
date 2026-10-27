@@ -109,3 +109,12 @@ export function primaryAction(): PrimaryAction {
     ? { href: channel.href, key: channel.key, external: true }
     : { href: CONTACT_ANCHOR, key: null, external: false };
 }
+
+/**
+ * The hero's main button for a visitor who came from a Meta ad (lib/ad-visit):
+ * the Instagram DM, through the same readiness gate. `null` — the account is
+ * not ready — means the hero stays as it is for everyone.
+ */
+export function directAction(): Channel | null {
+  return readyChannel("instagram");
+}

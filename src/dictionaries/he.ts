@@ -34,6 +34,7 @@ export const he: Dictionary = {
     subtitle: "הפקה, עריכה, רשתות חברתיות, פרסום.",
     cta: "לדבר על הפרויקט",
     secondary: "לראות עבודות",
+    direct: "לכתוב לנו בדיירקט",
   },
   work: {
     kicker: "תיק עבודות",

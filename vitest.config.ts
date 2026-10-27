@@ -26,6 +26,7 @@ export const critical = [
   "tests/thanks-lead.test.ts", //      принятая заявка → /thanks; Lead ровно один с eventID; Contact; URL без данных
   "tests/lead-ledger-first.test.ts", // журнал первым: Telegram упал → 200 и ретрай; оба упали → 502; повторная доставка
   "tests/cabinet-access.test.ts", //   кабинет: без cookie закрыт; подпись; ПД в снимке нет; ссылка setup одноразовая
+  "tests/ad-direct.test.ts", //        из рекламы Meta — Direct первой кнопкой; остальным герой прежний; флаг без ПД, не в URL
 ];
 
 export default defineConfig({

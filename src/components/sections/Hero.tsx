@@ -8,6 +8,7 @@ import { Reveal } from "@/components/motion/Reveal";
 import { ContactLink } from "@/components/conversion/ContactLink";
 import { buttonClass } from "@/components/ui/Button";
 import { AnchorLink } from "@/components/motion/SmoothScroll";
+import { AdHeroActions } from "@/components/conversion/AdHeroActions";
 
 interface HeroProps {
   locale: Locale;
@@ -114,6 +115,9 @@ export function Hero({ locale, dict }: HeroProps) {
           {/* Exactly one filled button on the page's first screen (§6), and it
               opens the messenger directly rather than scrolling to a form. */}
           <Reveal delay={0.18} className="w-full">
+            {/* A visitor from a Meta ad (27.10.2026) gets Direct first and the
+                form second instead; everyone else gets exactly this. */}
+            <AdHeroActions locale={locale} directLabel={dict.direct} formLabel={dict.cta}>
             <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
               <ContactLink
                 href={primary.href}
@@ -132,6 +136,7 @@ export function Hero({ locale, dict }: HeroProps) {
                 {dict.secondary}
               </AnchorLink>
             </div>
+            </AdHeroActions>
           </Reveal>
         </div>
       </div>
