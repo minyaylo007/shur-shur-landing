@@ -14,6 +14,7 @@ import { GoogleAdsStubReader } from "./google.ts";
 import type { Status } from "./funnel.ts";
 import { redeliverDue, type RedeliveryPass } from "./delivery.ts";
 import { buildSnapshot, pushSnapshot, type PushOutcome } from "./cabinet.ts";
+import { buildAnalysis, writeAnalysis, notifyConductor } from "./analysis.ts";
 import { log } from "./log.ts";
 
 /* Wiring: picks live or dry implementations from the config. Tests build the
@@ -108,6 +109,7 @@ export interface DailySummary {
   delivered: "telegram" | string;
   alerts: number;
   cabinet: PushOutcome;
+  analysis: { file: string | null; notify: string };
 }
 
 /** Build the owner's cabinet snapshot from the ledger and push it to the site. */
@@ -162,6 +164,16 @@ export async function runDaily(app: App): Promise<DailySummary> {
     log("cabinet.failed", { error: e instanceof Error ? e.name : "unknown" });
     cabinet = "failed";
   }
+  // Last: the analysis input for the conductor. It reads the ledger only, so a
+  // failure here costs nothing above.
+  let analysis: DailySummary["analysis"];
+  try {
+    const file = writeAnalysis(app.config.dataDir, buildAnalysis(app.db, { metaMode: app.modes.meta, limits: app.limits, now }));
+    analysis = { file, notify: await notifyConductor(app.config.analysisNotify, file) };
+  } catch (e) {
+    log("analysis.failed", { error: e instanceof Error ? e.name : "unknown" });
+    analysis = { file: null, notify: "off" };
+  }
   log("daily.done", { collect_ok: c.ok, rows: c.rows, proposals: rules.proposals, alerts: al.length, delivered: app.telegram.mode });
   return {
     collect: { ok: c.ok, rows: c.rows, mode: c.mode, error: c.error },
@@ -171,5 +183,6 @@ export async function runDaily(app: App): Promise<DailySummary> {
     delivered,
     alerts: al.length,
     cabinet,
+    analysis,
   };
 }

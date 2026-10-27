@@ -50,7 +50,7 @@ export class MetaNotConfiguredError extends Error {
   }
 }
 
-function encryptionKey(): Buffer {
+export function encryptionKey(): Buffer {
   const raw = process.env.CABINET_META_KEY ?? "";
   const key = Buffer.from(raw, "base64");
   if (key.length !== 32) throw new MetaNotConfiguredError();

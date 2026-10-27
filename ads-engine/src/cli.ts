@@ -9,7 +9,10 @@ import { buildReport } from "./report.ts";
 import { runRules, decide } from "./rules.ts";
 import { setStop, clearStop, isStopped } from "./safety.ts";
 import { log } from "./log.ts";
-import { pickupMetaKey } from "./meta-key.ts";
+import { pickupMetaKey, pickupOpsBot } from "./meta-key.ts";
+import { execFile } from "node:child_process";
+import { parseSale, recordSale, deleteSale, listSales, SALE_USAGE } from "./sales.ts";
+import { buildAnalysis, writeAnalysis } from "./analysis.ts";
 
 /* node ads-engine/src/cli.ts <command>. The CLI never prints names or
    contacts: `leads` lists id, date, market, kind, status only. */
@@ -18,6 +21,7 @@ const USAGE = `Команды:
   serve                         приём лидов на ${HOST}:PORT + служебный бот (long polling)
   daily                         сбор Meta → правила → отчёт (то, что делает таймер)
   cabinet                       снимок для кабинета хозяйки → сайт (daily делает это сам)
+  ops-bot                       забрать токен служебного бота, переданный в кабинете, в env (daily делает это сам)
   meta-key                      забрать ключ Meta, переданный в кабинете, в env (daily делает это сам)
   collect                       только сбор Meta Insights
   report                        напечатать отчёт
@@ -28,6 +32,11 @@ const USAGE = `Команды:
   set <id> <статус> [--reason R] [--amount N --currency EUR]
                                 статусы: new contacted qualified proposal won lost
                                 причины: ${Object.keys(LOST_REASONS).join(", ")}
+  client <сумма> <валюта> <источник> [рынок]
+                                клиент без заявки на сайте (Direct, форма Meta): учёт в CAC, без имён
+  clients [N]                   последние N таких продаж
+  delete-client <id>            удалить ошибочную запись продажи
+  analysis-data                 JSON для ежедневного разбора → data/analysis/<дата>.json (daily делает это сам)
   actions [N]                   журнал правил «причина → действие → результат»
   approve <id> | reject <id>    решение по действию в режиме approve
   stop [причина] | resume       аварийная остановка / снять
@@ -35,6 +44,16 @@ const USAGE = `Команды:
 
 const REDELIVERY_TICK_MS = 30_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Only this project's own unit, by its exact name; never anything else on the machine. */
+function restartOwnService(): Promise<void> {
+  return new Promise((resolve) => {
+    execFile("systemctl", ["--user", "try-restart", "ihor-shur-ads.service"], { timeout: 30_000 }, (error) => {
+      log("ops_bot.service_restart", { ok: !error });
+      resolve();
+    });
+  });
+}
 
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(name);
@@ -63,6 +82,26 @@ async function main(argv: string[]) {
     if (cmd === "meta-key") {
       const names = got.values ? ` → ${Object.keys(got.values).join(", ")} в ${config.envFile}` : "";
       console.log(`ключ Meta: ${got.outcome}${names}`);
+      return got.outcome === "failed" || got.outcome === "refused" ? 1 : 0;
+    }
+  }
+  if (cmd === "daily" || cmd === "ops-bot") {
+    // Her ops-bot token from the cabinet: this run reports through it, and the
+    // long-polling service is restarted so /client and the buttons use it too.
+    const got = await pickupOpsBot({
+      siteUrl: config.siteUrl,
+      secret: config.cabinetSecret,
+      cryptKey: config.cabinetMetaKey,
+      envFile: config.envFile,
+    });
+    if (got.values) {
+      Object.assign(process.env, got.values);
+      config = loadConfig();
+      await restartOwnService();
+    }
+    if (cmd === "ops-bot") {
+      const names = got.values ? ` → ${Object.keys(got.values).join(", ")} в ${config.envFile}` : "";
+      console.log(`служебный бот: ${got.outcome}${names}`);
       return got.outcome === "failed" || got.outcome === "refused" ? 1 : 0;
     }
   }
@@ -151,6 +190,29 @@ async function main(argv: string[]) {
         return 1;
       }
     }
+    case "client": {
+      const sale = parseSale(args.join(" "));
+      if (!sale) {
+        console.error(SALE_USAGE.replaceAll("/client", "client"));
+        return 2;
+      }
+      const id = recordSale(app.db, sale, `cli:${process.env.USER ?? "?"}`);
+      log("sale.recorded", { id, source: sale.source, market: sale.market, by: "cli" });
+      console.log(`клиент #${id}: ${sale.amount} ${sale.currency}, ${sale.source}, ${sale.market}`);
+      return 0;
+    }
+    case "clients":
+      console.table(listSales(app.db, Number(args[0] ?? 20)));
+      return 0;
+    case "delete-client": {
+      const ok = deleteSale(app.db, Number(args[0]));
+      if (ok) log("sale.deleted", { id: Number(args[0]), by: "cli" });
+      console.log(ok ? `удалена #${args[0]}` : `не найдена #${args[0] ?? ""}`);
+      return ok ? 0 : 1;
+    }
+    case "analysis-data":
+      console.log(writeAnalysis(app.config.dataDir, buildAnalysis(app.db, { metaMode: app.modes.meta, limits: app.limits })));
+      return 0;
     case "actions":
       console.table(
         app.db

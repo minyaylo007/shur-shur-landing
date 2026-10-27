@@ -66,7 +66,7 @@ describe("Meta Insights reader", () => {
     });
     const reader = new MetaHttpReader("tok", "999", g.fn);
     const db = memDb();
-    const s = await collect(db, reader, { now: NOW });
+    const s = await collect(db, reader, { now: NOW, backfillDays: 30 });
     expect(s).toMatchObject({ ok: true, rows: 6, mode: "live" });
     expect(g.calls.every((c) => c.method === "GET")).toBe(true);
     expect(g.calls.every((c) => c.url.pathname.startsWith(`/${GRAPH_API_VERSION}/`))).toBe(true);

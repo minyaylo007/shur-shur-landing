@@ -37,9 +37,24 @@ export interface CabinetSnapshot {
       cpc: number | null;
       leads: number;
     }[];
+    /** Every campaign in the account since the first day the ledger has —
+        paused and finished ones too. Totals per campaign, no days. */
+    all_time?: { since: string; campaigns: AllTimeCampaign[] };
   };
   site: { days: { date: string; visits: number | null; form_reached: number | null; leads: number }[] };
   insights: { date: string; markdown: string } | null;
+}
+
+export interface AllTimeCampaign {
+  campaign: string;
+  status: string | null;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversations: number;
+  form_leads: number;
+  landing_views: number;
+  leads: number;
 }
 
 const round = (n: number, digits: number) => Math.round(n * 10 ** digits) / 10 ** digits;
@@ -89,6 +104,41 @@ export function buildSnapshot(
     )
     .all(since) as { date: string; leads: number }[];
 
+  // All time, per campaign: the cabinet's «за всё время» table.
+  const allRows = db
+    .prepare(
+      `SELECT i.campaign_id, MAX(i.campaign_name) AS campaign, MAX(b.status) AS status, MIN(i.date) AS since,
+              SUM(i.spend) AS spend, SUM(i.impressions) AS impressions, SUM(i.clicks) AS clicks,
+              SUM(i.conversations) AS conversations, SUM(i.form_leads) AS form_leads, SUM(i.landing_views) AS landing_views
+         FROM insights i
+         LEFT JOIN budgets b ON b.source = 'meta' AND b.object_id = i.campaign_id AND b.mode = i.mode
+        WHERE i.source = 'meta' AND i.level = 'campaign' AND i.mode = ?
+        GROUP BY i.campaign_id
+        ORDER BY spend DESC
+        LIMIT 500`,
+    )
+    .all(opts.metaMode) as { campaign_id: string; campaign: string | null; status: string | null; since: string; spend: number; impressions: number; clicks: number; conversations: number; form_leads: number; landing_views: number }[];
+  const leadsByUtm = db
+    .prepare(
+      `SELECT json_extract(attribution, '$.utm_campaign') AS utm, COUNT(*) AS n FROM leads
+        WHERE is_spam = 0 AND is_duplicate = 0 AND json_extract(attribution, '$.utm_campaign') IS NOT NULL GROUP BY 1`,
+    )
+    .all() as { utm: string; n: number }[];
+  const allTime: AllTimeCampaign[] = allRows.map((r) => {
+    const name = r.campaign || r.campaign_id;
+    return {
+      campaign: name,
+      status: r.status,
+      spend: round(r.spend, 2),
+      impressions: r.impressions,
+      clicks: r.clicks,
+      conversations: r.conversations,
+      form_leads: r.form_leads,
+      landing_views: r.landing_views,
+      leads: leadsByUtm.filter((a) => a.utm === r.campaign_id || a.utm === name).reduce((s, a) => s + a.n, 0),
+    };
+  });
+
   let insights: CabinetSnapshot["insights"] = null;
   if (opts.insightsFile && existsSync(opts.insightsFile)) {
     const markdown = readFileSync(opts.insightsFile, "utf8").trim();
@@ -115,6 +165,7 @@ export function buildSnapshot(
           leads: leadsFor(r.date, r.campaign_id, name),
         };
       }),
+      ...(allRows.length ? { all_time: { since: allRows.reduce((m, r) => (r.since < m ? r.since : m), allRows[0].since), campaigns: allTime } } : {}),
     },
     // Visits and «reached the form» have no source on this server yet: null,
     // which the page shows as «нет данных», never as 0.

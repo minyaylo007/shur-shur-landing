@@ -16,6 +16,7 @@ import { keyboard, chunks } from "./telegram.ts";
 import { decide, type EngineContext, type Proposal } from "./rules.ts";
 import { setStop, clearStop, isStopped } from "./safety.ts";
 import { log } from "./log.ts";
+import { parseSale, recordSale, deleteSale, SALE_SOURCES, SALE_USAGE } from "./sales.ts";
 
 /* The ops bot: a SEPARATE service bot, not the one that delivers leads.
    It knows a lead by id, market, kind and source — never by name or contact
@@ -254,6 +255,27 @@ export class OpsBot {
       const s = isStopped(this.d.dataDir);
       await this.send(s.stopped ? `⛔ Остановлено: ${s.reason}` : "▶ Работает. Режим правил: " + this.d.engine().mode);
       return "status";
+    }
+    if (text.startsWith("/client_undo")) {
+      const id = Number(text.slice(12).trim());
+      const ok = Number.isInteger(id) && id > 0 && deleteSale(this.d.db, id);
+      if (ok) log("sale.deleted", { id, by: actor });
+      await this.send(ok ? `↺ Клиент #${id} удалён из учёта.` : "Не нашёл такой записи. Формат: /client_undo <номер>");
+      return ok ? "sale_deleted" : "bad_sale";
+    }
+    if (text.startsWith("/client")) {
+      const sale = parseSale(text.slice(7));
+      if (!sale) {
+        await this.send(SALE_USAGE);
+        return "bad_sale";
+      }
+      const id = recordSale(this.d.db, sale, actor);
+      log("sale.recorded", { id, source: sale.source, market: sale.market, by: actor });
+      await this.send(
+        `✅ Клиент #${id} записан: ${sale.amount} ${sale.currency} · ${SALE_SOURCES[sale.source]} · ${MARKET_LABEL[sale.market] ?? sale.market}. ` +
+          `Учтён в CAC. Отменить: /client_undo ${id}`,
+      );
+      return "sale_recorded";
     }
     if (text.startsWith("/report") && this.d.report) {
       await this.sendText(await this.d.report());

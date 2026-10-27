@@ -46,6 +46,9 @@ export interface Limits {
   smallSample: number;
   /** Explicit exchange rates, e.g. {"RON_EUR": 0.2}. No rate — no mixing. */
   fx: Record<string, number>;
+  /** Target cost per client, account currency; 0 = not set. The daily analysis
+      judges a campaign after max(30, 2 × targetCac) of spend. */
+  targetCac?: number;
 }
 
 export const DEFAULT_LIMITS: Limits = {
@@ -68,6 +71,7 @@ export const DEFAULT_LIMITS: Limits = {
   alertWindowDays: 3,
   smallSample: 30,
   fx: {},
+  targetCac: 0,
 };
 
 export function loadLimits(file: string | undefined): Limits {
@@ -106,6 +110,8 @@ export interface Config {
   cabinetMetaKey: string | undefined;
   /** This service's own env file: the Meta key from the cabinet is written here. */
   envFile: string;
+  /** Tells the shur conductor the analysis file is ready (lead-say.sh). Unset = off. */
+  analysisNotify: string | undefined;
 }
 
 /** The service only ever binds loopback (PORTS.md rule): not configurable. */
@@ -138,6 +144,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cabinetInsightsFile: env.SHUR_CABINET_INSIGHTS_FILE || join(dataDir, "..", "cabinet-insights.md"),
     cabinetMetaKey: env.CABINET_META_KEY || undefined,
     envFile: env.SHUR_ADS_ENV_FILE || join(dataDir, "..", "env"),
+    // "off" switches it off; unset = ~/bin/lead-say.sh when it exists.
+    analysisNotify:
+      env.SHUR_ANALYSIS_NOTIFY === "off"
+        ? undefined
+        : env.SHUR_ANALYSIS_NOTIFY ||
+          (env.HOME && existsSync(join(env.HOME, "bin", "lead-say.sh")) ? join(env.HOME, "bin", "lead-say.sh") : undefined),
   };
 }
 

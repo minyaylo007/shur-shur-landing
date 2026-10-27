@@ -7,6 +7,8 @@ import { cabinetStore, SNAPSHOT_KEY } from "@/lib/cabinet/store";
 import { MetaFields } from "./meta-fields";
 import { MetaGuide } from "./meta-guide";
 import { metaMessage, pixelToFill, readPixelHints } from "./meta-messages";
+import { opsBotStatus, type OpsBotStatus } from "@/lib/cabinet/ops-bot";
+import { OpsBotSection } from "./ops-bot-section";
 
 /* The cabinet itself. No session → the login page. Numbers come from the
    last snapshot only; an empty or fixture snapshot shows an honest plate,
@@ -102,6 +104,59 @@ function AdsTable({ title, rows, currency }: { title: string; rows: [string, Tot
   );
 }
 
+const STATUS: Record<string, string> = {
+  ACTIVE: "идёт",
+  PAUSED: "пауза",
+  CAMPAIGN_PAUSED: "пауза",
+  ARCHIVED: "в архиве",
+  DELETED: "удалена",
+  IN_PROCESS: "запускается",
+  WITH_ISSUES: "с ошибками",
+};
+
+type AllTime = NonNullable<Snapshot["ads"]["all_time"]>;
+
+/** Every campaign in the account, all time: what each one cost and what it brought. */
+function AllTimeTable({ allTime, currency }: { allTime: AllTime; currency: string | null }) {
+  return (
+    <div className="mt-6 overflow-x-auto">
+      <h3 className="font-medium">По кампаниям — за всё время (с {allTime.since})</h3>
+      <table className="mt-2 w-full min-w-[760px] text-sm">
+        <thead>
+          <tr>
+            <th className={th}></th>
+            <th className={th}>Статус</th>
+            <th className={th}>Расход</th>
+            <th className={th}>Клики</th>
+            <th className={th}>Переписки</th>
+            <th className={th}>Формы Meta</th>
+            <th className={th}>Открыли сайт</th>
+            <th className={th}>Заявки сайта</th>
+          </tr>
+        </thead>
+        <tbody>
+          {allTime.campaigns.map((c, i) => (
+            <tr key={`${c.campaign}-${i}`}>
+              <td className={td}>{c.campaign}</td>
+              <td className={td}>{c.status ? (STATUS[c.status] ?? c.status.toLowerCase()) : "—"}</td>
+              <td className={td}>{money(c.spend, currency)}</td>
+              <td className={td}>{int.format(c.clicks)}</td>
+              <td className={td}>{int.format(c.conversations)}</td>
+              <td className={td}>{int.format(c.form_leads)}</td>
+              <td className={td}>{int.format(c.landing_views)}</td>
+              <td className={td}>{int.format(c.leads)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 text-xs text-ink-500">
+        Переписки — начатые диалоги в Direct после клика по рекламе (так считает Meta). Продажи из Direct
+        учитываются отдельно, в ежедневном разборе.
+      </p>
+    </div>
+  );
+}
+
 /* A deliberately small markdown: headings, list items, paragraphs, **bold**.
    Rendered as React text — no HTML from the snapshot reaches the page. */
 function Markdown({ text }: { text: string }) {
@@ -149,8 +204,8 @@ function Markdown({ text }: { text: string }) {
 
 const kyiv = (ms: number) => new Date(ms).toLocaleString("ru-RU", { timeZone: "Europe/Kyiv" });
 
-export default async function Cabinet({ searchParams }: { searchParams: Promise<{ m?: string; px?: string | string[] }> }) {
-  const { m, px } = await searchParams;
+export default async function Cabinet({ searchParams }: { searchParams: Promise<{ m?: string; px?: string | string[]; o?: string }> }) {
+  const { m, px, o } = await searchParams;
   const jar = await cookies();
   let signedIn = false;
   try {
@@ -174,10 +229,17 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
   } catch {
     meta = null;
   }
+  let opsBot: OpsBotStatus | null = null;
+  try {
+    opsBot = await opsBotStatus();
+  } catch {
+    opsBot = null;
+  }
   const hints = readPixelHints(px);
   const metaText = m && m !== "saved" ? metaMessage(m, hints) : undefined;
 
   const realAds = hasRealAds(snapshot);
+  const allTime = snapshot && !snapshot.test_data && snapshot.ads.all_time?.campaigns.length ? snapshot.ads.all_time : null;
   const days = realAds ? snapshot!.ads.days : [];
   const currency = snapshot?.currency ?? null;
   const byCampaign = [...sum(days, (r) => r.campaign)].sort((a, b) => b[1].spend - a[1].spend);
@@ -223,16 +285,17 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
       <section className="mt-10">
         <h2 className="font-display text-xl">Реклама</h2>
         <div className="mt-3">
+          {allTime ? <AllTimeTable allTime={allTime} currency={currency} /> : null}
           {realAds && total ? (
             <>
-              <AdsTable title="Итого за период" rows={[["Всего", total]]} currency={currency} />
+              <AdsTable title="Итого за 60 дней" rows={[["Всего", total]]} currency={currency} />
               <AdsTable title="По кампаниям" rows={byCampaign} currency={currency} />
               <AdsTable title="По дням" rows={byDay} currency={currency} />
               <p className="mt-2 text-xs text-ink-500">
                 Заявки — те, что пришли на сайт по ссылке этой кампании. Расход — в валюте рекламного кабинета.
               </p>
             </>
-          ) : (
+          ) : allTime ? null : (
             <Plate title="Реклама ещё не подключена">
               {snapshot?.test_data
                 ? "Пока приходят только тестовые данные — их здесь не показываем. Цифры появятся после подключения рекламного кабинета."
@@ -303,6 +366,8 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
         </form>
         <p className="mt-4 text-sm text-ink-700">Если застряли — напишите Игорю.</p>
       </section>
+
+      <OpsBotSection status={opsBot} o={o} />
     </div>
   );
 }

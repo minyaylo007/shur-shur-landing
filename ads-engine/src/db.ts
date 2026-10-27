@@ -119,6 +119,19 @@ CREATE TABLE IF NOT EXISTS capi_events (
   PRIMARY KEY (lead_id, event_name)
 );
 
+/* Clients who bought without a site lead (Direct, a Meta instant form), recorded
+   in the ops bot: source, amount, currency — never a name or a contact. They
+   count in CAC next to won leads. */
+CREATE TABLE IF NOT EXISTS offline_sales (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  at        TEXT NOT NULL,
+  source    TEXT NOT NULL,
+  market    TEXT NOT NULL,
+  amount    REAL NOT NULL,
+  currency  TEXT NOT NULL,
+  actor     TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS kv (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -161,8 +174,18 @@ function migrateMode(db: Db): void {
   }
 }
 
+/* 27.10.2026: what the owner measures by — Direct conversations, instant-form
+   leads and landing page views per row, next to the click counters. */
+function migrateMessaging(db: Db): void {
+  const have = columns(db, "insights");
+  for (const name of ["conversations", "form_leads", "landing_views"]) {
+    if (!have.has(name)) db.exec(`ALTER TABLE insights ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`);
+  }
+}
+
 function migrate(db: Db): void {
   migrateMode(db);
+  migrateMessaging(db);
   const have = columns(db, "leads");
   if (have.has("delivered_at")) return;
   tx(db, () => {
