@@ -1,9 +1,11 @@
 /* Her Meta key: three write-only fields, shared by the setup page and the
-   cabinet. Never pre-filled — nothing she typed is ever sent back. */
+   cabinet. Nothing she typed is ever sent back. The one exception is not
+   hers: when the pixel id she typed is not the account's and the account
+   has exactly one pixel, Meta's id for it goes into the pixel field. */
 
 const input = "mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2 text-ink-900 placeholder:text-ink-500";
 
-export function MetaFields({ required = false }: { required?: boolean }) {
+export function MetaFields({ required = false, dataset }: { required?: boolean; dataset?: string }) {
   return (
     <>
       <label className="block">
@@ -35,6 +37,7 @@ export function MetaFields({ required = false }: { required?: boolean }) {
           type="text"
           name="meta_dataset"
           required={required}
+          defaultValue={dataset}
           inputMode="numeric"
           autoComplete="off"
           className={input}

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { MIN_PASSWORD, setupLinkValid } from "@/lib/cabinet/auth";
 import { MetaFields } from "../meta-fields";
 import { MetaGuide } from "../meta-guide";
-import { META_MESSAGES } from "../meta-messages";
+import { metaMessage, pixelToFill, readPixelHints } from "../meta-messages";
 
 const MESSAGES: Record<string, string> = {
   weak_password: `Пароль — не короче ${MIN_PASSWORD} символов.`,
@@ -12,8 +12,8 @@ const MESSAGES: Record<string, string> = {
   bad_link: "Ссылка уже использована или устарела — попросите новую.",
 };
 
-export default async function CabinetSetup({ searchParams }: { searchParams: Promise<{ t?: string; e?: string }> }) {
-  const { t, e } = await searchParams;
+export default async function CabinetSetup({ searchParams }: { searchParams: Promise<{ t?: string; e?: string; px?: string | string[] }> }) {
+  const { t, e, px } = await searchParams;
   let valid = false;
   try {
     valid = await setupLinkValid(t);
@@ -37,7 +37,9 @@ export default async function CabinetSetup({ searchParams }: { searchParams: Pro
     );
   }
 
-  const message = e ? (e.startsWith("meta_") ? META_MESSAGES[e.slice(5)] : MESSAGES[e]) : undefined;
+  const metaWord = e?.startsWith("meta_") ? e.slice(5) : undefined;
+  const hints = readPixelHints(px);
+  const message = metaWord ? metaMessage(metaWord, hints) : e ? MESSAGES[e] : undefined;
   return (
     <div className="mx-auto mt-16 max-w-xl">
       <h1 className="font-display text-2xl">Задайте пароль</h1>
@@ -75,7 +77,7 @@ export default async function CabinetSetup({ searchParams }: { searchParams: Pro
             просмотр, менять рекламу им нельзя. Это можно сделать и позже, из кабинета. Пройдите шаги по порядку:
           </p>
           <MetaGuide />
-          <MetaFields />
+          <MetaFields dataset={pixelToFill(metaWord, hints)} />
         </fieldset>
         {message ? (
           <p role="alert" className="text-sm text-cherry-600">

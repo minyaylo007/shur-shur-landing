@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isSignedIn, SESSION_COOKIE } from "@/lib/cabinet/auth";
 import { checkMetaKey } from "@/lib/cabinet/meta-check";
 import { metaConfigured, readMetaFields, saveMeta } from "@/lib/cabinet/meta";
+import { pixelHintQuery } from "@/app/cabinet/meta-messages";
 
 export const runtime = "nodejs";
 
@@ -9,8 +10,8 @@ export const runtime = "nodejs";
    key is checked with one read request to Meta, then encrypted and stored, the answer is a redirect with a status word —
    nothing of what she typed comes back. */
 
-function back(request: Request, m: string): NextResponse {
-  return NextResponse.redirect(new URL(`/cabinet?m=${m}`, request.url), 303);
+function back(request: Request, m: string, extra = ""): NextResponse {
+  return NextResponse.redirect(new URL(`/cabinet?m=${m}${extra}`, request.url), 303);
 }
 
 function cookieValue(request: Request): string | undefined {
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   const check = await checkMetaKey(meta.input);
   if (!check.ok) {
     console.info(`[cabinet] meta key refused: ${check.reason}`);
-    return back(request, check.reason);
+    return back(request, check.reason, "pixels" in check ? pixelHintQuery(check.pixels) : "");
   }
   try {
     await saveMeta(meta.input, check.accountName);

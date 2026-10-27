@@ -6,7 +6,7 @@ import { hasRealAds, snapshotSchema, type Snapshot } from "@/lib/cabinet/snapsho
 import { cabinetStore, SNAPSHOT_KEY } from "@/lib/cabinet/store";
 import { MetaFields } from "./meta-fields";
 import { MetaGuide } from "./meta-guide";
-import { META_MESSAGES } from "./meta-messages";
+import { metaMessage, pixelToFill, readPixelHints } from "./meta-messages";
 
 /* The cabinet itself. No session → the login page. Numbers come from the
    last snapshot only; an empty or fixture snapshot shows an honest plate,
@@ -149,8 +149,8 @@ function Markdown({ text }: { text: string }) {
 
 const kyiv = (ms: number) => new Date(ms).toLocaleString("ru-RU", { timeZone: "Europe/Kyiv" });
 
-export default async function Cabinet({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
-  const { m } = await searchParams;
+export default async function Cabinet({ searchParams }: { searchParams: Promise<{ m?: string; px?: string | string[] }> }) {
+  const { m, px } = await searchParams;
   const jar = await cookies();
   let signedIn = false;
   try {
@@ -174,7 +174,8 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
   } catch {
     meta = null;
   }
-  const metaMessage = m && m !== "saved" ? META_MESSAGES[m] : undefined;
+  const hints = readPixelHints(px);
+  const metaText = m && m !== "saved" ? metaMessage(m, hints) : undefined;
 
   const realAds = hasRealAds(snapshot);
   const days = realAds ? snapshot!.ads.days : [];
@@ -288,14 +289,14 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
               ? `Ключ перенесён на сервер рекламы ${kyiv(meta.takenAt)} (Киев)${meta.accountName ? ` — аккаунт «${meta.accountName}»` : ""}; здесь его копии нет.`
               : "Ключ ещё не передан. Пройдите шаги по порядку — это займёт минут 15."}
         </p>
-        {metaMessage ? (
+        {metaText ? (
           <p role="alert" className="mt-2 text-sm text-cherry-600">
-            {metaMessage}
+            {metaText}
           </p>
         ) : null}
         <form method="post" action="/api/cabinet/meta" className="mt-4 space-y-4">
           {meta?.pendingSince || meta?.takenAt ? null : <MetaGuide />}
-          <MetaFields required />
+          <MetaFields required dataset={pixelToFill(m, hints)} />
           <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-3 font-semibold text-cream-type shadow-sm hover:bg-cherry-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cherry-deep">
             Проверить и сохранить
           </button>

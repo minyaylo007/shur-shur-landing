@@ -31,6 +31,7 @@ const { POST: SETUP_LINK } = await import("../src/app/api/cabinet/setup-link/rou
 const { POST: SETUP } = await import("../src/app/api/cabinet/setup/route");
 const { POST: LOGIN } = await import("../src/app/api/cabinet/login/route");
 const { default: CabinetPageComponent } = await import("../src/app/cabinet/page");
+const { default: SetupPage } = await import("../src/app/cabinet/setup/page");
 const { POST: META } = await import("../src/app/api/cabinet/meta/route");
 const { POST: META_PICKUP } = await import("../src/app/api/cabinet/meta-pickup/route");
 const { META_STORE_KEY, META_AAD, envelopeDigest, saveMeta } = await import("../src/lib/cabinet/meta");
@@ -55,11 +56,15 @@ function signed(path: string, payload: unknown, secret = SECRET): Request {
   });
 }
 
-function form(path: string, fields: Record<string, string>): Request {
+function form(path: string, fields: Record<string, string>, cookie?: string): Request {
   ip += 1;
   return new Request(`https://shur-shur.com${path}`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded", "x-forwarded-for": `10.77.0.${ip}` },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      "x-forwarded-for": `10.77.0.${ip}`,
+      ...(cookie ? { cookie } : {}),
+    },
     body: new URLSearchParams(fields).toString(),
   });
 }
@@ -313,15 +318,19 @@ describe("cabinet: her Meta key is write-only", () => {
     const res = await SETUP(form("/api/cabinet/setup", { t: token, password: PASS, repeat: PASS, ...fields }));
     return { token, res };
   }
-  /* Meta itself: one GET for the account name. Tests answer instead of it. */
+  /* Meta itself: a GET for the account name, a GET for its pixels. Tests answer instead of it. */
   let graph: { url: string; auth: string | null }[] = [];
-  let graphAnswer: () => Response = () => Response.json({ name: "SHUR Ads", id: "act_1234567890" });
+  const META_OK = (url: string) =>
+    url.includes("/adspixels")
+      ? Response.json({ data: [{ id: "9876543210", name: "SHUR pixel" }] })
+      : Response.json({ name: "SHUR Ads", id: "act_1234567890" });
+  let graphAnswer: (url: string) => Response = META_OK;
   beforeEach(() => {
     graph = [];
-    graphAnswer = () => Response.json({ name: "SHUR Ads", id: "act_1234567890" });
+    graphAnswer = META_OK;
     vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
       graph.push({ url: String(url), auth: new Headers(init?.headers).get("authorization") });
-      return graphAnswer();
+      return graphAnswer(String(url));
     });
   });
   afterEach(() => vi.unstubAllGlobals());
@@ -346,9 +355,10 @@ describe("cabinet: her Meta key is write-only", () => {
     expect(html).toContain("Подключено: SHUR Ads");
     expect(leaks(html)).toBe(false);
     // The check went to Meta with the key in the header, never in the URL.
-    expect(graph).toHaveLength(1);
+    expect(graph).toHaveLength(2);
     expect(graph[0].url).toMatch(/^https:\/\/graph\.facebook\.com\/v\d+\.\d+\/act_1234567890\?fields=name$/);
-    expect(graph[0].auth).toBe(`Bearer ${KEY}`);
+    expect(graph[1].url).toMatch(/\/act_1234567890\/adspixels\?fields=id,name&limit=100$/);
+    for (const call of graph) expect(call.auth).toBe(`Bearer ${KEY}`);
     expect(leaks(html)).toBe(false);
 
     const taken = await META_PICKUP(signed("/api/cabinet/meta-pickup", { action: "take" }));
@@ -415,6 +425,45 @@ describe("cabinet: her Meta key is write-only", () => {
     expect(leaks(await wire(res))).toBe(false);
     expect(await auth.setupLinkValid(token)).toBe(true);
     expect(store.has(META_STORE_KEY)).toBe(false);
+  });
+
+  it("an app id in the pixel field → refused, the account's pixel offered, the key nowhere", async () => {
+    const APP_ID = "1122334455667788";
+    const { token, res } = await setUp({ ...FIELDS, meta_dataset: APP_ID });
+    const location = res.headers.get("location")!;
+    expect(location).toContain("e=meta_pixel_not_in_account");
+    expect(location).toContain("px=9876543210");
+    expect(leaks(await wire(res))).toBe(false);
+    expect(await auth.setupLinkValid(token)).toBe(true);
+    expect(store.has(META_STORE_KEY)).toBe(false);
+
+    // The page with the new text and the pixel filled in carries no key either.
+    const px = new URL(location).searchParams.getAll("px");
+    const setupHtml = renderToStaticMarkup(
+      await SetupPage({ searchParams: Promise.resolve({ t: token, e: "meta_pixel_not_in_account", px }) }),
+    );
+    expect(setupHtml).toContain("Это не номер пикселя");
+    expect(setupHtml).toContain('value="9876543210"');
+    expect(leaks(setupHtml)).toBe(false);
+
+    // Same refusal from the cabinet form.
+    const session = await auth.completeSetup(token, PASS, PASS);
+    if (!session.ok) throw new Error("setup failed");
+    cookieJar.set(auth.SESSION_COOKIE, session.session);
+    const cabinet = await META(
+      form("/api/cabinet/meta", { ...FIELDS, meta_dataset: APP_ID }, `${auth.SESSION_COOKIE}=${session.session}`),
+    );
+    const back = cabinet.headers.get("location")!;
+    expect(back).toContain("m=pixel_not_in_account");
+    expect(leaks(await wire(cabinet))).toBe(false);
+    expect(store.has(META_STORE_KEY)).toBe(false);
+    const html = renderToStaticMarkup(
+      await CabinetPageComponent({
+        searchParams: Promise.resolve({ m: "pixel_not_in_account", px: new URL(back).searchParams.getAll("px") }),
+      }),
+    );
+    expect(html).toContain("Это не номер пикселя");
+    expect(leaks(html)).toBe(false);
   });
 
   it("no CABINET_META_KEY → key refused, link kept, nothing stored in clear", async () => {
