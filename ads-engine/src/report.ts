@@ -33,6 +33,10 @@ function marketBlock(m: MarketMetrics): string {
   return [
     `${MARKET_LABEL[m.market] ?? m.market}`,
     `  расход ${spend} · лиды ${m.leads} (Meta считает ${m.platformLeads}) · повторы ${m.duplicates} · спам ${m.spam}`,
+    // Campaigns without the sv_/ta_ prefix land here: name them instead of guessing a market.
+    ...(m.market === "other" && m.campaigns.length
+      ? [`  кампании: ${m.campaigns.map((c) => `«${c.name}» ${money(c.spend)} ${c.currency}`).join("; ")}`]
+      : []),
     `  связались ${m.contacted} · квал. ${m.qualified} · предложения ${m.proposals} · сделки ${m.won} на ${revenue}`,
     `  CPQL ${m.cpql.map(fmtCost).join("; ") || "—"}`,
     `  CAC  ${m.cac.map(fmtCost).join("; ") || "—"}`,
@@ -45,7 +49,8 @@ function marketBlock(m: MarketMetrics): string {
 
 /** `metaMode: "fixtures"` — spend comes from fake fixture rows, so spend-based
    alerts would raise the same false alarm every day. They are skipped; the
-   stop flag and data freshness still alert. */
+   stop flag and data freshness still alert. In live mode only live rows count:
+   fixture rows left in the ledger must not raise a «spend without leads». */
 export function alerts(db: Db, limits: Limits, dataDir: string, now = new Date(), metaMode = "live"): string[] {
   const out: string[] = [];
   const stop = isStopped(dataDir);
@@ -58,7 +63,7 @@ export function alerts(db: Db, limits: Limits, dataDir: string, now = new Date()
 
   const today = dateInZone(now, "UTC");
   const feedSince = addDays(today, -(limits.evalDays - 1));
-  const anySpend = db.prepare("SELECT COALESCE(SUM(spend),0) AS s FROM insights WHERE level='campaign' AND date>=?").get(feedSince) as { s: number };
+  const anySpend = db.prepare("SELECT COALESCE(SUM(spend),0) AS s FROM insights WHERE level='campaign' AND mode=? AND date>=?").get(metaMode, feedSince) as { s: number };
   const anyLead = db.prepare("SELECT COUNT(*) AS n FROM leads WHERE substr(created_at,1,10)>=?").get(feedSince) as { n: number };
   if (anySpend.s > 0 && anyLead.n === 0) {
     out.push(`⚠ За ${limits.evalDays} дн. в учёт не пришло ни одной заявки при расходе — проверьте связь сайт → учёт (LEDGER_URL, секрет). Правила по лидам молчат.`);
@@ -66,8 +71,8 @@ export function alerts(db: Db, limits: Limits, dataDir: string, now = new Date()
   const since = addDays(today, -(limits.alertWindowDays - 1));
   for (const market of MARKETS) {
     const spend = db
-      .prepare("SELECT COALESCE(SUM(spend),0) AS s, MAX(currency) AS c FROM insights WHERE level='campaign' AND market=? AND date>=? AND date<=?")
-      .get(market, since, today) as { s: number; c: string | null };
+      .prepare("SELECT COALESCE(SUM(spend),0) AS s, MAX(currency) AS c FROM insights WHERE level='campaign' AND mode=? AND market=? AND date>=? AND date<=?")
+      .get(metaMode, market, since, today) as { s: number; c: string | null };
     const leads = db
       .prepare("SELECT COUNT(*) AS n FROM leads WHERE market=? AND is_spam=0 AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?")
       .get(market, since, today) as { n: number };
@@ -87,7 +92,7 @@ export function buildReport(
   const now = opts.now ?? new Date();
   const until = dateInZone(now, "UTC");
   const since = addDays(until, -((opts.days ?? 30) - 1));
-  const m = computeMetrics(db, since, until, limits);
+  const m = computeMetrics(db, since, until, limits, opts.modes.meta);
   const actions = db
     .prepare("SELECT id, rule, status, reason, result FROM actions WHERE created_at >= ? ORDER BY id DESC LIMIT 10")
     .all(new Date(now.getTime() - 86400_000).toISOString()) as { id: number; rule: string; status: string; reason: string; result: string | null }[];

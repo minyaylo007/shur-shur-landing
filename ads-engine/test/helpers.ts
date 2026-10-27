@@ -98,19 +98,20 @@ export async function captureLog<T>(fn: () => Promise<T> | T): Promise<{ out: T;
 /** Seeds one campaign with a budget and `days` of daily spend ending yesterday. */
 export function seedCampaign(
   db: Db,
-  o: { id: string; name: string; market: string; daily: number; spendPerDay: number; days: number; today: string; firstDaysAgo?: number },
+  o: { id: string; name: string; market: string; daily: number; spendPerDay: number; days: number; today: string; firstDaysAgo?: number; mode?: string },
 ) {
+  const mode = o.mode ?? "live";
   const fetched = NOW.toISOString();
   db.prepare(
-    "INSERT OR REPLACE INTO budgets(source, object_id, level, name, market, daily_budget, currency, status, fetched_at) VALUES('meta',?, 'campaign', ?, ?, ?, 'EUR', 'ACTIVE', ?)",
-  ).run(o.id, o.name, o.market, o.daily, fetched);
+    "INSERT OR REPLACE INTO budgets(source, object_id, level, name, market, daily_budget, currency, status, fetched_at, mode) VALUES('meta',?, 'campaign', ?, ?, ?, 'EUR', 'ACTIVE', ?, ?)",
+  ).run(o.id, o.name, o.market, o.daily, fetched, mode);
   const start = o.firstDaysAgo ?? o.days;
   for (let i = 1; i <= start; i++) {
     const date = new Date(Date.parse(o.today + "T00:00:00Z") - i * 86400_000).toISOString().slice(0, 10);
     db.prepare(
-      `INSERT OR REPLACE INTO insights(source, level, object_id, date, campaign_id, campaign_name, object_name, market, spend, currency, timezone, fetched_at)
-       VALUES('meta','campaign',?,?,?,?,?,?,?,'EUR','UTC',?)`,
-    ).run(o.id, date, o.id, o.name, o.name, o.market, i <= o.days ? o.spendPerDay : 0, fetched);
+      `INSERT OR REPLACE INTO insights(source, level, object_id, date, campaign_id, campaign_name, object_name, market, spend, currency, timezone, fetched_at, mode)
+       VALUES('meta','campaign',?,?,?,?,?,?,?,'EUR','UTC',?,?)`,
+    ).run(o.id, date, o.id, o.name, o.name, o.market, i <= o.days ? o.spendPerDay : 0, fetched, mode);
   }
 }
 

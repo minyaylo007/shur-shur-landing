@@ -42,6 +42,8 @@ export interface EngineContext {
   dataDir: string;
   writer: AdsWriter;
   now?: Date;
+  /** Meta reader mode («live» | «fixtures»): rules read only the rows it wrote. Default «live». */
+  metaMode?: string;
   /** Approve mode: asks a human (Telegram buttons). */
   requestApproval?: (actionId: number, p: Proposal) => Promise<void>;
 }
@@ -61,8 +63,8 @@ function round2(x: number): number {
   return Math.round(x * 100) / 100;
 }
 
-function accountToday(db: Db, now: Date): string {
-  const tz = db.prepare("SELECT timezone FROM insights LIMIT 1").get() as { timezone: string } | undefined;
+function accountToday(db: Db, now: Date, metaMode: string): string {
+  const tz = db.prepare("SELECT timezone FROM insights WHERE mode = ? LIMIT 1").get(metaMode) as { timezone: string } | undefined;
   return dateInZone(now, tz?.timezone ?? "UTC");
 }
 
@@ -81,32 +83,33 @@ function leadCounts(db: Db, obj: BudgetObj, since: string, until: string) {
   return { leads: r.leads, qualified: r.qualified ?? 0 };
 }
 
-function objectSpend(db: Db, obj: BudgetObj, since: string, until: string) {
+function objectSpend(db: Db, obj: BudgetObj, since: string, until: string, metaMode: string) {
   const r = db
     .prepare(
-      "SELECT COALESCE(SUM(spend),0) AS spend, MIN(date) AS first FROM insights WHERE level = ? AND object_id = ? AND date >= ? AND date <= ?",
+      "SELECT COALESCE(SUM(spend),0) AS spend, MIN(date) AS first FROM insights WHERE mode = ? AND level = ? AND object_id = ? AND date >= ? AND date <= ?",
     )
-    .get(obj.level, obj.object_id, since, until) as { spend: number; first: string | null };
+    .get(metaMode, obj.level, obj.object_id, since, until) as { spend: number; first: string | null };
   const first = db
-    .prepare("SELECT MIN(date) AS first FROM insights WHERE level = ? AND object_id = ? AND spend > 0")
-    .get(obj.level, obj.object_id) as { first: string | null };
+    .prepare("SELECT MIN(date) AS first FROM insights WHERE mode = ? AND level = ? AND object_id = ? AND spend > 0")
+    .get(metaMode, obj.level, obj.object_id) as { first: string | null };
   return { spend: r.spend, firstSpend: first.first };
 }
 
 /** Pure part: what the numbers suggest, before any guard. */
 export function propose(ctx: EngineContext): Proposal[] {
   const { db, limits } = ctx;
+  const metaMode = ctx.metaMode ?? "live";
   const now = ctx.now ?? new Date();
-  const today = accountToday(db, now);
+  const today = accountToday(db, now, metaMode);
   const evalUntil = addDays(today, -limits.conversionLagDays);
   const evalSince = addDays(evalUntil, -(limits.evalDays - 1));
   const step = limits.maxStepPct / 100;
 
   const objs = db
     .prepare(
-      "SELECT object_id, level, name, market, daily_budget, currency FROM budgets WHERE daily_budget > 0 AND status = 'ACTIVE'",
+      "SELECT object_id, level, name, market, daily_budget, currency FROM budgets WHERE mode = ? AND daily_budget > 0 AND status = 'ACTIVE'",
     )
-    .all() as unknown as BudgetObj[];
+    .all(metaMode) as unknown as BudgetObj[];
 
   // Zero leads in the WHOLE ledger means the site → ledger feed is down or not
   // connected yet, not that every campaign failed: lead-based rules stay silent
@@ -118,7 +121,7 @@ export function propose(ctx: EngineContext): Proposal[] {
 
   const out: Proposal[] = [];
   for (const obj of objs) {
-    const { spend } = objectSpend(db, obj, evalSince, evalUntil);
+    const { spend } = objectSpend(db, obj, evalSince, evalUntil, metaMode);
     const { leads, qualified } = leadCounts(db, obj, evalSince, evalUntil);
     const target = limits.markets[obj.market]?.targetCpql ?? 0;
     const base = { market: obj.market, objectId: obj.object_id, level: obj.level, objectName: obj.name, fromDaily: obj.daily_budget, currency: obj.currency, evalUntil };
@@ -164,6 +167,7 @@ export function propose(ctx: EngineContext): Proposal[] {
 /** Guards. Returns the reason the proposal may NOT run, or null. */
 export function guard(ctx: EngineContext, p: Proposal): string | null {
   const { db, limits, dataDir } = ctx;
+  const metaMode = ctx.metaMode ?? "live";
   const now = ctx.now ?? new Date();
   const stop = isStopped(dataDir);
   if (stop.stopped) return `аварийная остановка (${stop.reason})`;
@@ -178,10 +182,10 @@ export function guard(ctx: EngineContext, p: Proposal): string | null {
     if (f.ageHours === null || f.ageHours > limits.staleHours) return `данные старше ${limits.staleHours} ч — повышать нельзя`;
   }
 
-  const obj = db.prepare("SELECT fetched_at FROM budgets WHERE object_id = ?").get(p.objectId);
+  const obj = db.prepare("SELECT fetched_at FROM budgets WHERE mode = ? AND object_id = ?").get(metaMode, p.objectId);
   if (!obj) return "объект больше не найден в кабинете";
-  const { firstSpend } = objectSpend(db, { object_id: p.objectId, level: p.level } as BudgetObj, "0000", "9999");
-  const today = accountToday(db, now);
+  const { firstSpend } = objectSpend(db, { object_id: p.objectId, level: p.level } as BudgetObj, "0000", "9999", metaMode);
+  const today = accountToday(db, now, metaMode);
   if (!firstSpend || daysBetween(firstSpend, today) < limits.learningDays) {
     return `фаза обучения: объект крутится меньше ${limits.learningDays} дн.`;
   }
@@ -202,17 +206,17 @@ export function guard(ctx: EngineContext, p: Proposal): string | null {
       (
         db
           .prepare(
-            `SELECT COALESCE(SUM(spend),0) AS s FROM insights WHERE level = 'campaign' AND date >= ? AND date <= ?${market ? " AND market = ?" : ""}`,
+            `SELECT COALESCE(SUM(spend),0) AS s FROM insights WHERE mode = ? AND level = 'campaign' AND date >= ? AND date <= ?${market ? " AND market = ?" : ""}`,
           )
-          .get(...(market ? [monthStart, today, market] : [monthStart, today])) as { s: number }
+          .get(...(market ? [metaMode, monthStart, today, market] : [metaMode, monthStart, today])) as { s: number }
       ).s;
     const budgets = (market: Market | null) =>
       (
         db
           .prepare(
-            `SELECT COALESCE(SUM(daily_budget),0) AS b FROM budgets WHERE status = 'ACTIVE' AND daily_budget > 0${market ? " AND market = ?" : ""}`,
+            `SELECT COALESCE(SUM(daily_budget),0) AS b FROM budgets WHERE mode = ? AND status = 'ACTIVE' AND daily_budget > 0${market ? " AND market = ?" : ""}`,
           )
-          .get(...(market ? [market] : [])) as { b: number }
+          .get(...(market ? [metaMode, market] : [metaMode])) as { b: number }
       ).b;
     const delta = p.toDaily - p.fromDaily;
     const projMarket = mtd(p.market) + (budgets(p.market) + delta) * remaining;

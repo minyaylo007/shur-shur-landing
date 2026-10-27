@@ -69,6 +69,7 @@ export function createApp(config: Config, o: Overrides = {}): App {
     db,
     limits,
     mode,
+    metaMode: m.meta,
     dataDir: config.dataDir,
     writer,
     now: o.now?.(),

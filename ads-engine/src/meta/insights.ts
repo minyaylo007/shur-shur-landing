@@ -236,7 +236,7 @@ export async function collect(
   try {
     const account = await reader.account();
     const today = dateInZone(now, account.timezone_name);
-    const have = db.prepare("SELECT COUNT(*) AS n FROM insights WHERE source = ?").get(reader.source) as {
+    const have = db.prepare("SELECT COUNT(*) AS n FROM insights WHERE source = ? AND mode = ?").get(reader.source, reader.mode) as {
       n: number;
     };
     const since = addDays(today, -(have.n === 0 ? (opts.backfillDays ?? 30) : REREAD_DAYS));
@@ -256,8 +256,8 @@ export async function collect(
       );
       const ins = db.prepare(
         `INSERT INTO insights(source, level, object_id, date, campaign_id, campaign_name, adset_id, ad_id,
-           object_name, market, spend, currency, timezone, impressions, clicks, platform_leads, fetched_at)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           object_name, market, spend, currency, timezone, impressions, clicks, platform_leads, fetched_at, mode)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       );
       for (const list of byLevel.values()) {
         for (const r of list) {
@@ -279,14 +279,15 @@ export async function collect(
             r.clicks,
             r.platform_leads,
             at,
+            reader.mode,
           );
           rows++;
         }
       }
       db.prepare("DELETE FROM budgets WHERE source = ?").run(reader.source);
       const bud = db.prepare(
-        `INSERT INTO budgets(source, object_id, level, name, market, daily_budget, currency, status, fetched_at)
-         VALUES(?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO budgets(source, object_id, level, name, market, daily_budget, currency, status, fetched_at, mode)
+         VALUES(?,?,?,?,?,?,?,?,?,?)`,
       );
       for (const b of budgets) {
         bud.run(
@@ -299,6 +300,7 @@ export async function collect(
           account.currency,
           b.status,
           at,
+          reader.mode,
         );
       }
       db.prepare("INSERT INTO collector_runs(at, source, mode, ok, rows) VALUES(?,?,?,?,?)").run(

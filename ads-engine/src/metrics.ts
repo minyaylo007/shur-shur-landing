@@ -81,6 +81,8 @@ export interface MarketMetrics {
   proposals: number;
   won: number;
   revenue: Record<string, number>;
+  /** Spend by campaign name: «other» has no sv_/ta_ prefix to explain it, so the report names them. */
+  campaigns: { name: string; currency: string; spend: number }[];
   cpql: CostPer[];
   cac: CostPer[];
   /** Revenue / spend, only where revenue is in (or has a rate to) the spend currency. */
@@ -99,15 +101,29 @@ export interface MetricsReport {
   markets: MarketMetrics[];
 }
 
-export function computeMetrics(db: Db, since: string, until: string, limits: Pick<Limits, "fx" | "smallSample">): MetricsReport {
+/** `metaMode` picks the rows that mode wrote: fixture rows never count as live spend. */
+export function computeMetrics(
+  db: Db,
+  since: string,
+  until: string,
+  limits: Pick<Limits, "fx" | "smallSample">,
+  metaMode = "live",
+): MetricsReport {
   const small = limits.smallSample;
   const markets = MARKETS.map((market): MarketMetrics => {
     const spendRows = db
       .prepare(
         `SELECT currency, SUM(spend) AS spend, SUM(platform_leads) AS pl FROM insights
-         WHERE level = 'campaign' AND market = ? AND date >= ? AND date <= ? GROUP BY currency`,
+         WHERE level = 'campaign' AND mode = ? AND market = ? AND date >= ? AND date <= ? GROUP BY currency`,
       )
-      .all(market, since, until) as { currency: string; spend: number; pl: number }[];
+      .all(metaMode, market, since, until) as { currency: string; spend: number; pl: number }[];
+    const campaigns = db
+      .prepare(
+        `SELECT COALESCE(NULLIF(MAX(campaign_name), ''), campaign_id) AS name, currency, SUM(spend) AS spend FROM insights
+         WHERE level = 'campaign' AND mode = ? AND market = ? AND date >= ? AND date <= ?
+         GROUP BY campaign_id, currency ORDER BY spend DESC`,
+      )
+      .all(metaMode, market, since, until) as { name: string; currency: string; spend: number }[];
     const spend: Record<string, number> = {};
     let platformLeads = 0;
     for (const r of spendRows) {
@@ -170,6 +186,7 @@ export function computeMetrics(db: Db, since: string, until: string, limits: Pic
       proposals,
       won,
       revenue,
+      campaigns,
       cpql: Object.entries(spend).map(([cur, s]) => costPer(s, qualified, cur, small)),
       cac: Object.entries(spend).map(([cur, s]) => costPer(s, won, cur, small)),
       roas,

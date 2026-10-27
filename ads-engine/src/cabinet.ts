@@ -13,8 +13,9 @@ import { log } from "./log.ts";
 
    Counters only. Names, contacts, messages and lead ids never enter the
    snapshot: the queries below select counts, and the site refuses any field
-   its schema does not name. While Meta runs on fixtures `test_data` is true
-   and the page does not show the ad rows as real. */
+   its schema does not name. Ad rows come only from the current Meta mode;
+   `test_data` is true while Meta runs on fixtures or if any fixture row got in,
+   and the page then does not show the ad rows as real. */
 
 export const SNAPSHOT_FILE = "cabinet-snapshot.json";
 const DAYS = 60;
@@ -52,14 +53,14 @@ export function buildSnapshot(
 
   const rows = db
     .prepare(
-      `SELECT date, campaign_id, MAX(campaign_name) AS campaign, currency,
+      `SELECT date, campaign_id, MAX(campaign_name) AS campaign, currency, MAX(mode) AS mode,
               SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(clicks) AS clicks
          FROM insights
-        WHERE source = 'meta' AND level = 'campaign' AND date >= ?
+        WHERE source = 'meta' AND level = 'campaign' AND mode = ? AND date >= ?
         GROUP BY date, campaign_id, currency
         ORDER BY date, campaign_id`,
     )
-    .all(since) as { date: string; campaign_id: string; campaign: string | null; currency: string; spend: number; impressions: number; clicks: number }[];
+    .all(opts.metaMode, since) as { date: string; campaign_id: string; campaign: string | null; currency: string; mode: string; spend: number; impressions: number; clicks: number }[];
 
   // Leads the ledger attributes to a campaign: utm_campaign carries its name or id.
   const attributed = db
@@ -74,7 +75,10 @@ export function buildSnapshot(
   const leadsFor = (date: string, id: string, name: string) =>
     attributed.filter((a) => a.date === date && (a.utm === id || a.utm === name)).reduce((s, a) => s + a.n, 0);
 
-  const currencies = [...new Set(rows.map((r) => r.currency))];
+  // No ad rows yet in the window: the account currency still comes from this mode's budgets.
+  const currencies = rows.length
+    ? [...new Set(rows.map((r) => r.currency))]
+    : (db.prepare("SELECT DISTINCT currency FROM budgets WHERE source = 'meta' AND mode = ?").all(opts.metaMode) as { currency: string }[]).map((r) => r.currency);
 
   const site = db
     .prepare(
@@ -94,7 +98,7 @@ export function buildSnapshot(
   return {
     version: 1,
     generated_at: now.toISOString(),
-    test_data: opts.metaMode !== "live",
+    test_data: opts.metaMode !== "live" || rows.some((r) => r.mode !== "live"),
     currency: currencies.length === 1 ? currencies[0] : null,
     ads: {
       connected: rows.length > 0,

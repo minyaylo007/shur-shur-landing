@@ -36,10 +36,11 @@ function lead(app: App, campaign: string, i: number, day = "2026-09-20", qualifi
   if (qualified) setStatus(app.db, p.lead.lead_id, { to: "qualified", actor: "t" });
 }
 
-/** A campaign spending 20 EUR/day for 30 days, fresh data. */
+/** A campaign spending 20 EUR/day for 30 days, fresh data. testApp has no Meta key,
+    so Meta runs on fixtures and the rules read only fixture-mode rows. */
 function world(opts: { limits?: Partial<Limits>; env?: Record<string, string> } = {}) {
   const app = testApp({ limits: opts.limits, env: opts.env });
-  seedCampaign(app.db, { id: "c1", name: "sv_test", market: "suceava", daily: 20, spendPerDay: 20, days: 30, today: TODAY });
+  seedCampaign(app.db, { id: "c1", name: "sv_test", market: "suceava", daily: 20, spendPerDay: 20, days: 30, today: TODAY, mode: "fixtures" });
   markCollected(app.db, NOW);
   return app;
 }
@@ -126,7 +127,7 @@ describe("guards", () => {
 
   it("stale or failed data blocks increases only", () => {
     const stale = testApp({ limits: CAPS });
-    seedCampaign(stale.db, { id: "c1", name: "sv_test", market: "suceava", daily: 20, spendPerDay: 20, days: 30, today: TODAY });
+    seedCampaign(stale.db, { id: "c1", name: "sv_test", market: "suceava", daily: 20, spendPerDay: 20, days: 30, today: TODAY, mode: "fixtures" });
     markCollected(stale.db, new Date(NOW.getTime() - 40 * 3600_000));
     expect(guard(stale.engine(), up())).toMatch(/старше 36/);
     expect(guard(stale.engine(), cut())).toBeNull();
@@ -139,7 +140,7 @@ describe("guards", () => {
 
   it("learning phase and unknown objects are left alone", () => {
     const app = testApp({ limits: CAPS });
-    seedCampaign(app.db, { id: "c1", name: "sv_test", market: "suceava", daily: 20, spendPerDay: 20, days: 5, today: TODAY });
+    seedCampaign(app.db, { id: "c1", name: "sv_test", market: "suceava", daily: 20, spendPerDay: 20, days: 5, today: TODAY, mode: "fixtures" });
     markCollected(app.db, NOW);
     expect(guard(app.engine(), cut())).toMatch(/обучения/);
     expect(guard(app.engine(), cut({ objectId: "gone" }))).toMatch(/не найден/);
@@ -212,7 +213,7 @@ describe("modes and journal", () => {
       throw new Error("network must not be touched");
     }) as unknown as typeof fetch;
     const app = testApp({ env: { SHUR_ADS_RULES_MODE: "auto" }, fetchFn });
-    seedCampaign(app.db, { id: "c1", name: "sv_test", market: "suceava", daily: 20, spendPerDay: 20, days: 30, today: TODAY });
+    seedCampaign(app.db, { id: "c1", name: "sv_test", market: "suceava", daily: 20, spendPerDay: 20, days: 30, today: TODAY, mode: "fixtures" });
     markCollected(app.db, NOW);
     lead(app, "other_campaign", 1);
     const r = await runRules(app.engine());
