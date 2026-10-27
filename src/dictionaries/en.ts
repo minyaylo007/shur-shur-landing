@@ -27,6 +27,7 @@ export const en: Dictionary = {
     subtitle: "Production, editing, social media, advertising.",
     cta: "Discuss a project",
     secondary: "See the work",
+    direct: "Message us on Direct",
   },
   work: {
     kicker: "Portfolio",

@@ -27,6 +27,7 @@ export const ro: Dictionary = {
     subtitle: "Producție, montaj, rețele sociale, reclame.",
     cta: "Să discutăm proiectul",
     secondary: "Vezi lucrările",
+    direct: "Scrie-ne în Direct",
   },
   work: {
     kicker: "Portofoliu",
