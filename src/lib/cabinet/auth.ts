@@ -19,7 +19,7 @@ import { AUTH_KEY, cabinetStore, StoreConflictError } from "./store";
 export const SESSION_COOKIE = "shur_cabinet";
 export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 export const SETUP_TTL_SECONDS = 7 * 24 * 60 * 60;
-export const MIN_PASSWORD = 10;
+export const MIN_PASSWORD = 8;
 export const MAX_PASSWORD = 200;
 /** Failed logins across all IPs before the cabinet stops checking passwords. */
 export const GLOBAL_FAILURE_LIMIT = 30;
