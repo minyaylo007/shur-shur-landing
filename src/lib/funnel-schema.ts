@@ -8,7 +8,7 @@ import { locales } from "./i18n";
  * is used only to name the market and is not forwarded.
  */
 const channels = ["whatsapp", "telegram", "instagram", "viber", "phone"] as const;
-const placements = ["header", "hero", "contact_bar", "contact_section", "footer"] as const;
+const placements = ["header", "hero", "contact_bar", "contact_section", "packages", "footer"] as const;
 // A plain path: no query, no hash, no host — nothing a visitor typed.
 const path = z.string().max(120).regex(/^\/[A-Za-z0-9/_-]*$/);
 const locale = z.enum(locales);
