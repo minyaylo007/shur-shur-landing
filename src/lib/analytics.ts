@@ -1,4 +1,5 @@
 import type { Locale } from "./i18n";
+import { sendFunnel } from "./funnel";
 
 /**
  * The project's whole analytics surface (v3, discrepancy §12).
@@ -67,5 +68,10 @@ export function track(event: AnalyticsEvent): void {
     window.shurTrack?.(event);
   } catch {
     /* A broken analytics provider is not allowed to break the page. */
+  }
+  // 04.11.2026: the click is also counted on our own server (lib/funnel) —
+  // no personal data and no cookie, so without waiting for consent.
+  if (event.name === "contact_click") {
+    sendFunnel({ event: "contact_click", locale: event.locale, channel: event.channel, placement: event.placement });
   }
 }

@@ -114,6 +114,22 @@ export async function sendLeadToLedger(lead: LedgerLead): Promise<LedgerOutcome>
   return postSigned(`${config.base}/v1/leads`, config.secret, lead, "ledger", lead.lead_id);
 }
 
+/** Site funnel counter: the ledger adds one to a daily aggregate (ads-engine/src/site-funnel.ts). */
+export interface LedgerFunnel {
+  event: "visit" | "form_reached" | "contact_click";
+  locale: string;
+  market: Market;
+  channel?: string;
+  placement?: string;
+}
+
+export async function sendFunnelToLedger(funnel: LedgerFunnel): Promise<LedgerOutcome> {
+  const config = ledgerConfig();
+  if (!config) return "skipped";
+  // Same path and signature as a lead: Caddy opens nothing else on the ledger.
+  return postSigned(`${config.base}/v1/leads`, config.secret, { funnel }, "funnel", funnel.event);
+}
+
 /** Telegram took the lead: tell the ledger not to re-send it. */
 export async function markLeadDelivered(leadId: string): Promise<LedgerOutcome> {
   const config = ledgerConfig();
