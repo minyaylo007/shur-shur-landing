@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Db } from "./db.ts";
 import type { FetchLike } from "./meta/graph.ts";
 import { sign } from "./hmac.ts";
+import { funnelDays, funnelSince } from "./site-funnel.ts";
 import { log } from "./log.ts";
 
 /* The owner's stats cabinet (site: /cabinet, src/lib/cabinet/snapshot.ts).
@@ -167,11 +168,27 @@ export function buildSnapshot(
       }),
       ...(allRows.length ? { all_time: { since: allRows.reduce((m, r) => (r.since < m ? r.since : m), allRows[0].since), campaigns: allTime } } : {}),
     },
-    // Visits and «reached the form» have no source on this server yet: null,
-    // which the page shows as «нет данных», never as 0.
-    site: { days: site.map((d) => ({ date: d.date, visits: null, form_reached: null, leads: d.leads })) },
+    // Visits and «reached the form» come from the site counter (site-funnel.ts).
+    // Days before its first count stay null — the page shows «нет данных», never 0.
+    site: { days: siteDays(db, since, site) },
     insights,
   };
+}
+
+function siteDays(db: Db, since: string, leadDays: { date: string; leads: number }[]): CabinetSnapshot["site"]["days"] {
+  const first = funnelSince(db);
+  const counted = new Map(funnelDays(db, since).map((d) => [d.date, d]));
+  const leadsOn = new Map(leadDays.map((d) => [d.date, d.leads]));
+  return [...new Set([...leadsOn.keys(), ...counted.keys()])].sort().map((date) => {
+    const on = first !== null && date >= first;
+    const c = counted.get(date);
+    return {
+      date,
+      visits: on ? (c?.visits ?? 0) : null,
+      form_reached: on ? (c?.form_reached ?? 0) : null,
+      leads: leadsOn.get(date) ?? 0,
+    };
+  });
 }
 
 export type PushOutcome = "sent" | "skipped" | "failed";
