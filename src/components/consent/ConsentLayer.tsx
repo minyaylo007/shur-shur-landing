@@ -23,6 +23,28 @@ import { readZone } from "@/lib/zone";
 
 const SERVER = "\u0000server";
 
+/** The open banner's height, for the hero to lift its button above it (B3.1). */
+export const CONSENT_HEIGHT_VAR = "--consent-h";
+
+/* A callback ref (React 19 runs the returned cleanup): while the banner is on
+   screen its height is published on <html>, and it is removed with the banner.
+   On a 390 px phone in the EU zone the banner used to lie on top of the hero's
+   one filled button (audit 04.11.2026, ro) — a visitor from the ad saw a first
+   screen with no button. The hero pads its bottom by this height instead of
+   the banner shrinking: the two equal buttons stay as large as the law wants. */
+function publishHeight(node: HTMLElement | null) {
+  if (!node || typeof ResizeObserver === "undefined") return;
+  const root = document.documentElement;
+  const observer = new ResizeObserver(() => {
+    root.style.setProperty(CONSENT_HEIGHT_VAR, `${Math.ceil(node.getBoundingClientRect().height)}px`);
+  });
+  observer.observe(node);
+  return () => {
+    observer.disconnect();
+    root.style.removeProperty(CONSENT_HEIGHT_VAR);
+  };
+}
+
 function readConsentRaw(): string | null {
   try {
     return window.localStorage.getItem(CONSENT_STORAGE_KEY);
@@ -111,6 +133,7 @@ export function ConsentLayer({ dict }: ConsentLayerProps) {
 
   return (
     <section
+      ref={publishHeight}
       role="region"
       aria-label={dict.label}
       className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-3xl rounded-md bg-cherry-black p-4 text-paper-100 shadow-[4px_4px_0_rgb(28_26_25)] sm:p-5"

@@ -97,7 +97,11 @@ export function Hero({ locale, dict }: HeroProps) {
           on both sides of the joint (see `SelectedWork`), which lands the
           distance at ~64 px on phones and ~88 px from `lg`. The top padding
           is untouched: it clears the fixed header, which is a different job. */}
-      <div className="relative mx-auto w-full max-w-7xl px-4 pt-24 pb-8 sm:px-6 lg:pt-28 lg:pb-12">
+      {/* `--consent-h` is the cookie banner's height while it is open
+          (ConsentLayer): the content is anchored to the bottom, so this lifts
+          the button above the banner instead of under it. Without a banner
+          the variable is unset and the padding is the one described above. */}
+      <div className="relative mx-auto w-full max-w-7xl px-4 pt-24 pb-[calc(2rem+var(--consent-h,0px))] sm:px-6 lg:pt-28 lg:pb-[calc(3rem+var(--consent-h,0px))]">
         <div className="flex max-w-xl flex-col items-start gap-7 lg:max-w-[52%]">
           <KineticHeading
             as="h1"
