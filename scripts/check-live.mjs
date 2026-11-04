@@ -8,6 +8,8 @@
 //   2. «Спасибо»: форма → /uk/thanks без query, ровно один Lead с eventID = lead_id;
 //      перезагрузка, «назад/вперёд» и прямой заход — 0 Lead. noindex на месте.
 //   3. Контакт: клик по WhatsApp и по телефону — ровно один Contact, параметр только канал.
+//   4. Баннер и кнопка: на телефоне 390 px (ro, uk) открытый баннер согласия не
+//      лежит на главной кнопке первого экрана — она целиком видна над ним (B3.1).
 //
 // Что НЕ уходит наружу: /api/lead замокан (в Telegram и журнал ничего не падает),
 // пиксельный /tr отдаётся пустой картинкой, всё не-Meta и не-сайт — abort.
@@ -36,6 +38,8 @@ const { chromium } = loadPlaywright();
 
 const BASE = (process.env.SHUR_LIVE_URL || "https://shur-shur.com").replace(/\/$/, "");
 const HOST = new URL(BASE).hostname;
+// SHUR_LIVE_ONLY=bannerScenarios — один сценарий (для превью и локальной сборки).
+const ONLY = process.env.SHUR_LIVE_ONLY;
 const PIXEL = "1133465872469034";
 const LEAD = "0b8e2f4c-1d2e-4f3a-9b8c-7d6e5f4a3b2c";
 // Пиксель Meta сам отбрасывает ботов (HeadlessChrome в UA): без обычного UA он молчит.
@@ -214,11 +218,30 @@ async function thanksScenarios(browser) {
   }
 }
 
+async function bannerScenarios(browser) {
+  // Без согласия: баннер открыт, как у румына из рекламы. Кнопка — первая
+  // ссылка героя с классом кнопки (#top a[class*=rounded-full]).
+  for (const locale of ["ro", "uk"]) {
+    const context = await browser.newContext({ userAgent: UA, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    await context.route("**/*", (route) => (new URL(route.request().url()).hostname === HOST ? route.continue() : route.abort()));
+    const page = await context.newPage();
+    await page.goto(`${BASE}/${locale}`, { waitUntil: "networkidle" });
+    const banner = page.locator('section[role="region"]').filter({ has: page.getByRole("button") }).last();
+    await banner.waitFor({ timeout: 10000 });
+    await page.waitForTimeout(1500); // Reveal и ResizeObserver
+    const cta = page.locator("#top a[class*=rounded-full]").first();
+    const [b, c] = [await banner.boundingBox(), await cta.boundingBox()];
+    const ok = !!b && !!c && c.y >= 0 && c.y + c.height <= b.y;
+    check(`баннер · ${locale} 390 px: главная кнопка целиком над баннером`, ok, { cta: c && { top: Math.round(c.y), bottom: Math.round(c.y + c.height) }, bannerTop: b && Math.round(b.y) });
+    await context.close();
+  }
+}
+
 (async () => {
   console.log(`живая проверка ${BASE} · fixtures: ${FBEVENTS && CONFIG ? FIXTURES : "CDN Meta"}`);
   const browser = await chromium.launch({ args: ["--disable-blink-features=AutomationControlled"] });
   try {
-    for (const run of [consentScenarios, thanksScenarios]) {
+    for (const run of [consentScenarios, thanksScenarios, bannerScenarios].filter((r) => !ONLY || r.name === ONLY)) {
       try { await run(browser); } catch (e) { failed++; console.log(`FAIL ${run.name}: ${e.message.split("\n")[0]}`); }
     }
   } finally {
