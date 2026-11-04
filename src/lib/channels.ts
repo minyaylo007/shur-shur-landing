@@ -71,19 +71,18 @@ export function localeChannels(locale: Locale): Channel[] {
 }
 
 /**
- * The ONE primary action of the whole page (redesign v3 §6). Everything
- * labelled «Обговорити проєкт» — header, hero, contact section — points here,
- * and there is deliberately no second filled button anywhere: Instagram is a
- * portfolio link and the audit form is a different, differently-labelled
- * offer.
+ * The ONE primary action of the whole page (redesign v3 §6, v4 B1.1).
+ * Everything labelled «Обговорити проєкт» — header, hero, contact section —
+ * points here, and there is deliberately no second filled button anywhere.
  *
- * WhatsApp carries it: it is the agency's real number, it is answered, and it
- * is the messenger that dominates every market this page is written for
- * except Ukraine — where the Ukrainian first choice, Telegram, is still an
- * unregistered placeholder.
+ * v4 (04.11.2026): it is the FIRST READY channel of the locale's own order,
+ * not one channel for everyone. Until then Ukrainian visitors got WhatsApp,
+ * which is nobody's first messenger in Ukraine; the brief asks for Direct or
+ * Telegram there and WhatsApp for he/ro/en. `MESSENGER_ORDER` already says
+ * exactly that, so the action reads it instead of restating it: today uk
+ * resolves to Instagram Direct (Telegram is still not ready), the rest to
+ * WhatsApp, and the day Telegram goes ready the Ukrainian button follows.
  */
-const PRIMARY_CHANNEL: ChannelKey = "whatsapp";
-
 /** Anchor of the page's own contact section — the destination that never dies. */
 export const CONTACT_ANCHOR = "#contact";
 
@@ -103,8 +102,8 @@ export interface PrimaryAction {
  * slightly longer one. So it degrades to `#contact`: the audit form on the
  * same page, always reachable, no deep-link involved.
  */
-export function primaryAction(): PrimaryAction {
-  const channel = readyChannel(PRIMARY_CHANNEL);
+export function primaryAction(locale: Locale): PrimaryAction {
+  const [channel] = localeChannels(locale);
   return channel
     ? { href: channel.href, key: channel.key, external: true }
     : { href: CONTACT_ANCHOR, key: null, external: false };

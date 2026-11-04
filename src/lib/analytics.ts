@@ -27,7 +27,7 @@ import type { Locale } from "./i18n";
  */
 
 /** Where on the page the interaction happened. */
-export type EventPlacement = "header" | "hero" | "contact_bar" | "contact_section" | "footer";
+export type EventPlacement = "header" | "hero" | "contact_bar" | "contact_section" | "packages" | "footer";
 
 /**
  * Which channel the visitor chose. Mirrors `ChannelKey` from `lib/channels`

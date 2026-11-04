@@ -15,13 +15,13 @@ interface HeaderProps {
   langSwitcher: Dictionary["langSwitcher"];
 }
 
-/* Redesign v2 IA: four destinations instead of five, in scroll order. The
-   old #cases and #team sections are gone — their surviving content lives in
-   #work and #about respectively. */
+/* Redesign v4 IA (brief B1): four destinations, in scroll order — cases,
+   packages, how we work with your city, contact. The full portfolio (#work)
+   is reached from the cases section, not from the bar. */
 const anchors = [
-  { id: "#work", key: "work" },
-  { id: "#services", key: "services" },
-  { id: "#about", key: "about" },
+  { id: "#cases", key: "cases" },
+  { id: "#packages", key: "packages" },
+  { id: "#how", key: "how" },
   { id: "#contact", key: "contact" },
 ] as const;
 
@@ -31,7 +31,7 @@ export function Header({ locale, nav, langSwitcher }: HeaderProps) {
      JS only *removes* the background once it knows we're at the very top. */
   const [atTop, setAtTop] = useState(false);
   /* Resolved once per render, not per click: the gate is static data. */
-  const primary = primaryAction();
+  const primary = primaryAction(locale);
 
   useEffect(() => {
     const onScroll = () => setAtTop(window.scrollY <= 24);

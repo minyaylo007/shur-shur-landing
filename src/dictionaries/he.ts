@@ -16,9 +16,9 @@ export const he: Dictionary = {
     ogAlt: "SHUR-SHUR — סוכנות תוכן מצ׳רנוביץ.",
   },
   nav: {
-    work: "עבודות",
-    services: "שירותים",
-    about: "עלינו",
+    cases: "מקרי בוחן",
+    packages: "חבילות",
+    how: "איך עובדים",
     contact: "צור קשר",
     cta: "לדבר על הפרויקט",
     callLabel: "להתקשר",
@@ -30,10 +30,11 @@ export const he: Dictionary = {
     current: "השפה הנוכחית",
   },
   hero: {
-    titleLines: ["מייצרים", "תוכן", "שמוכר"],
-    subtitle: "הפקה, עריכה, רשתות חברתיות, פרסום.",
+    titleLines: ["תוכן", "שמוכר", "לעסקים בישראל"],
+    subtitle:
+      "ימי צילום בתאריכי הביקור שלנו, ניהול רשתות ופרסום מרחוק — ומנהל פרויקט שמדבר עברית.",
     cta: "לדבר על הפרויקט",
-    secondary: "לראות עבודות",
+    secondary: "לראות מקרי בוחן",
     direct: "לכתוב לנו בדיירקט",
   },
   work: {
@@ -112,6 +113,118 @@ export const he: Dictionary = {
       { value: "3", label: "מדינות שבהן כבר עבדנו" },
     ],
   },
+  /* v4 B1.2: niche + what we made, from the portfolio's own alt texts.
+     Brand, task and result are slots in lib/cases — empty, not drawn. */
+  cases: {
+    kicker: "מקרי בוחן",
+    heading: "מה עשינו ללקוחות",
+    did: "מה עשינו",
+    task: "המשימה",
+    result: "התוצאה",
+    all: "כל העבודות",
+    items: {
+      bridal: {
+        niche: "מותג שמלות כלה",
+        did: "סרט תדמית לסלון, תפירת שמלה בתקריב, צילום שחור-לבן באטלייה",
+      },
+      restaurant: {
+        niche: "מסעדה איטלקית",
+        did: "רילס מהמטבח, סטוריז לתפריט העונתי של המרפסת, הגשת פסטה ויין",
+      },
+      bodycare: {
+        niche: "מותג טיפוח לגוף",
+        did: "צילום מוצר של בלם במים — מאחורי הקלעים ועד הפריים המוגמר",
+      },
+      leisure: {
+        niche: "מתחם נופש",
+        did: "סטוריז עם הזמנה לשריין בקתה ולוח תאריכים פנויים",
+      },
+      wellness: {
+        niche: "סטודיו ולנס",
+        did: "רילס מטיפול עיסוי וסטוריז עם הזמנה לקבוע תור",
+      },
+    },
+  },
+  /* v4 B1.3: the bullets are services.items[0..2]; the «від» price lives
+     in lib/business and is drawn only when it exists. */
+  packages: {
+    kicker: "חבילות",
+    heading: "מאיפה מתחילים",
+    from: "החל מ־",
+    ask: "לברר מחיר",
+    names: {
+      shoot: "יום צילום",
+      social: "ניהול רשתות · חודש",
+      ads: "פרסום · חודש",
+    },
+    extra: "וגם: מושן, אתרים, בוטים ו-AI — לפי המשימה.",
+  },
+  /* v4 B1.4: four steps in the market's own terms. Facts from the brief
+     (A4/B2) — every line awaits the owner's confirmation in the PR. */
+  how: {
+    kicker: "איך עובדים",
+    heading: "עם ישראל",
+    steps: [
+      {
+        title: "כותבים לנו",
+        text: "עונים בעברית, בוואטסאפ או במסנג׳ר שנוח לכם.",
+      },
+      {
+        title: "מצלמים",
+        text: "ימי צילום בישראל בתאריכי הביקור שלנו — או שאתם מצלמים בטלפון לפי התסריט שלנו, והעריכה עלינו.",
+      },
+      {
+        title: "מנהלים ומפרסמים",
+        text: "את הרשתות והפרסום אנחנו מנהלים מרחוק.",
+      },
+      {
+        title: "תשלום ולוחות זמנים",
+        text: "תנאי תשלום ולוחות זמנים נסגרים בכתב לפני ההתחלה.",
+      },
+    ],
+  },
+  /* v4 B1.5–B1.6: headings only — the section renders when lib/business
+     has people / reviews, and not at all before. */
+  team: {
+    kicker: "הצוות",
+    heading: "עם מי עובדים",
+  },
+  reviews: {
+    kicker: "המלצות",
+    heading: "מה הלקוחות אומרים",
+  },
+  /* v4 B1.7: conservative answers; rights to the material is a question
+     for the owner, not answered here. */
+  faq: {
+    kicker: "שאלות",
+    heading: "שאלות נפוצות",
+    items: [
+      {
+        q: "באיזו שפה אתם עובדים?",
+        a: "עברית, אנגלית, אוקראינית ורומנית — כתבו איך שנוח לכם.",
+      },
+      {
+        q: "איפה אתם מצלמים?",
+        a: "בישראל — בימי צילום בתאריכי הביקור שלנו. בין הביקורים — אתם מצלמים בטלפון לפי התסריט שלנו.",
+      },
+      {
+        q: "אפשר לעבוד לגמרי מרחוק?",
+        a: "כן. ניהול רשתות, עריכה מהחומר שלכם, פרסום, מושן, אתרים ובוטים — בלי פגישה.",
+      },
+      {
+        q: "כמה זה עולה?",
+        a: "תלוי בהיקף. כתבו מה צריך, ונגיד מחיר במסנג׳ר.",
+      },
+      {
+        q: "איך משלמים מישראל?",
+        a: "אמצעי התשלום והמסמכים נסגרים לפני ההתחלה.",
+      },
+      {
+        q: "מתי רואים תוצאה?",
+        a: "לוחות הזמנים תלויים במשימה. אנחנו קובעים אותם לפני ההתחלה, בכתב.",
+      },
+    ],
+  },
   audit: {
     kicker: "בחינם",
     heading: "ניתוח האינסטגרם שלכם",
@@ -163,6 +276,7 @@ export const he: Dictionary = {
   },
   footer: {
     tagline: "סוכנות תוכן מצ׳רנוביץ",
+    email: "אימייל",
     nav: "ניווט",
     socials: "רשתות",
     contacts: "פרטי קשר",

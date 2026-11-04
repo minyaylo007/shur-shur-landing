@@ -52,7 +52,7 @@ export function AuditCta({
   /** Accessible name for the phone link in that failure state. */
   callLabel: string;
 }) {
-  const primary = primaryAction();
+  const primary = primaryAction(locale);
   const telegram = readyChannel("telegram");
   const instagram = readyChannel("instagram");
   const TelegramMark = CHANNEL_ICONS.telegram;

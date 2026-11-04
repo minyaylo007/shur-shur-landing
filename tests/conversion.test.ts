@@ -187,11 +187,16 @@ describe("lib/site — the one real phone number, demoted (v3 §4)", () => {
   });
 
   it("§6: one primary action, it goes through the gate, and it is never dead", () => {
-    const primary = primaryAction();
-    expect(primary.key).toBe("whatsapp");
-    expect(primary.href).toBe(messengers.whatsapp.href);
-    expect(messengers.whatsapp.ready).toBe(true);
-    expect(primary.external).toBe(true);
+    // v4 (brief B1.1): each market's first ready messenger — Instagram Direct
+    // for uk while Telegram is not ready, WhatsApp for he/ro/en.
+    for (const locale of locales) {
+      const primary = primaryAction(locale);
+      const expected = locale === "uk" ? "instagram" : "whatsapp";
+      expect(primary.key, locale).toBe(expected);
+      expect(primary.href).toBe(messengers[expected].href);
+      expect(messengers[expected].ready).toBe(true);
+      expect(primary.external).toBe(true);
+    }
     // The degraded destination exists as a real anchor on the page, so the
     // day WhatsApp goes not-ready the main action still lands somewhere.
     expect(CONTACT_ANCHOR).toBe("#contact");
@@ -374,7 +379,7 @@ describe("§6 — one main action, worded identically everywhere", () => {
       "../src/components/sections/AuditCta.tsx",
     ]) {
       const src = read(path);
-      expect(src).toContain("primaryAction()");
+      expect(src).toContain("primaryAction(locale)");
       // Deep-links are never hand-written next to the one source of truth.
       expect(src).not.toContain("wa.me");
     }
@@ -392,7 +397,7 @@ describe("§6 — one main action, worded identically everywhere", () => {
     const src = read("../src/components/sections/Hero.tsx");
     expect(src.match(/buttonClass\(/g)).toHaveLength(1);
     expect(src).not.toContain("<ButtonLink");
-    expect(src).toContain('hash="#work"');
+    expect(src).toContain('hash="#cases"');
   });
 
   it("the contact section does not line up three equal buttons", () => {
@@ -540,8 +545,9 @@ describe("§12 — the analytics layer is wired, with no provider shipped", () =
       "../src/components/conversion/ContactBar.tsx",
       "../src/components/sections/AuditCta.tsx",
       "../src/components/layout/Footer.tsx",
+      "../src/components/sections/Packages.tsx",
     ].map(read).join("\n");
-    for (const placement of ["header", "hero", "contact_bar", "contact_section", "footer"]) {
+    for (const placement of ["header", "hero", "contact_bar", "contact_section", "footer", "packages"]) {
       expect(used).toContain(`"${placement}"`);
     }
   });
@@ -726,11 +732,11 @@ describe("wiring — one conversion destination", () => {
     expect(src).toContain('"telegram"');
     expect(src).toContain('"instagram"');
     // WhatsApp and Viber reach the same number and live in the ContactBar.
-    // (The one filled button is WhatsApp, but by way of primaryAction() — the
+    // (The one filled button is the market's messenger, by way of primaryAction() — the
     // section never names the channel itself.)
     expect(src).not.toContain("whatsapp");
     expect(src).not.toContain("viber");
-    expect(src).toContain("primaryAction()");
+    expect(src).toContain("primaryAction(locale)");
   });
 
   it("the API route still logs the request kind (observability)", () => {

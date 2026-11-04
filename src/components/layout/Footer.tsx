@@ -1,6 +1,7 @@
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
+import { business } from "@/lib/business";
 import { readyChannel } from "@/lib/channels";
 import { ContactLink } from "@/components/conversion/ContactLink";
 import { Logo } from "@/components/ui/Logo";
@@ -46,9 +47,9 @@ export function Footer({ locale, nav, footer, consentSettings }: FooterProps) {
               {footer.nav}
             </span>
             {/* Same four destinations as the header — one IA, stated twice. */}
-            <a href="#work" className="cursor-pointer transition-colors hover:text-juice-300">{nav.work}</a>
-            <a href="#services" className="cursor-pointer transition-colors hover:text-juice-300">{nav.services}</a>
-            <a href="#about" className="cursor-pointer transition-colors hover:text-juice-300">{nav.about}</a>
+            <a href="#cases" className="cursor-pointer transition-colors hover:text-juice-300">{nav.cases}</a>
+            <a href="#packages" className="cursor-pointer transition-colors hover:text-juice-300">{nav.packages}</a>
+            <a href="#how" className="cursor-pointer transition-colors hover:text-juice-300">{nav.how}</a>
             <a href="#contact" className="cursor-pointer transition-colors hover:text-juice-300">{nav.contact}</a>
           </nav>
 
@@ -100,7 +101,19 @@ export function Footer({ locale, nav, footer, consentSettings }: FooterProps) {
               {/* dir="ltr": without it the leading "+" is re-ordered in Hebrew. */}
               <span dir="ltr">{site.phone.display}</span>
             </ContactLink>
+            {/* v4 B1.9: email and requisites are slots (lib/business) — drawn
+                only once the owner gives them. */}
+            {business.email !== null ? (
+              <a
+                href={`mailto:${business.email}`}
+                aria-label={footer.email}
+                className="inline-flex min-h-11 items-center transition-colors hover:text-juice-300"
+              >
+                <span dir="ltr">{business.email}</span>
+              </a>
+            ) : null}
             <p className="text-paper-200/70">{footer.city}</p>
+            {business.requisites !== null ? <p className="text-xs text-paper-200/60">{business.requisites}</p> : null}
           </div>
         </div>
 

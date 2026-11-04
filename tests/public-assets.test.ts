@@ -96,14 +96,15 @@ describe("public/ — the scan itself is honest before it judges anything", () =
     expect(constructedPaths.length).toBeGreaterThan(20);
   });
 
-  it("follows BUILT paths — hero-street.mp4 is reachable, and by no literal", () => {
+  it("follows BUILT paths — the hero video is reachable, and by no literal", () => {
     // The exact case the first, grep-shaped version of this test got wrong.
     // Asserted from both ends: the constructed set has it, and a search for
     // the name in the source would NOT have — so if someone ever replaces the
     // construction with a substring search, this line says what breaks.
-    expect(constructedPaths).toContain("/work/video/hero-street.mp4");
-    expect(literalPaths).not.toContain("/work/video/hero-street.mp4");
-    expect(publicFiles()).toContain("/work/video/hero-street.mp4");
+    // (v4 replaced hero-street with the showreel; same construction.)
+    expect(constructedPaths).toContain("/work/video/showreel.mp4");
+    expect(literalPaths).not.toContain("/work/video/showreel.mp4");
+    expect(publicFiles()).toContain("/work/video/showreel.mp4");
   });
 
   it("follows WRITTEN paths — the Open Graph card is found as a literal", () => {

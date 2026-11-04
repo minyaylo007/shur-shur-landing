@@ -9,9 +9,9 @@ export const en: Dictionary = {
     ogAlt: "SHUR-SHUR — content agency from Chernivtsi.",
   },
   nav: {
-    work: "Work",
-    services: "Services",
-    about: "About",
+    cases: "Cases",
+    packages: "Packages",
+    how: "How we work",
     contact: "Contact",
     cta: "Discuss a project",
     callLabel: "Call us",
@@ -23,10 +23,11 @@ export const en: Dictionary = {
     current: "Current language",
   },
   hero: {
-    titleLines: ["WE MAKE", "CONTENT", "THAT SELLS"],
-    subtitle: "Production, editing, social media, advertising.",
+    titleLines: ["CONTENT", "THAT SELLS,", "WHEREVER YOU ARE"],
+    subtitle:
+      "Social media, editing and ads for small businesses — run remotely by a production team from Chernivtsi, Ukraine.",
     cta: "Discuss a project",
-    secondary: "See the work",
+    secondary: "See the cases",
     direct: "Message us on Direct",
   },
   work: {
@@ -105,6 +106,118 @@ export const en: Dictionary = {
       { value: "3", label: "countries we have worked in" },
     ],
   },
+  /* v4 B1.2: niche + what we made, from the portfolio's own alt texts.
+     Brand, task and result are slots in lib/cases — empty, not drawn. */
+  cases: {
+    kicker: "Cases",
+    heading: "WHAT WE MADE FOR CLIENTS",
+    did: "What we made",
+    task: "Task",
+    result: "Result",
+    all: "All work",
+    items: {
+      bridal: {
+        niche: "Bridal brand",
+        did: "A salon image film, a dress being made in close-up, a black-and-white atelier shoot",
+      },
+      restaurant: {
+        niche: "Italian restaurant",
+        did: "Kitchen Reels, stories for the seasonal terrace menu, pasta and wine served",
+      },
+      bodycare: {
+        niche: "Body-care brand",
+        did: "A product shoot of a balm in water — from behind the scenes to the finished frame",
+      },
+      leisure: {
+        niche: "Leisure complex",
+        did: "Stories inviting guests to book a cottage, with a calendar of open dates",
+      },
+      wellness: {
+        niche: "Wellness studio",
+        did: "Reels of a massage treatment and stories inviting bookings",
+      },
+    },
+  },
+  /* v4 B1.3: the bullets are services.items[0..2]; the «від» price lives
+     in lib/business and is drawn only when it exists. */
+  packages: {
+    kicker: "Packages",
+    heading: "WHERE TO START",
+    from: "from",
+    ask: "Ask the price",
+    names: {
+      shoot: "Shooting day",
+      social: "Social media · month",
+      ads: "Advertising · month",
+    },
+    extra: "Also: motion, websites, bots and AI — scoped to the task.",
+  },
+  /* v4 B1.4: four steps in the market's own terms. Facts from the brief
+     (A4/B2) — every line awaits the owner's confirmation in the PR. */
+  how: {
+    kicker: "How we work",
+    heading: "WITH YOUR CITY",
+    steps: [
+      {
+        title: "You write to us",
+        text: "We reply in English, in the messenger you prefer.",
+      },
+      {
+        title: "We shoot",
+        text: "Not in our city? You film on your phone to our script, and we do the editing.",
+      },
+      {
+        title: "We run and launch",
+        text: "Social media and ads, managed remotely — wherever you are.",
+      },
+      {
+        title: "Payment and timing",
+        text: "Payment terms and deadlines are agreed in writing before we start.",
+      },
+    ],
+  },
+  /* v4 B1.5–B1.6: headings only — the section renders when lib/business
+     has people / reviews, and not at all before. */
+  team: {
+    kicker: "Team",
+    heading: "WHO YOU WORK WITH",
+  },
+  reviews: {
+    kicker: "Reviews",
+    heading: "WHAT CLIENTS SAY",
+  },
+  /* v4 B1.7: conservative answers; rights to the material is a question
+     for the owner, not answered here. */
+  faq: {
+    kicker: "Questions",
+    heading: "FAQ",
+    items: [
+      {
+        q: "What language do you work in?",
+        a: "English, Ukrainian, Romanian and Hebrew — write in whichever suits you.",
+      },
+      {
+        q: "Where do you shoot?",
+        a: "In Chernivtsi, on site. Elsewhere — shooting trips by arrangement, or you film on your phone to our script.",
+      },
+      {
+        q: "Can we work fully remotely?",
+        a: "Yes. Social media, editing your footage, ads, motion, websites and bots need no meeting.",
+      },
+      {
+        q: "How much does it cost?",
+        a: "It depends on the scope. Tell us what you need and we will name the price in the messenger.",
+      },
+      {
+        q: "How do I pay from abroad?",
+        a: "The payment method and paperwork are agreed before we start, for your country.",
+      },
+      {
+        q: "When will I see results?",
+        a: "Timing depends on the task. We name it before we start and put it in writing.",
+      },
+    ],
+  },
   audit: {
     kicker: "Free",
     heading: "AN INSTAGRAM REVIEW",
@@ -156,6 +269,7 @@ export const en: Dictionary = {
   },
   footer: {
     tagline: "Content agency from Chernivtsi",
+    email: "Email",
     nav: "Navigation",
     socials: "Social",
     contacts: "Contacts",
