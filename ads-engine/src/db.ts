@@ -136,6 +136,18 @@ CREATE TABLE IF NOT EXISTS kv (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Site funnel (site-funnel.ts): one aggregate row per day and dimension, never per visitor.
+CREATE TABLE IF NOT EXISTS site_funnel_daily (
+  date      TEXT NOT NULL,
+  event     TEXT NOT NULL,
+  locale    TEXT NOT NULL,
+  market    TEXT NOT NULL,
+  channel   TEXT NOT NULL,
+  placement TEXT NOT NULL,
+  n         INTEGER NOT NULL,
+  PRIMARY KEY (date, event, locale, market, channel, placement)
+);
 `;
 
 /* Contract v1.1 (03.10.2026): delivery to the lead chat. delivered_at NULL =

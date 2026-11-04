@@ -4,13 +4,14 @@ import { HOST } from "./config.ts";
 import { verify } from "./hmac.ts";
 import { parseLead, ingestLead } from "./leads.ts";
 import { markDelivered } from "./delivery.ts";
+import { parseFunnel, countFunnel } from "./site-funnel.ts";
 import { isStopped } from "./safety.ts";
 import { freshness } from "./meta/insights.ts";
 import { log } from "./log.ts";
 
 /* HTTP surface: POST /v1/leads (contract v1), POST /v1/leads/<id>/delivered
    (v1.1: the site's «Telegram has it», same HMAC) and GET /healthz. Nothing
-   else. The body is read raw (≤ 32 KiB) because the signature covers raw bytes. */
+   else. A signed `{ funnel }` body on /v1/leads is a site counter, not a lead. The body is read raw (≤ 32 KiB) because the signature covers raw bytes. */
 
 const MAX_BODY = 32 * 1024;
 const DELIVERED_PATH = /^\/v1\/leads\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/delivered$/i;
@@ -105,6 +106,18 @@ export function handler(app: App, nowSeconds: () => number = () => Math.floor(Da
         log("lead.delivered_mark", { lead_id: leadId, result: r });
         if (r === "unknown") return send(res, 404, { ok: false, error: "unknown_lead" });
         return send(res, 200, { ok: true, lead_id: leadId, already: r === "already" });
+      }
+      if (body !== null && typeof body === "object" && "funnel" in body) {
+        // Site funnel counter (site-funnel.ts): same path and signature as a lead,
+        // Caddy opens nothing else. Only the counter's own fields are allowed.
+        const extra = Object.keys(body).find((k) => k !== "funnel");
+        const f = extra ? { ok: false as const, field: extra } : parseFunnel((body as { funnel: unknown }).funnel);
+        if (!f.ok) {
+          log("funnel.rejected", { field: f.field.slice(0, 40) });
+          return send(res, 400, { ok: false, error: "invalid_input", field: f.field.slice(0, 40) });
+        }
+        countFunnel(app.db, f.event, new Date(nowSeconds() * 1000));
+        return send(res, 200, { ok: true });
       }
       const parsed = parseLead(body);
       if (!parsed.ok) {

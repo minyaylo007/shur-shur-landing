@@ -27,6 +27,7 @@ export const critical = [
   "tests/lead-ledger-first.test.ts", // журнал первым: Telegram упал → 200 и ретрай; оба упали → 502; повторная доставка
   "tests/cabinet-access.test.ts", //   кабинет: без cookie закрыт; подпись; ПД в снимке нет; ссылка setup одноразовая
   "tests/ad-direct.test.ts", //        из рекламы Meta — Direct первой кнопкой; остальным герой прежний; флаг без ПД, не в URL
+  "tests/funnel-counter.test.ts", //   счётчик воронки идёт без согласия → право: ни IP, ни UA, ни query, ни чужих полей; журнал упал → 204
 ];
 
 export default defineConfig({

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Db } from "./db.ts";
 import type { Limits } from "./config.ts";
 import { addDays } from "./time.ts";
+import { funnelDays, funnelSince } from "./site-funnel.ts";
 import { log } from "./log.ts";
 
 /* The day's analysis input: ONE JSON the conductor reads with
@@ -255,12 +256,38 @@ export function buildAnalysis(db: Db, opts: { metaMode: string; limits: Limits; 
       by_market: byMarket,
     },
     offline_sales: offline.map((o) => ({ source: o.source, market: o.market, currency: o.currency, clients: o.n, amount: round(o.amount) })),
-    site_funnel: {
-      note: "визиты и «дошли до формы» на сервере пока без источника — null, не 0; landing_views из Meta — заменитель",
-      visits: null,
-      form_reached: null,
-      days: siteDays,
-    },
+    site_funnel: siteFunnel(db, addDays(today, -30), siteDays),
+  };
+}
+
+/** Server counters (site-funnel.ts) next to the ledger's leads. Days before the
+    counter's first day stay null — «no data», never 0. */
+function siteFunnel(db: Db, since: string, leadDays: { date: string; leads: number }[]) {
+  const first = funnelSince(db);
+  const counted = new Map(funnelDays(db, since).map((d) => [d.date, d]));
+  const dates = [...new Set([...leadDays.map((d) => d.date), ...counted.keys()])].sort();
+  const leadsOn = new Map(leadDays.map((d) => [d.date, d.leads]));
+  const sum = (k: "visits" | "form_reached" | "contact_clicks") =>
+    first === null ? null : [...counted.values()].reduce((s, d) => s + d[k], 0);
+  return {
+    note: first === null
+      ? "серверный счётчик ещё не получил ни одного события — null, не 0; landing_views из Meta — заменитель"
+      : `серверный счётчик сайта с ${first} (без ПД, без cookie); до этой даты — null`,
+    counted_since: first,
+    visits: sum("visits"),
+    form_reached: sum("form_reached"),
+    contact_clicks: sum("contact_clicks"),
+    days: dates.map((date) => {
+      const c = counted.get(date);
+      const on = first !== null && date >= first;
+      return {
+        date,
+        leads: leadsOn.get(date) ?? 0,
+        visits: on ? (c?.visits ?? 0) : null,
+        form_reached: on ? (c?.form_reached ?? 0) : null,
+        contact_clicks: on ? (c?.contact_clicks ?? 0) : null,
+      };
+    }),
   };
 }
 

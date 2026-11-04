@@ -14,6 +14,7 @@ import { site } from "@/lib/site";
 import { buildSha, BUILD_SHA_META } from "@/lib/build";
 import { ConsentLayer } from "@/components/consent/ConsentLayer";
 import { SiteAnalytics } from "@/components/analytics/SiteAnalytics";
+import { FunnelBeacon } from "@/components/analytics/FunnelBeacon";
 import "../globals.css";
 
 export const dynamicParams = false;
@@ -124,6 +125,8 @@ export default async function RootLayout({
         <ConsentLayer dict={getDictionary(locale).consent} />
         {/* Cookieless visitor count (Vercel Web Analytics), path only. */}
         <SiteAnalytics />
+        {/* Our server's funnel counter: visit / form reached, daily sums only. */}
+        <FunnelBeacon locale={locale} />
       </body>
     </html>
   );
