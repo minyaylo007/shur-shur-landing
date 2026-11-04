@@ -20,7 +20,7 @@ const walk = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? walk(`${dir}/${entry.name}`) : [readFileSync(`${dir}/${entry.name}`, "utf8")],
   );
-const anchors = ['"#work"', '"#services"', '"#about"', '"#contact"'];
+const anchors = ['"#cases"', '"#packages"', '"#how"', '"#contact"'];
 
 describe("shell — Header", () => {
   const src = read("../src/components/layout/Header.tsx");
@@ -45,7 +45,7 @@ describe("shell — Header", () => {
       expect(src).toContain(anchor);
       expect(footer).toContain(anchor);
     }
-    for (const gone of ['"#cases"', '"#team"']) {
+    for (const gone of ['"#services"', '"#about"', '"#team"']) {
       expect(src).not.toContain(gone);
       expect(footer).not.toContain(gone);
     }
@@ -153,14 +153,15 @@ describe("page composition", () => {
   const src = read("../src/app/[locale]/page.tsx");
 
   it("renders the seven-beat scroll in order (brief §4/§29)", () => {
-    const order = ["<Header", "<Hero", "<SelectedWork", "<ProcessResult", "<Services", "<Trust", "<AuditCta", "<Footer", "<ContactBar"]
+    const order = ["<Header", "<Hero", "<Cases", "<SelectedWork", "<Packages", "<HowWeWork", "<Team", "<Reviews", "<Faq", "<AuditCta", "<Footer", "<ContactBar"]
       .map((tag) => src.indexOf(tag));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
   it("mounts no retired v1 block, uses two torn-paper boundaries, keeps the skip-link target", () => {
-    for (const tag of ["<Marquee", "<Pain", "<Cases", "<Numbers", "<Team", "<Socials", "<MessengerFab", "<StickyCta", "<CherryCursor"]) {
+    // v4 brought cases and team back on purpose (brief B1.2, B1.5).
+    for (const tag of ["<Marquee", "<Pain", "<Numbers", "<Socials", "<MessengerFab", "<StickyCta", "<CherryCursor"]) {
       expect(src).not.toContain(tag);
     }
     expect(src.match(/<TapeDivider/g)).toHaveLength(2);

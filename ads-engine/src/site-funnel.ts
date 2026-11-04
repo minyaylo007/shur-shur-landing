@@ -11,7 +11,7 @@ import { LOCALES } from "./leads.ts";
 
 export const FUNNEL_EVENTS = ["visit", "form_reached", "contact_click"] as const;
 export const FUNNEL_CHANNELS = ["whatsapp", "telegram", "instagram", "viber", "phone"] as const;
-export const FUNNEL_PLACEMENTS = ["header", "hero", "contact_bar", "contact_section", "footer"] as const;
+export const FUNNEL_PLACEMENTS = ["header", "hero", "contact_bar", "contact_section", "packages", "footer"] as const;
 const KEYS = new Set(["event", "locale", "market", "channel", "placement"]);
 
 export interface FunnelEvent {

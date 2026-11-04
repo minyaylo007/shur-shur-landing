@@ -332,10 +332,15 @@ export const processPair = {
   }),
 } as const;
 
-/** Hero background (brief §6): a street shoot in the agency's own city. */
-export const heroVideo = video("hero-street", "fashion", 720, 1280, {
-  uk: "Бекстейдж вуличної зйомки в Чернівцях: оператор знімає модель біля фруктової ятки",
-  en: "Behind the scenes of a street shoot in Chernivtsi: an operator filming a model by a fruit stall",
-  he: "מאחורי הקלעים של צילומי רחוב בצ’רנוביץ: צלם מצלם דוגמנית ליד דוכן פירות",
-  ro: "Din culisele unei filmări stradale în Cernăuți: un operator filmează un model lângă o tarabă cu fructe",
+/**
+ * Hero background (v4 B1.1): a 12.7 s showreel cut from eight clips that are
+ * already on this page or were the hero before (scripts/build-showreel.sh).
+ * The old hero clip, the street shoot in Chernivtsi, opens it; its own file
+ * left `public/` because nothing references it any more.
+ */
+export const heroVideo = video("showreel", "fashion", 720, 1280, {
+  uk: "Шоурил: уривки зйомок SHUR-SHUR для клієнтів — вулиця, кухня, весільний салон, бекстейдж, косметика",
+  en: "Showreel: excerpts from SHUR-SHUR shoots for clients — street, kitchen, bridal salon, behind the scenes, cosmetics",
+  he: "שואוריל: קטעים מצילומים של SHUR-SHUR עבור לקוחות — רחוב, מטבח, סלון כלות, מאחורי הקלעים, קוסמטיקה",
+  ro: "Showreel: fragmente din filmările SHUR-SHUR pentru clienți — stradă, bucătărie, salon de mirese, culise, cosmetice",
 });

@@ -45,10 +45,14 @@ export function SectionHeading({
           brief cares about (390 and wider) looks exactly as before.
 
           Whoever adds a fifth language measures it here: at 390 the Romanian
-          word clears the column by only ~2px. */}
+          word clears the column by only ~2px.
+
+          04.11.2026: 360–389px was still 13px too wide in Romanian (375 is
+          an iPhone mini/SE width) — the word needs the type at ~31px for a
+          335px column, so that band gets 1.8rem (28.8px, ~310px). */}
       <KineticHeading
         lines={[heading]}
-        className={`text-[clamp(2.1rem,6.5vw,4.8rem)] font-extrabold max-[359px]:text-[1.6rem] ${headingColor}`}
+        className={`text-[clamp(2.1rem,6.5vw,4.8rem)] font-extrabold max-[389px]:text-[1.8rem] max-[359px]:text-[1.6rem] ${headingColor}`}
       />
       {sub ? (
         <Reveal delay={0.15}>

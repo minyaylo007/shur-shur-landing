@@ -38,8 +38,8 @@ const allMedia = [...workItems, processPair.bts, processPair.result, heroVideo];
 describe("no invented numbers (brief §16, §28)", () => {
   it("the only figures in the copy are the three the agency reports about itself", () => {
     for (const dict of allDicts) expect(dict.trust.facts.map((f) => f.value)).toEqual(["11", "7", "3"]);
-    const src = read("../src/components/sections/Trust.tsx");
-    expect(src).toContain("§16"); // records WHY the v1 figures are absent
+    // v4: the facts surface only as the hero's proof line, built in the page.
+    expect(read("../src/app/[locale]/page.tsx")).toContain("dict.trust.facts");
   });
 
   it("no percentage, multiplier, ROAS/CTR, millions, followers delta or K/M count in any locale", () => {
@@ -61,8 +61,7 @@ describe("no invented numbers (brief §16, §28)", () => {
       expect(string).not.toMatch(/Дай Боже|lexi\.brzvsk|@100fmcv|Нас знають|Known by|מכירים אותנו|Ne cunosc/i);
     }
     expect(existsSync(fileURLToPath(new URL("../src/lib/known.ts", import.meta.url)))).toBe(false);
-    const src = read("../src/components/sections/Trust.tsx");
-    expect(src).not.toContain("blockquote");
+    const src = read("../src/app/[locale]/page.tsx");
     expect(src).not.toMatch(/dict\.trust\.(knownBy|quotes)/);
   });
 });
@@ -144,7 +143,8 @@ describe("services (brief §15) — grouped, nothing invented, nothing dropped",
   });
 
   it("the disclosure is HTML, not a scroll-jacking track (brief §14)", () => {
-    const src = read("../src/components/sections/Services.tsx");
+    // v4: the disclosure moved to the FAQ.
+    const src = read("../src/components/sections/Faq.tsx");
     expect(src).toContain("<details");
     expect(src).toContain("<summary");
     expect(src).not.toMatch(/ScrollTrigger|gsap/);

@@ -13,6 +13,9 @@ import { AdHeroActions } from "@/components/conversion/AdHeroActions";
 interface HeroProps {
   locale: Locale;
   dict: Dictionary["hero"];
+  /** «11 людей у команді · 3 країни, де вже працювали» — built by the page
+      from `trust.facts`, the only figures the agency has confirmed. */
+  proof: string;
 }
 
 /**
@@ -32,21 +35,25 @@ interface HeroProps {
  *    no action. What is left is ONE filled button straight into WhatsApp and
  *    one quiet text link down to the work.
  *
- * The media is one clip of the agency shooting on its own street. It is 9:16,
+ * v4 (04.11.2026): the clip is a showreel — eight clips already in the
+ * archive, 1.6 s each (scripts/build-showreel.sh) — and the quiet link goes
+ * to #cases instead of the whole portfolio. The headline is per market.
+ *
+ * The media used to be one clip of the agency shooting on its own street. It is 9:16,
  * like every other file in the archive, so it is used natively: on a phone it
  * fills the screen exactly, and from `lg` up it becomes a tall frame on the
  * inline-end side instead of being cropped into a wide band.
  * `start-auto`/`end-*` are logical, so under RTL the frame moves to the other
  * side on its own and the text still leads.
  */
-export function Hero({ locale, dict }: HeroProps) {
+export function Hero({ locale, dict, proof }: HeroProps) {
   /* The three-link row that used to stand under the button is gone with §4,
      and with it the last place on the first screen that read `site.socials`
      straight through — which is how a dead t.me link reached every locale
      here until 19.09. The button below keeps the lesson rather than the row:
      it is resolved by `primaryAction()`, the same readiness gate, so it can
      degrade to #contact but can never become a link to nowhere. */
-  const primary = primaryAction();
+  const primary = primaryAction(locale);
 
 
   return (
@@ -134,13 +141,21 @@ export function Hero({ locale, dict }: HeroProps) {
                 {dict.cta}
               </ContactLink>
               <AnchorLink
-                hash="#work"
+                hash="#cases"
                 className="cursor-pointer text-sm font-semibold text-cream-type/75 underline decoration-cream-type/30 underline-offset-4 transition-colors hover:text-juice-300 hover:decoration-juice-300"
               >
                 {dict.secondary}
               </AnchorLink>
             </div>
             </AdHeroActions>
+          </Reveal>
+
+          {/* v4 B1.1: one line of proof under the buttons, built ONLY from
+              self-reported facts the page already carried (the old trust
+              block): no clients, no figures, no country names (owner,
+              23.09.2026 — a list of countries reads as a limit). */}
+          <Reveal delay={0.24}>
+            <p className="text-sm font-semibold text-juice-300">{proof}</p>
           </Reveal>
         </div>
       </div>

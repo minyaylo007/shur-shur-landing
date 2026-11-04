@@ -113,7 +113,7 @@ describe("dictionaries — one per locale", () => {
   it("every locale resolves to its own dictionary object", () => {
     const dicts = locales.map((locale) => getDictionary(locale));
     expect(new Set(dicts).size).toBe(locales.length);
-    for (const dict of dicts) expect(dict.nav.work.length).toBeGreaterThan(1);
+    for (const dict of dicts) expect(dict.nav.cases.length).toBeGreaterThan(1);
   });
 
   it("no locale shares a heading with another (no copy-paste stubs)", () => {
@@ -171,7 +171,7 @@ describe("dictionaries — no untranslated leftovers", () => {
     for (const value of [
       he.meta.title,
       he.meta.description,
-      he.nav.work,
+      he.nav.cases,
       he.hero.cta,
       he.work.heading,
       he.process.btsLabel,
@@ -289,7 +289,9 @@ describe("RTL — flipped choreography", () => {
   it("no animation is mirrored by hand any more (nothing left to mirror)", () => {
     const css = read("../src/app/globals.css");
     expect(css).not.toContain("marquee");
-    expect(read("../src/components/sections/Services.tsx")).not.toContain("ScrollTrigger");
+    for (const rel of ["Cases", "Packages", "HowWeWork", "Faq"]) {
+      expect(read(`../src/components/sections/${rel}.tsx`)).not.toContain("ScrollTrigger");
+    }
   });
 
   it("the up-right arrow glyph mirrors itself once, at its definition", () => {
@@ -305,7 +307,6 @@ describe("RTL — flipped choreography", () => {
        contact control is one labelled pill (§4, §6). What still prints Latin
        or digits inside a possibly-RTL line must still isolate it. */
     for (const rel of [
-      "../src/components/sections/Trust.tsx",
       "../src/components/sections/AuditCta.tsx",
       "../src/components/layout/Footer.tsx",
       "../src/components/forms/AuditForm.tsx",
@@ -346,9 +347,11 @@ describe("RTL — flipped choreography", () => {
     for (const rel of [
       "../src/components/sections/Hero.tsx",
       "../src/components/sections/SelectedWork.tsx",
-      "../src/components/sections/ProcessResult.tsx",
-      "../src/components/sections/Services.tsx",
-      "../src/components/sections/Trust.tsx",
+      "../src/components/sections/Cases.tsx",
+      "../src/components/sections/Packages.tsx",
+      "../src/components/sections/HowWeWork.tsx",
+      "../src/components/sections/TeamAndReviews.tsx",
+      "../src/components/sections/Faq.tsx",
       "../src/components/sections/AuditCta.tsx",
       "../src/components/conversion/ContactBar.tsx",
     ]) {
