@@ -98,6 +98,23 @@ describe("alerts and the daily report", () => {
     expect(a).toMatch(/связь сайт → учёт/);
   });
 
+  it("no leads with spend: a live site counter means the link works, no counter means check it", () => {
+    const app = testApp();
+    seedCampaign(app.db, { id: "c1", name: "sv_a", market: "suceava", daily: 30, spendPerDay: 30, days: 10, today: TODAY });
+    markCollected(app.db, NOW);
+    const noLeads = () => alerts(app.db, app.limits, app.config.dataDir, NOW).find((a) => a.includes("заяв")) ?? "";
+    expect(noLeads()).toMatch(/проверьте связь сайт → учёт/);
+    const add = (date: string, event: string, n: number) =>
+      app.db.prepare("INSERT INTO site_funnel_daily(date, event, locale, market, channel, placement, n) VALUES(?, ?, 'ro', 'suceava', '', '', ?)").run(date, event, n);
+    add("2026-09-28", "visit", 9);
+    add("2026-09-29", "visit", 7);
+    add("2026-09-29", "form_reached", 2);
+    add("2026-01-01", "visit", 100); // outside the window — not counted
+    const text = noLeads();
+    expect(text).toContain(`За ${app.limits.evalDays} дн. заявок нет при расходе; связь сайт → учёт жива (16 визитов, 2 дошли до формы)`);
+    expect(text).not.toMatch(/проверьте/);
+  });
+
   it("fixtures mode: no spend alerts, the stop flag still alerts", () => {
     const app = testApp();
     seedCampaign(app.db, { id: "c1", name: "sv_a", market: "suceava", daily: 30, spendPerDay: 30, days: 10, today: TODAY });
