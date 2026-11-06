@@ -6,6 +6,7 @@ import { freshness } from "./meta/insights.ts";
 import { isStopped } from "./safety.ts";
 import { addDays, dateInZone } from "./time.ts";
 import { MARKET_LABEL } from "./bot.ts";
+import { funnelDays } from "./site-funnel.ts";
 
 /* Daily report and alerts. Plain text, Russian, per market — markets are
    never folded into one line. Every rate shows its interval, and small
@@ -66,7 +67,16 @@ export function alerts(db: Db, limits: Limits, dataDir: string, now = new Date()
   const anySpend = db.prepare("SELECT COALESCE(SUM(spend),0) AS s FROM insights WHERE level='campaign' AND mode=? AND date>=?").get(metaMode, feedSince) as { s: number };
   const anyLead = db.prepare("SELECT COUNT(*) AS n FROM leads WHERE substr(created_at,1,10)>=?").get(feedSince) as { n: number };
   if (anySpend.s > 0 && anyLead.n === 0) {
-    out.push(`⚠ За ${limits.evalDays} дн. в учёт не пришло ни одной заявки при расходе — проверьте связь сайт → учёт (LEDGER_URL, секрет). Правила по лидам молчат.`);
+    // The site counter rides the same signed path as leads: any count proves the link works.
+    const days = funnelDays(db, feedSince);
+    const visits = days.reduce((s, d) => s + d.visits, 0);
+    const formReached = days.reduce((s, d) => s + d.form_reached, 0);
+    const events = days.reduce((s, d) => s + d.visits + d.form_reached + d.contact_clicks, 0);
+    out.push(
+      events > 0
+        ? `⚠ За ${limits.evalDays} дн. заявок нет при расходе; связь сайт → учёт жива (${visits} визитов, ${formReached} дошли до формы). Правила по лидам молчат.`
+        : `⚠ За ${limits.evalDays} дн. в учёт не пришло ни одной заявки при расходе — проверьте связь сайт → учёт (LEDGER_URL, секрет). Правила по лидам молчат.`,
+    );
   }
   const since = addDays(today, -(limits.alertWindowDays - 1));
   for (const market of MARKETS) {
