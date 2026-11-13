@@ -53,7 +53,9 @@ jobs:
             if (r.type === "summary") { returned = Number(r.recordsReturned ?? 0); continue; }
             // Only key NAMES (and the line type) — never values: the repo is public.
             Object.keys(r).forEach((k) => top.add(k + (k === "type" ? "=" + String(r.type).slice(0, 20) : "")));
-            const rec = r.record ?? r.log ?? r;
+            // CLI 65 writes {"type":"log","data":{level,requestPath,message,…}} (recordLine in
+            // its source); other line types (summary, warning) carry no level and are skipped.
+            const rec = (r.data && typeof r.data === "object" ? r.data : null) ?? r.record ?? r.log ?? r;
             const level = String(rec.level ?? "").toLowerCase();
             if (!level) continue;
             records++;
