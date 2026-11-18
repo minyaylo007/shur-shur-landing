@@ -9,6 +9,8 @@ import { MetaGuide } from "./meta-guide";
 import { metaMessage, pixelToFill, readPixelHints } from "./meta-messages";
 import { opsBotStatus, type OpsBotStatus } from "@/lib/cabinet/ops-bot";
 import { OpsBotSection } from "./ops-bot-section";
+import { ClientsSection } from "./clients-section";
+import { listClients, type Client } from "@/lib/client/clients";
 
 /* The cabinet itself. No session → the login page. Numbers come from the
    last snapshot only; an empty or fixture snapshot shows an honest plate,
@@ -204,8 +206,8 @@ function Markdown({ text }: { text: string }) {
 
 const kyiv = (ms: number) => new Date(ms).toLocaleString("ru-RU", { timeZone: "Europe/Kyiv" });
 
-export default async function Cabinet({ searchParams }: { searchParams: Promise<{ m?: string; px?: string | string[]; o?: string }> }) {
-  const { m, px, o } = await searchParams;
+export default async function Cabinet({ searchParams }: { searchParams: Promise<{ m?: string; px?: string | string[]; o?: string; c?: string }> }) {
+  const { m, px, o, c } = await searchParams;
   const jar = await cookies();
   let signedIn = false;
   try {
@@ -234,6 +236,12 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
     opsBot = await opsBotStatus();
   } catch {
     opsBot = null;
+  }
+  let clients: Client[] | null = null;
+  try {
+    clients = await listClients();
+  } catch {
+    clients = null;
   }
   const hints = readPixelHints(px);
   const metaText = m && m !== "saved" ? metaMessage(m, hints) : undefined;
@@ -368,6 +376,8 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
       </section>
 
       <OpsBotSection status={opsBot} o={o} />
+
+      <ClientsSection clients={clients} c={c} />
     </div>
   );
 }

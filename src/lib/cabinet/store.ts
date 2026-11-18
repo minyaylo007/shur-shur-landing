@@ -1,4 +1,4 @@
-import { BlobPreconditionFailedError, get, put } from "@vercel/blob";
+import { BlobPreconditionFailedError, del, get, put } from "@vercel/blob";
 
 /**
  * Where the cabinet keeps its two documents: the stats snapshot and the auth
@@ -30,6 +30,8 @@ export interface CabinetStore {
   read(key: string): Promise<Stored | null>;
   /** Throws StoreConflictError when `ifMatch` is given and the etag moved. */
   write(key: string, text: string, ifMatch?: string): Promise<void>;
+  /** Gone for good; a key that is not there is not an error. */
+  remove(key: string): Promise<void>;
 }
 
 const blobStore: CabinetStore = {
@@ -54,6 +56,9 @@ const blobStore: CabinetStore = {
       throw error;
     }
   },
+  async remove(key) {
+    await del(key);
+  },
 };
 
 let override: CabinetStore | null = null;
@@ -74,6 +79,9 @@ export function useMemoryStore(): Map<string, Stored> {
       const current = data.get(key);
       if (ifMatch !== undefined && current?.etag !== ifMatch) throw new StoreConflictError();
       data.set(key, { text, etag: `e${++n}` });
+    },
+    async remove(key) {
+      data.delete(key);
     },
   };
   return data;
