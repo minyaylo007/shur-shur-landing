@@ -19,7 +19,6 @@ export const attemptsKey = (id: string) => `cabinet/clients/${id}-attempts.json`
 export const MAX_BATCH = 500;
 /** The newest this many are kept; older ones fall off. */
 export const MAX_ATTEMPTS = 5000;
-export const SHOWN_ATTEMPTS = 50;
 
 const answerSchema = z.strictObject({
   q: z.string().min(1).max(500),
