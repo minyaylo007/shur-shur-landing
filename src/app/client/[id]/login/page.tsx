@@ -14,7 +14,7 @@ export default async function ClientLogin({ params, searchParams }: { params: Pr
   const { e } = await searchParams;
   const message = e ? MESSAGES[e] : undefined;
   return (
-    <div className="mx-auto mt-16 max-w-sm">
+    <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-paper-200 bg-cream-type p-6 shadow-[0_8px_24px_-16px_rgba(74,13,20,0.25)] sm:mt-12 sm:p-8">
       <h1 className="font-display text-2xl">Кабінет клієнта SHUR-SHUR</h1>
       <form method="post" action="/api/client/login" className="mt-6 space-y-4">
         <input type="hidden" name="id" value={id} />
@@ -26,7 +26,7 @@ export default async function ClientLogin({ params, searchParams }: { params: Pr
             required
             autoComplete="current-password"
             autoFocus
-            className="mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2 text-ink-900 placeholder:text-ink-500"
+            className="mt-1 block w-full rounded-xl border border-ink-500/50 bg-white px-4 py-3 text-ink-900 placeholder:text-ink-500"
           />
         </label>
         {message ? (
@@ -34,7 +34,7 @@ export default async function ClientLogin({ params, searchParams }: { params: Pr
             {message}
           </p>
         ) : null}
-        <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-3 font-semibold text-cream-type shadow-sm hover:bg-cherry-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cherry-deep">
+        <button type="submit" className="w-full rounded-full bg-cherry-juice px-6 py-3.5 font-semibold text-cream-type shadow-sm hover:bg-juice-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cherry-deep">
           Увійти
         </button>
       </form>

@@ -11,7 +11,7 @@ const MESSAGES: Record<string, string> = {
   bad_link: "Посилання вже використане або застаріло — попросіть нове.",
 };
 
-const input = "mt-1 block w-full rounded border border-ink-500 bg-white px-3 py-2 text-ink-900 placeholder:text-ink-500";
+const input = "mt-1 block w-full rounded-xl border border-ink-500/50 bg-white px-4 py-3 text-ink-900 placeholder:text-ink-500";
 
 export default async function ClientSetup({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ t?: string; e?: string }> }) {
   const { id } = await params;
@@ -26,7 +26,7 @@ export default async function ClientSetup({ params, searchParams }: { params: Pr
 
   if (!valid) {
     return (
-      <div className="mx-auto mt-16 max-w-sm">
+      <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-paper-200 bg-cream-type p-6 shadow-[0_8px_24px_-16px_rgba(74,13,20,0.25)] sm:mt-12 sm:p-8">
         <h1 className="font-display text-2xl">Посилання недійсне</h1>
         <p className="mt-4 text-ink-700">
           Посилання для встановлення пароля одноразове й діє 7 днів. Це вже використане або застаріло — попросіть нове.
@@ -42,7 +42,7 @@ export default async function ClientSetup({ params, searchParams }: { params: Pr
 
   const message = e ? MESSAGES[e] : undefined;
   return (
-    <div className="mx-auto mt-16 max-w-sm">
+    <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-paper-200 bg-cream-type p-6 shadow-[0_8px_24px_-16px_rgba(74,13,20,0.25)] sm:mt-12 sm:p-8">
       <h1 className="font-display text-2xl">Задайте пароль</h1>
       <p className="mt-2 text-sm text-ink-700">Не коротший за {MIN_PASSWORD} символів. Посилання спрацює один раз.</p>
       <form method="post" action="/api/client/setup" className="mt-6 space-y-4">
@@ -61,7 +61,7 @@ export default async function ClientSetup({ params, searchParams }: { params: Pr
             {message}
           </p>
         ) : null}
-        <button type="submit" className="w-full rounded bg-cherry-deep px-4 py-3 font-semibold text-cream-type shadow-sm hover:bg-cherry-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cherry-deep">
+        <button type="submit" className="w-full rounded-full bg-cherry-juice px-6 py-3.5 font-semibold text-cream-type shadow-sm hover:bg-juice-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cherry-deep">
           Зберегти пароль
         </button>
       </form>
