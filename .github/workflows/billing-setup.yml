@@ -1,0 +1,86 @@
+name: Billing setup
+
+# Включает оплату подписки (monobank) в боевом окружении: копирует из секретов
+# GitHub в production Vercel то, что задано:
+#   MONO_TOKEN       — боевой токен эквайринга (web.monobank.ua). Пока его нет,
+#                      кнопки оплаты на сайте нет и ничего не списывается;
+#   MONO_TEST_TOKEN  — тестовый токен (api.monobank.ua), только для клиентов с
+#                      пометкой «тест»;
+#   MONO_PRICE_UAH   — необязательно: цена в целых гривнах. Задаётся, только
+#                      если monobank не принимает подписку в евро.
+# Те же значения лежат в /opt/ihor/shur-ads/env на ace-main.
+#
+# Незаданный секрет пропускается, уже заведённая переменная НЕ удаляется.
+# Чтобы выключить оплату: `vercel env rm MONO_TOKEN production` и новый выкат.
+#
+# Запуск ТОЛЬКО вручную: Actions → Billing setup → Run workflow. Переменные
+# подхватит только НОВЫЙ выкат: после сценария — Deploy (ref=main).
+#
+# Репозиторий ПУБЛИЧНЫЙ: значения не печатаются нигде и не идут в аргументы.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: billing-setup
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      MONO_TOKEN: ${{ secrets.MONO_TOKEN }}
+      MONO_TEST_TOKEN: ${{ secrets.MONO_TEST_TOKEN }}
+      MONO_PRICE_UAH: ${{ secrets.MONO_PRICE_UAH }}
+      VERCEL_CLI: vercel@65.2.0
+    steps:
+      - name: Доступы на месте
+        run: |
+          set -euo pipefail
+          missing=""
+          for n in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!n-}" ]; then missing="$missing $n"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Пусто или не задано:$missing — ничего не менялось"
+            exit 1
+          fi
+          if [ -z "${MONO_TOKEN-}${MONO_TEST_TOKEN-}${MONO_PRICE_UAH-}" ]; then
+            echo "::error::Ни один из секретов MONO_TOKEN, MONO_TEST_TOKEN, MONO_PRICE_UAH не задан — нечего заводить"
+            exit 1
+          fi
+
+      - name: Привязать проект Vercel
+        run: |
+          set -euo pipefail
+          npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN" > /dev/null
+          rm -f .vercel/.env.production.local
+
+      - name: Переменные оплаты в production
+        run: |
+          set -euo pipefail
+          existing=$(npx --yes "$VERCEL_CLI" env ls production --token="$VERCEL_TOKEN" 2>/dev/null | awk '{print $1}')
+          for n in MONO_TOKEN MONO_TEST_TOKEN MONO_PRICE_UAH; do
+            if [ -z "${!n-}" ]; then
+              echo "· $n не задан в секретах — пропущен"
+              continue
+            fi
+            if printf '%s\n' "$existing" | grep -xF "$n" > /dev/null; then
+              npx --yes "$VERCEL_CLI" env rm "$n" production --yes --token="$VERCEL_TOKEN" > /dev/null
+            fi
+            printf '%s' "${!n}" | npx --yes "$VERCEL_CLI" env add "$n" production --token="$VERCEL_TOKEN" > /dev/null
+            echo "· $n заведён в production"
+          done
+
+      - name: Что теперь в боевом окружении
+        run: |
+          set -euo pipefail
+          npx --yes "$VERCEL_CLI" env ls production --token="$VERCEL_TOKEN" | awk 'NR>1 {print $1}' | grep -E '^MONO_' || true
+          echo '⚠️ Переменные подхватит только НОВЫЙ выкат: запустите Deploy (ref=main).' >> "$GITHUB_STEP_SUMMARY"

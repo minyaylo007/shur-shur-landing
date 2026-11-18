@@ -24,6 +24,10 @@ const nextConfig: NextConfig = {
       { source: "/cabinet", headers: closed },
       { source: "/cabinet/:path*", headers: closed },
       { source: "/api/cabinet/:path*", headers: closed },
+      /* Client cabinets (bot results, may hold personal data) and billing. */
+      { source: "/client/:path*", headers: closed },
+      { source: "/api/client/:path*", headers: closed },
+      { source: "/api/billing/:path*", headers: closed },
     ];
   },
   async redirects() {

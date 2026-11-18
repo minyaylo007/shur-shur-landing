@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/dictionaries";
 import { site } from "@/lib/site";
@@ -114,6 +115,15 @@ export function Footer({ locale, nav, footer, consentSettings }: FooterProps) {
               label={consentSettings}
               className="cursor-pointer underline underline-offset-4 transition-colors hover:text-juice-300"
             />
+            {/* The subscription terms: Ukrainian only, like the subscription itself. */}
+            {locale === "uk" ? (
+              <>
+                {" "}
+                <Link href="/uk/oferta" prefetch={false} className="underline underline-offset-4 transition-colors hover:text-juice-300">
+                  Публічна оферта
+                </Link>
+              </>
+            ) : null}
           </p>
           <p className="inline-flex items-center gap-1.5">
             {footer.madeIn}
