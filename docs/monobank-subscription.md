@@ -61,6 +61,54 @@
 `{payments: [{amount, ccy, status: new | success | failed, chargedAt}], pagination}`.
 `dateFrom` обязателен; есть `dateTo`, `limit`, `page`.
 
+### Откуда эти поля и что, если они окажутся другими
+
+Поля ответов взяты не с текста страницы, а из схемы OpenAPI, которую страница документации
+подгружает скриптом: `https://monobank.ua/assets/openapi-data-CzHxXBxW.js` (имя файла
+меняется при пересборке их сайта), схемы `SubscriptionStatusResponse` и
+`SubscriptionPaymentsResponse`. На самой странице они видны только во вкладке
+«Response samples → 200». Дословно, 18.11.2026:
+
+```
+status:{type:"string",enum:["active","cancelled"],example:"active",description:"Статус підписки"}
+nextChargeDate:{type:"string",format:"date-time",example:"2024-07-01T14:15:22Z",description:"Дата наступного списання"}
+endDate:{type:"string",format:"date-time",example:"2024-06-20T09:30:15Z",description:"Дата коли регулярний платіж скасували"}
+payments:{type:"array",items:{type:"object",required:["amount","status","chargedAt","ccy"], …
+  status:{type:"string",enum:["new","success","failed"],example:"success",description:"Статус платежу"}
+  chargedAt:{type:"string",format:"date-time",example:"2024-06-01T14:15:22Z",description:"Дата коли було списання"}
+pagination:{type:"object",required:["totalItems","itemsPerPage","currentPage","totalPages"], …
+```
+
+Это схема, а не живой ответ: живого никто из нас не видел. Поэтому разбор
+(`parseStatus`, `parsePayments`) устроен с запасом:
+
+- понимает близкие написания: `state`, `canceled`, `list`/`items` вместо `payments`,
+  `chargeDate`/`paidAt`/`date`, даты числом (секунды или миллисекунды), любой регистр;
+- непонятный ответ НЕ ухудшает состояние: статус, дата оплаты и дата списания остаются
+  прежними, в записи ставится `unclearAt`, и клиент, который уже платил, остаётся открыт,
+  пока ответ не станет читаемым;
+- если список платежей не прочитан, а `summary.totalPaid` > 0 — оплата засчитывается
+  (месяц до `nextChargeDate`, иначе от `startDate`);
+- в журнал идёт одна строка `[billing] monobank answer not understood…` с ИМЕНАМИ ключей,
+  без значений (в ответе есть токен карты). Эта строка — сигнал поправить разбор.
+
+Чего запас не покрывает: клиент платит ВПЕРВЫЕ, а ответ не читается вовсе и счётчика
+`summary.totalPaid` в нём нет — кабинет останется закрыт до правки разбора (в журнале
+будет та же строка).
+
+### Проход в тестовой среде
+
+```
+node ops/billing/test-cycle.mjs --id <id тестового клиента>          # ссылка на оплату
+node ops/billing/test-cycle.mjs --id <id тестового клиента> --check  # после оплаты
+```
+
+Скрипт подписанно просит сайт (`/api/cabinet/billing-test`), сайт работает своим
+`MONO_TEST_TOKEN` — проверяется тот же код, что за кнопкой, вместе с вебхуком. `--check`
+печатает имена ключей ответов (значения — только типы), что прочитал разбор, сохранённое
+состояние и итог `accessOf`. Принимается только клиент с пометкой «тестовый»; без
+тестового токена на сайте скрипт так и говорит.
+
 ## Состояние у нас
 
 В записи клиента (`billing`): `none` → `pending` (подписка создана, оплаты не было) →

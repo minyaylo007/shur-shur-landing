@@ -40,6 +40,7 @@ const { POST: SUBSCRIBE } = await import("../src/app/api/client/subscribe/route"
 const { POST: CANCEL } = await import("../src/app/api/client/cancel/route");
 const { POST: LOGIN } = await import("../src/app/api/client/login/route");
 const { POST: CLIENT_KEY } = await import("../src/app/api/cabinet/client-key/route");
+const { POST: BILLING_TEST } = await import("../src/app/api/cabinet/billing-test/route");
 const { default: ClientPage } = await import("../src/app/client/[id]/page");
 
 const HMAC = "cabinet-test-secret";
@@ -56,6 +57,8 @@ const sign = (key: ReturnType<typeof pair>, body: string) => createSign("SHA256"
 /* ---- the mocked monobank ---- */
 let bankKey = pair();
 let remote: { status: string; nextChargeDate?: string; payments: { status: string; chargedAt: string; amount: number; ccy: number }[] };
+/** Set to answer something else than the published schema. */
+let odd: { status?: unknown; payments?: unknown } = {};
 let calls: { method: string; path: string; token: string | null; body: Record<string, unknown> | null }[];
 
 const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -70,8 +73,10 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
     case "/api/merchant/subscription/create":
       return json({ subscriptionId: "s2_test", pageUrl: "https://pay.mbnk.biz/s2_test" });
     case "/api/merchant/subscription/status":
+      if (odd.status !== undefined) return json(odd.status);
       return json({ subscriptionId: "s2_test", status: remote.status, amount: 1500, ccy: 978, interval: "1m", nextChargeDate: remote.nextChargeDate });
     case "/api/merchant/subscription/payments":
+      if (odd.payments !== undefined) return json(odd.payments);
       return json({ payments: remote.payments, pagination: { totalItems: remote.payments.length, itemsPerPage: 50, currentPage: 1, totalPages: 1 } });
     case "/api/merchant/subscription/edit":
     case "/api/merchant/subscription/remove":
@@ -186,6 +191,7 @@ beforeEach(() => {
   delete process.env.MONO_PRICE_UAH;
   bankKey = pair();
   remote = { status: "active", payments: [] };
+  odd = {};
   calls = [];
   logged = [];
   mono.forgetWebhookKeys();
@@ -694,5 +700,109 @@ describe("money", () => {
     const response = await CANCEL(post("/api/client/cancel", a.cookie));
     expect(response.headers.get("location")).toContain("?b=cancel_failed");
     expect((await record(a.id)).billing.status).toBe("active");
+  });
+});
+
+describe("an answer of monobank that is not what the schema says", () => {
+  it("near spellings are read: a paid charge opens the cabinet", async () => {
+    const a = await newClient("Кав'ярня");
+    await subscribed(a.id, null, "pending");
+    odd.status = { State: "Active", next_charge_date: Math.floor((Date.now() + 29 * DAY) / 1000) };
+    odd.payments = { list: [{ state: "SUCCESS", chargeDate: Date.now() - 60_000 }], paging: { pages: 1 } };
+
+    const synced = await mono.syncBilling(await record(a.id));
+    expect(synced!.billing).toMatchObject({ status: "active", unclearAt: null });
+    expect(synced!.billing.nextChargeAt).toBeGreaterThan(Date.now() + 28 * DAY);
+    expect(mono.accessOf(synced!)).toMatchObject({ open: true, state: "paid" });
+    expect(logged.join("\n")).not.toContain("not understood");
+  });
+
+  it("an answer nobody can read does not close a client who has paid; one warning names keys, never values", async () => {
+    const a = await newClient("Кав'ярня");
+    await subscribed(a.id, 31); // the paid month ended yesterday
+    odd.status = { subscription: { phase: "running" }, walletData: { cardToken: "CARD-TOKEN-VALUE" } };
+    odd.payments = { rows: [{ result: "done", when: "yesterday", payer: "SECRET-PAYER" }] };
+
+    const synced = await mono.syncBilling(await record(a.id));
+    expect(synced!.billing.status).toBe("active");
+    expect(synced!.billing.unclearAt).not.toBeNull();
+    expect(mono.accessOf(synced!)).toMatchObject({ open: true });
+    // …and weeks later, while the answer is still unreadable.
+    expect(mono.accessOf(synced!, Date.now() + 30 * DAY)).toMatchObject({ open: true });
+
+    const warned = logged.filter((line) => line.includes("not understood"));
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toContain("walletData");
+    expect(warned[0]).toContain("rows");
+    for (const value of ["CARD-TOKEN-VALUE", "SECRET-PAYER", "running", "yesterday"]) expect(logged.join("\n")).not.toContain(value);
+
+    // A readable answer afterwards settles it: no payment → the grace rule decides again.
+    odd = {};
+    const clear = await mono.syncBilling(await record(a.id));
+    expect(clear!.billing.unclearAt).toBeNull();
+  });
+
+  it("payments unreadable but monobank counts a paid charge → the first payment still opens the cabinet", async () => {
+    const a = await newClient("Кав'ярня");
+    await subscribed(a.id, null, "pending");
+    odd.status = { status: "active", startDate: new Date(Date.now() - 60_000).toISOString(), nextChargeDate: new Date(Date.now() + 30 * DAY).toISOString(), summary: { totalPaid: 1, totalFailed: 0 } };
+    odd.payments = { rows: [] };
+
+    const synced = await mono.syncBilling(await record(a.id));
+    expect(synced!.billing.status).toBe("active");
+    expect(mono.accessOf(synced!)).toMatchObject({ open: true, state: "paid" });
+  });
+
+  it("an unreadable answer opens nothing for a client who never paid", async () => {
+    const a = await newClient("Кав'ярня");
+    await subscribed(a.id, null, "pending");
+    odd.status = { whatever: 1 };
+    odd.payments = "nonsense";
+    const synced = await mono.syncBilling(await record(a.id));
+    expect(synced!.billing.status).toBe("pending");
+    expect(mono.accessOf(synced!).open).toBe(false);
+  });
+});
+
+describe("the test pass (ops/billing/test-cycle.mjs)", () => {
+  const call = (payload: unknown, secret = HMAC) => {
+    const body = JSON.stringify(payload);
+    const ts = String(Math.floor(Date.now() / 1000));
+    return new Request("https://shur-shur.com/api/cabinet/billing-test", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-shur-timestamp": ts, "x-shur-signature": signLedgerBody(secret, ts, body) },
+      body,
+    });
+  };
+
+  it("only a signed call, only a test client, only the test token — the live one is never used", async () => {
+    const demo = await newClient("Демо", true);
+    const real = await newClient("Кав'ярня");
+
+    expect((await BILLING_TEST(call({ action: "start", client_id: demo.id }, "wrong"))).status).toBe(401);
+    expect(await (await BILLING_TEST(call({ action: "start", client_id: real.id }))).json()).toMatchObject({ ok: false, error: "not_a_test_client" });
+    expect(calls).toHaveLength(0);
+
+    delete process.env.MONO_TEST_TOKEN;
+    expect(await (await BILLING_TEST(call({ action: "start", client_id: demo.id }))).json()).toMatchObject({ ok: false, error: "no_test_token" });
+    expect(calls).toHaveLength(0);
+
+    process.env.MONO_TEST_TOKEN = "test-token";
+    const started = await (await BILLING_TEST(call({ action: "start", client_id: demo.id }))).json();
+    expect(started).toMatchObject({ ok: true, page_url: "https://pay.mbnk.biz/s2_test", ccy: 978, amount: 1500 });
+
+    remote.payments = paidNow();
+    odd.status = { status: "active", walletData: { cardToken: "CARD-TOKEN-VALUE" }, nextChargeDate: new Date(Date.now() + 30 * DAY).toISOString() };
+    const checked = await BILLING_TEST(call({ action: "check", client_id: demo.id }));
+    const text = await checked.text();
+    const answer = JSON.parse(text);
+    expect(answer.status_keys).toEqual({ nextChargeDate: "string", status: "string", walletData: { cardToken: "string" } });
+    expect(answer.read).toMatchObject({ status: "active", paid_payment_found: true, not_understood: [] });
+    expect(answer.access).toMatchObject({ open: true, state: "paid" });
+    expect(text).not.toContain("CARD-TOKEN-VALUE");
+    expect(logged.join("\n")).not.toContain("CARD-TOKEN-VALUE");
+
+    expect(calls.length).toBeGreaterThan(0);
+    for (const c of calls) expect(c.token).toBe("test-token");
   });
 });
