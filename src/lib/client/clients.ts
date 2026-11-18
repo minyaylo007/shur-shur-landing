@@ -45,6 +45,8 @@ const billingSchema = z.object({
   nextChargeAt: z.number().nullable(),
   endedAt: z.number().nullable(),
   syncedAt: z.number().nullable(),
+  /** Set while monobank's last answer was not understood (lib/billing/mono): a paid client stays open. */
+  unclearAt: z.number().nullable().default(null),
   /** SHA-256 of the webhook bodies already applied — a repeat changes nothing. */
   seen: z.array(z.string()),
 });
@@ -62,6 +64,7 @@ export const EMPTY_BILLING: Billing = {
   nextChargeAt: null,
   endedAt: null,
   syncedAt: null,
+  unclearAt: null,
   seen: [],
 };
 

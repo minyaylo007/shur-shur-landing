@@ -10,7 +10,12 @@ import { EMPTY_BILLING, updateClient, type Billing, type Client } from "@/lib/cl
  *    state is read back from monobank (status + payments). The body schema of
  *    subscription webhooks is not documented, and this way a replayed or
  *    reordered webhook cannot write a stale state;
- *  - without a token there is no billing at all: no button, nothing charged.
+ *  - without a token there is no billing at all: no button, nothing charged;
+ *  - the answers are read by the published schema, but nobody here has seen a
+ *    live one yet. So the reader also takes near spellings, and an answer it
+ *    does not understand changes nothing for the worse: the stored state
+ *    stands, a client who has paid stays open, and one warning names the keys
+ *    that came (never the values). Paid-but-closed is the costly mistake.
  */
 
 const API = "https://api.monobank.ua";
@@ -86,10 +91,26 @@ async function call(token: string, method: "GET" | "POST", path: string, body?: 
 }
 
 const str = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+/** An RFC 3339 string by the schema; epoch seconds or milliseconds are taken too. */
 const time = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value < 1e11 ? value * 1000 : value;
   const ms = typeof value === "string" ? Date.parse(value) : NaN;
   return Number.isFinite(ms) ? ms : null;
 };
+type Json = Record<string, unknown>;
+const object = (value: unknown): Json | null => (value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Json) : null);
+/** The first of `names` the object has, whatever the letter case or underscores. */
+function field(source: Json | null, ...names: string[]): unknown {
+  if (!source) return undefined;
+  const flat = (name: string) => name.toLowerCase().replace(/_/g, "");
+  for (const name of names) {
+    for (const key of Object.keys(source)) {
+      if (flat(key) === flat(name) && source[key] !== null && source[key] !== undefined) return source[key];
+    }
+  }
+  return undefined;
+}
+const word = (value: unknown): string => (typeof value === "string" ? value.trim().toLowerCase() : "");
 
 export async function createSubscription(token: string, input: { redirectUrl: string; webhookUrl: string }): Promise<{ subscriptionId: string; pageUrl: string; price: Price }> {
   const p = price();
@@ -118,44 +139,137 @@ export async function removeSubscription(token: string, subscriptionId: string):
 }
 
 interface Remote {
-  status: "active" | "cancelled";
+  /** null: the answer did not say it in a way we know. */
+  status: "active" | "cancelled" | null;
   ccy: number | null;
   amount: number | null;
   nextChargeAt: number | null;
   endedAt: number | null;
   lastPaidAt: number | null;
   lastFailedAt: number | null;
+  /** The payments were read in full; false → the stored failure date stands. */
+  paymentsRead: boolean;
+  /** What was not understood — key names only. Empty: all clear. */
+  unclear: string[];
+}
+
+const SUBSCRIPTION_STATUS: Record<string, "active" | "cancelled"> = { active: "active", cancelled: "cancelled", canceled: "cancelled" };
+const PAID = new Set(["success", "successful", "succeeded", "paid", "ok"]);
+const FAILED = new Set(["failed", "failure", "fail", "declined", "rejected", "error"]);
+const WAITING = new Set(["new", "created", "processing", "pending", "hold"]);
+
+/** monobank's status answer → what we take from it. Exported for the reading script and the tests. */
+export function parseStatus(json: unknown): Pick<Remote, "status" | "ccy" | "amount" | "nextChargeAt" | "endedAt"> & { paidCount: number | null; paidAtGuess: number | null; unclear: string[] } {
+  const source = object(json);
+  const unclear: string[] = [];
+  const status = SUBSCRIPTION_STATUS[word(field(source, "status", "state"))] ?? null;
+  if (!status) unclear.push(`status answer: no known status; keys: ${source ? Object.keys(source).sort().join(",") : "not an object"}`);
+  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+  const nextChargeAt = time(field(source, "nextChargeDate", "nextChargeAt", "nextPaymentDate", "nextCharge"));
+  const paidCount = number(field(object(field(source, "summary")), "totalPaid", "paid", "successCount"));
+  // Only for an answer whose payments could not be read: the month that the
+  // next charge closes, else the first charge.
+  const started = time(field(source, "startDate", "startedAt", "firstChargeDate"));
+  const paidAtGuess = nextChargeAt ? subMonth(nextChargeAt) : started;
+  return {
+    status,
+    ccy: number(field(source, "ccy", "currency")),
+    amount: number(field(source, "amount")),
+    nextChargeAt,
+    endedAt: time(field(source, "endDate", "endedAt", "cancelledAt", "canceledAt")),
+    paidCount,
+    paidAtGuess,
+    unclear,
+  };
+}
+
+/** One page of monobank's payments answer. `pages` null → not told. */
+export function parsePayments(json: unknown): { lastPaidAt: number | null; lastFailedAt: number | null; pages: number | null; unclear: string[] } {
+  const source = object(json);
+  const unclear: string[] = [];
+  const raw = Array.isArray(json) ? json : field(source, "payments", "list", "items", "data");
+  let lastPaidAt: number | null = null;
+  let lastFailedAt: number | null = null;
+  if (!Array.isArray(raw)) {
+    unclear.push(`payments answer: no list; keys: ${source ? Object.keys(source).sort().join(",") : "not an object"}`);
+  } else {
+    const odd = new Set<string>();
+    for (const item of raw) {
+      const payment = object(item);
+      const status = word(field(payment, "status", "state"));
+      const at = time(field(payment, "chargedAt", "chargeDate", "chargeAt", "paidAt", "date", "createdDate", "createdAt", "time"));
+      if (WAITING.has(status)) continue;
+      const known = PAID.has(status) || FAILED.has(status);
+      if (!known || at === null) {
+        odd.add(payment ? Object.keys(payment).sort().join(",") : "not an object");
+        continue;
+      }
+      if (PAID.has(status)) lastPaidAt = Math.max(lastPaidAt ?? 0, at);
+      else lastFailedAt = Math.max(lastFailedAt ?? 0, at);
+    }
+    for (const keys of odd) unclear.push(`payment: unknown status or no date; keys: ${keys}`);
+  }
+  const pages = Number(field(object(field(source, "pagination", "paging")), "totalPages", "pages", "pageCount"));
+  return { lastPaidAt, lastFailedAt, pages: Number.isFinite(pages) ? pages : null, unclear };
 }
 
 async function readRemote(token: string, subscriptionId: string, sinceMs: number): Promise<Remote> {
   const id = encodeURIComponent(subscriptionId);
-  const status = (await call(token, "GET", `/api/merchant/subscription/status?subscriptionId=${id}`)) as Record<string, unknown> | null;
+  const status = parseStatus(await call(token, "GET", `/api/merchant/subscription/status?subscriptionId=${id}`));
+  const unclear = new Set(status.unclear);
   let lastPaidAt: number | null = null;
   let lastFailedAt: number | null = null;
   const from = encodeURIComponent(new Date(sinceMs).toISOString());
   for (let page = 1; page <= 5; page++) {
-    const json = (await call(token, "GET", `/api/merchant/subscription/payments?subscriptionId=${id}&dateFrom=${from}&limit=50&page=${page}`)) as {
-      payments?: unknown;
-      pagination?: { totalPages?: unknown };
-    } | null;
-    const payments = Array.isArray(json?.payments) ? (json.payments as Record<string, unknown>[]) : [];
-    for (const payment of payments) {
-      const at = time(payment?.chargedAt);
-      if (at === null) continue;
-      if (payment.status === "success") lastPaidAt = Math.max(lastPaidAt ?? 0, at);
-      if (payment.status === "failed") lastFailedAt = Math.max(lastFailedAt ?? 0, at);
-    }
-    const pages = Number(json?.pagination?.totalPages);
-    if (!Number.isFinite(pages) || page >= pages) break;
+    const answer = parsePayments(await call(token, "GET", `/api/merchant/subscription/payments?subscriptionId=${id}&dateFrom=${from}&limit=50&page=${page}`));
+    for (const note of answer.unclear) unclear.add(note);
+    if (answer.lastPaidAt) lastPaidAt = Math.max(lastPaidAt ?? 0, answer.lastPaidAt);
+    if (answer.lastFailedAt) lastFailedAt = Math.max(lastFailedAt ?? 0, answer.lastFailedAt);
+    if (answer.pages === null || page >= answer.pages) break;
   }
+  const paymentsRead = ![...unclear].some((note) => note.startsWith("payment"));
+  // monobank counts a paid charge that the list did not show us.
+  if (!lastPaidAt && (status.paidCount ?? 0) > 0) {
+    unclear.add("payments: summary counts a paid charge, the list shows none");
+    lastPaidAt = status.paidAtGuess;
+  }
+  // One line, key names only: an answer may carry a card token or a wallet id.
+  if (unclear.size) console.warn(`[billing] monobank answer not understood, stored state kept: ${[...unclear].slice(0, 6).join(" | ")}`);
+  return { status: status.status, ccy: status.ccy, amount: status.amount, nextChargeAt: status.nextChargeAt, endedAt: status.endedAt, lastPaidAt, lastFailedAt, paymentsRead, unclear: [...unclear] };
+}
+
+/** The key names and value types of an answer — never a value. */
+export function shape(value: unknown, depth = 0): unknown {
+  if (Array.isArray(value)) return value.length && depth < 4 ? [shape(value[0], depth + 1)] : [];
+  const source = object(value);
+  if (source && depth < 4) return Object.fromEntries(Object.keys(source).sort().map((key) => [key, shape(source[key], depth + 1)]));
+  return value === null ? "null" : typeof value;
+}
+
+/**
+ * For ops/billing/test-cycle.mjs: what monobank answers about a subscription,
+ * as key names, and what this file made of it. No value of the answer leaves.
+ */
+export async function inspectSubscription(token: string, subscriptionId: string, sinceMs: number) {
+  const id = encodeURIComponent(subscriptionId);
+  const from = encodeURIComponent(new Date(sinceMs).toISOString());
+  const status = await call(token, "GET", `/api/merchant/subscription/status?subscriptionId=${id}`);
+  const payments = await call(token, "GET", `/api/merchant/subscription/payments?subscriptionId=${id}&dateFrom=${from}&limit=50&page=1`);
+  const s = parseStatus(status);
+  const p = parsePayments(payments);
   return {
-    status: status?.status === "cancelled" ? "cancelled" : "active",
-    ccy: typeof status?.ccy === "number" ? status.ccy : null,
-    amount: typeof status?.amount === "number" ? status.amount : null,
-    nextChargeAt: time(status?.nextChargeDate),
-    endedAt: time(status?.endDate),
-    lastPaidAt,
-    lastFailedAt,
+    status_keys: shape(status),
+    payments_keys: shape(payments),
+    read: {
+      status: s.status,
+      next_charge_read: s.nextChargeAt !== null,
+      end_read: s.endedAt !== null,
+      paid_count: s.paidCount,
+      paid_payment_found: p.lastPaidAt !== null,
+      failed_payment_found: p.lastFailedAt !== null,
+      pages: p.pages,
+      not_understood: [...s.unclear, ...p.unclear],
+    },
   };
 }
 
@@ -166,13 +280,17 @@ const SEEN_KEPT = 50;
 function apply(billing: Billing, remote: Remote, nowMs: number): void {
   // A new subscription starts with no payments; the month paid under the previous one still counts.
   billing.lastPaidAt = Math.max(billing.lastPaidAt ?? 0, remote.lastPaidAt ?? 0) || null;
-  billing.lastFailedAt = remote.lastFailedAt;
-  billing.status = remote.status === "cancelled" ? "cancelled" : remote.lastPaidAt ? "active" : "pending";
+  if (remote.paymentsRead) billing.lastFailedAt = remote.lastFailedAt;
+  if (remote.status === "cancelled") billing.status = "cancelled";
+  else if (remote.lastPaidAt) billing.status = "active";
+  else if (remote.status === "active" && remote.paymentsRead) billing.status = "pending";
+  // Otherwise the answer does not say: the stored status stands.
   billing.ccy = remote.ccy ?? billing.ccy;
   billing.amount = remote.amount ?? billing.amount;
-  billing.nextChargeAt = remote.status === "cancelled" ? null : remote.nextChargeAt;
-  billing.endedAt = remote.endedAt;
+  billing.nextChargeAt = billing.status === "cancelled" ? null : (remote.nextChargeAt ?? billing.nextChargeAt);
+  billing.endedAt = remote.endedAt ?? (billing.status === "cancelled" ? billing.endedAt : null);
   billing.syncedAt = nowMs;
+  billing.unclearAt = remote.unclear.length ? nowMs : null;
   if (billing.status !== "pending") billing.pageUrl = null;
 }
 
@@ -224,6 +342,17 @@ export function addMonth(ms: number): number {
   return d.getTime();
 }
 
+/** The same day a month earlier. */
+function subMonth(ms: number): number {
+  const d = new Date(ms);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, last));
+  return d.getTime();
+}
+
 export type Access =
   /** Billing is not switched on for this client: nothing to pay, results open. */
   | { open: true; state: "no_billing" }
@@ -237,13 +366,19 @@ export type Access =
  * Results are open while the last successful charge covers today, plus three
  * days of grace when the next charge failed or is late. A cancelled
  * subscription gets its paid month and no grace.
+ *
+ * While monobank's last answer was not understood (billing.unclearAt), a
+ * client who has paid before is NOT closed: we cannot tell a missed charge
+ * from an answer we failed to read, and the warning in the log is what gets
+ * that fixed.
  */
 export function accessOf(client: Client, nowMs = Date.now()): Access {
   if (!monoToken(client.test)) return { open: true, state: "no_billing" };
-  const { lastPaidAt, status } = client.billing;
+  const { lastPaidAt, status, unclearAt } = client.billing;
   if (!lastPaidAt) return { open: false, state: "unpaid" };
   const paidUntil = addMonth(lastPaidAt);
   if (nowMs < paidUntil) return { open: true, state: "paid", paidUntil };
+  if (unclearAt && status === "active") return { open: true, state: "paid", paidUntil: Math.max(paidUntil, nowMs) };
   const closesAt = paidUntil + GRACE_MS;
   if (status === "active" && nowMs < closesAt) return { open: true, state: "grace", paidUntil, closesAt };
   return { open: false, state: "expired", paidUntil };
