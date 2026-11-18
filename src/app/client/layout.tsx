@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Logo } from "@/components/ui/Logo";
 import { latinFontClass } from "../fonts";
 import "../globals.css";
 
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
 };
 
-export const viewport: Viewport = { themeColor: "#2a0a0e" };
+export const viewport: Viewport = { themeColor: "#4a0d14" };
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   return (
     <html lang="uk" className={latinFontClass}>
       <body className="cabinet min-h-screen font-body antialiased">
-        <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">{children}</main>
+        <header className="bg-cherry-deep text-cream-type">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+            <Logo className="text-xl" />
+            <span className="text-xs uppercase tracking-widest text-cream-type/70">кабінет клієнта</span>
+          </div>
+        </header>
+        <main className="mx-auto max-w-5xl px-4 pb-16 pt-6 sm:px-6 sm:pt-10">{children}</main>
       </body>
     </html>
   );
