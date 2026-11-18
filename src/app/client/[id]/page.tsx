@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { accessOf, monoToken, price, syncBilling, type Access } from "@/lib/billing/mono";
-import { readAttempts, SHOWN_ATTEMPTS, summarize, type Attempt } from "@/lib/client/attempts";
+import { readAttempts, summarize, type Attempt } from "@/lib/client/attempts";
 import { CherryIcon } from "@/components/ui/icons";
 import { CLIENT_COOKIE, isClientId, signedInClient, type Client } from "@/lib/client/clients";
 import { readResults, SHOWN_ROWS, splitByDay, type Results } from "@/lib/client/results";
@@ -13,6 +13,8 @@ import { site } from "@/lib/site";
    client, or none, lands on the login form and reads nothing. */
 
 const STALE_MS = 6 * 60 * 60 * 1000;
+/** How many of the newest attempts the cabinet lists; the charts count all of them. */
+const LATEST = 12;
 const stale = (syncedAt: number | null) => Date.now() - (syncedAt ?? 0) > STALE_MS;
 
 const UPLOAD: Record<string, string> = {
@@ -218,7 +220,7 @@ function DayChart({ days, span }: { days: { day: string; count: number }[]; span
   const total = span.reduce((sum, d) => sum + (counts.get(d) ?? 0), 0);
   return (
     <figure>
-      <figcaption className="flex items-baseline justify-between gap-3">
+      <figcaption className="flex flex-col gap-x-3 gap-y-1 sm:flex-row sm:items-baseline sm:justify-between">
         <span className="font-semibold">За днями</span>
         <span className="text-xs text-ink-500">
           {span.length} днів · {total} проходжень · максимум {top} за день
@@ -270,7 +272,7 @@ const byLabel = (rows: { label: string; count: number }[]) => [...rows].sort((x,
    the bot sends none (the intake refuses such fields). */
 function AttemptsView({ attempts, updatedAt }: { attempts: Attempt[]; updatedAt: number }) {
   const tests = summarize(attempts);
-  const latest = [...attempts].sort((a, b) => b.at - a.at).slice(0, SHOWN_ATTEMPTS);
+  const latest = [...attempts].sort((a, b) => b.at - a.at).slice(0, LATEST);
   const span = lastDays(30);
   const week = new Set(span.slice(-7));
   const thisWeek = attempts.filter((a) => week.has(kyivDay(a.at))).length;
