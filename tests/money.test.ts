@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEMO_ACCOUNTS, DEMO_NOW, DEMO_OPERATIONS, DEMO_PLAN } from "../src/lib/money/demo";
+import { apply, emptyBook, everything, paused, payerKeys, payerName, projectsMonth, projectsOf, type Book } from "../src/lib/money/book";
 import { classify, nextPayout, payouts, planRowOf, remember, remindTomorrow, summarize, taxes, type Operation, type Plan } from "../src/lib/money/ledger";
 
 /*
@@ -99,7 +100,7 @@ describe("taxes 2026", () => {
 
 describe("the payout plan", () => {
   const plan: Plan = [
-    { id: "a", name: "Тест Один", recipient: "Тест Один", amount: 10_000_00, day: 5, client: "Клієнт А" },
+    { id: "a", name: "Тест Один", recipient: "Тест Один", amount: 10_000_00, day: 5, project: "pa" },
     { id: "b", name: "Тест Один", recipient: "Тест Один", amount: 10_000_00, day: 20 },
   ];
   const pay = (d: number, amount = 10_000_00) => op({ account: WHITE.id, amount: -amount, description: "Тест Один", time: nov(d) });
@@ -116,12 +117,13 @@ describe("the payout plan", () => {
     expect(planRowOf({ ...pay(5), account: FOP.id }, accounts, plan)).toBeUndefined();
   });
 
-  it("«за <клієнт>» only when that client paid a few days before", () => {
+  it("«за <проект>» only when that project paid a few days before", () => {
     const income = op({ account: FOP.id, amount: 30_000_00, counterName: "ТОВ \"КЛІЄНТ А\"", counterIban: "UA77", time: nov(3) });
-    expect(payouts([income, pay(5)], accounts, plan, "2026-11")[0].forClient).toBe("Клієнт А");
-    expect(payouts([pay(5)], accounts, plan, "2026-11")[0].forClient).toBeUndefined();
+    const projectsOf = (o: Operation) => (o.counterIban === "UA77" ? ["pa"] : []);
+    expect(payouts([income, pay(5)], accounts, plan, "2026-11", projectsOf)[0].forClient).toBe("pa");
+    expect(payouts([pay(5)], accounts, plan, "2026-11", projectsOf)[0].forClient).toBeUndefined();
     const longAgo = { ...income, time: Date.UTC(2026, 9, 20, 10) / 1000 };
-    expect(payouts([longAgo, pay(5)], accounts, plan, "2026-11")[0].forClient).toBeUndefined();
+    expect(payouts([longAgo, pay(5)], accounts, plan, "2026-11", projectsOf)[0].forClient).toBeUndefined();
   });
 
   it("each row of the month: paid and when, or still due", () => {
@@ -150,5 +152,67 @@ describe("the payout plan", () => {
     const sep = summarize(DEMO_OPERATIONS, accounts, {}, "2026-09", DEMO_PLAN);
     expect(sep.toSort).toEqual([]);
     expect(sep.income).toBeGreaterThan(150_000_00);
+  });
+});
+
+describe("projects: who paid this month", () => {
+  const book = (): Book => ({
+    ...emptyBook(),
+    projects: [
+      { id: "a", name: "А", amount: 20_000_00, currency: "UAH" },
+      { id: "b", name: "Б", amount: 10_000_00, currency: "UAH" },
+      { id: "c", name: "В", amount: 500_00, currency: "USD" },
+      { id: "z", name: "Пауза", amount: 9_000_00, currency: "UAH", pausedFrom: "2026-10", pausedUntil: "2027-01" },
+    ],
+  });
+  let k = 0;
+  const id = () => `n${++k}`;
+  const fopIn = (amount: number, iban = "UA01", d = 10) =>
+    op({ account: FOP.id, amount, counterName: "ФОП Хтось", counterIban: iban, counterEdrpou: "1234567890", time: nov(d) });
+
+  it("one payment put on two projects: both paid, «Прийшло» counts it once", () => {
+    const pay = fopIn(30_000_00);
+    const b = apply(book(), { type: "payer.assign", keys: payerKeys(pay), name: payerName(pay), projects: ["a", "b"] }, id);
+    const { ops, accounts: all } = everything(b, [pay], accounts);
+    const pm = projectsMonth(b, ops, all, "2026-11");
+    expect(pm.paid).toBe(2);
+    expect(pm.total).toBe(3); // the paused one is not counted
+    expect(summarize(ops, all, b.rules, "2026-11").income).toBe(30_000_00);
+  });
+
+  it("a remembered payer is put on its project by itself — by IBAN, by ЄДРПОУ; a project may have several payers", () => {
+    const first = fopIn(20_000_00, "UA01", 3);
+    const b = apply(book(), { type: "payer.assign", keys: payerKeys(first), name: payerName(first), projects: ["a"] }, id);
+    const later = fopIn(20_000_00, "UA01", 25);
+    const pm = projectsMonth(b, [later], accounts, "2026-11");
+    expect(pm.rows.find((r) => r.project.id === "a")!.payments).toHaveLength(1);
+    expect(pm.toSort).toEqual([]);
+    expect(projectsOf(b)(fopIn(1_00, "UA02"))).toEqual(["a"]);
+    const other = op({ account: FOP.id, amount: 5_00, counterName: "ФОП Інший" });
+    expect(projectsMonth(b, [other], accounts, "2026-11").toSort).toHaveLength(1);
+    const b2 = apply(b, { type: "payer.assign", keys: payerKeys(other), name: payerName(other), projects: ["a"] }, id);
+    expect(projectsOf(b2)(other)).toEqual(["a"]);
+    expect(projectsOf(b2)(later)).toEqual(["a"]);
+  });
+
+  it("cash goes into «Прийшло» and marks its project paid; dollars are counted apart, never converted", () => {
+    let b = apply(book(), { type: "entry.add", entry: { date: "2026-11-12", amount: 6_000_00, currency: "UAH", projects: ["b"], cash: true } }, id);
+    b = apply(b, { type: "entry.add", entry: { date: "2026-11-14", amount: 500_00, currency: "USD", projects: ["c"], cash: true } }, id);
+    const { ops, accounts: all } = everything(b, [fopIn(20_000_00)], accounts);
+    const m = summarize(ops, all, b.rules, "2026-11");
+    expect(m.income).toBe(26_000_00);
+    expect(m.cash).toBe(6_000_00);
+    expect(m.incomeUsd).toBe(500_00);
+    expect(projectsMonth(b, ops, all, "2026-11").paid).toBe(2);
+    const gone = apply(b, { type: "entry.remove", id: b.entries[0].id }, id);
+    const left = everything(gone, [], accounts);
+    expect(summarize(left.ops, left.accounts, {}, "2026-11").income).toBe(0);
+  });
+
+  it("a pause covers its months only; «до» is the month it pays again", () => {
+    const z = book().projects[3];
+    expect(paused(z, "2026-09")).toBe(false);
+    expect(paused(z, "2026-12")).toBe(true);
+    expect(paused(z, "2027-01")).toBe(false);
   });
 });

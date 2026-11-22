@@ -43,6 +43,8 @@ jobs:
       # Журнал заявок (ads-engine на ace-main): адрес и общий HMAC-секрет.
       LEDGER_URL: ${{ secrets.LEDGER_URL }}
       LEDGER_HMAC_SECRET: ${{ secrets.LEDGER_HMAC_SECRET }}
+      # «Гроші» (/cabinet/groshi): личный ключ monobank Саши, только чтение выписки.
+      MONO_PERSONAL_TOKEN: ${{ secrets.MONO_PERSONAL_TOKEN }}
     steps:
       # Проверяем ВСЁ до первой записи. Если секрета нет, а мы уже успели снять
       # прежнее значение, боевое окружение осталось бы хуже, чем было.
@@ -51,7 +53,8 @@ jobs:
           set -euo pipefail
           missing=""
           for n in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID \
-                   TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID LEDGER_URL LEDGER_HMAC_SECRET; do
+                   TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID LEDGER_URL LEDGER_HMAC_SECRET \
+                   MONO_PERSONAL_TOKEN; do
             if [ -z "${!n-}" ]; then
               missing="$missing $n"
             fi
@@ -60,7 +63,7 @@ jobs:
             echo "::error::Пусто или не задано:$missing — синхронизация остановлена, в боевом окружении ничего не менялось"
             exit 1
           fi
-          echo "Все семь значений на месте (перечислены только имена)"
+          echo "Все восемь значений на месте (перечислены только имена)"
 
       - name: Привязать проект Vercel
         run: |
@@ -105,6 +108,7 @@ jobs:
           sync_one TELEGRAM_CHAT_ID
           sync_one LEDGER_URL
           sync_one LEDGER_HMAC_SECRET
+          sync_one MONO_PERSONAL_TOKEN
 
       # Отчёт о том, ЧТО теперь лежит в боевом окружении: список имён. Значения
       # Vercel в нём не печатает — колонка value для секретов всегда Encrypted.

@@ -269,9 +269,9 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
       </header>
       {updated ? <p className="mt-1 text-sm text-ink-500">Данные обновлены: {updated} (Киев)</p> : null}
 
-      <Link href="/groshi" prefetch={false} className="mt-6 flex items-center justify-between rounded border border-paper-200 bg-white p-4 hover:border-cherry-juice">
+      <Link href="/cabinet/groshi" prefetch={false} className="mt-6 flex items-center justify-between rounded border border-paper-200 bg-white p-4 hover:border-cherry-juice">
         <span className="font-display text-xl">Гроші</span>
-        <span className="text-sm text-ink-500">скоро з вашими даними →</span>
+        <span className="text-sm text-ink-500">проекти, приходи, виплати →</span>
       </Link>
 
       {down ? (
