@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isSignedIn, SESSION_COOKIE } from "@/lib/cabinet/auth";
 import { metaStatus, type MetaStatus } from "@/lib/cabinet/meta";
@@ -267,6 +268,11 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
         </form>
       </header>
       {updated ? <p className="mt-1 text-sm text-ink-500">Данные обновлены: {updated} (Киев)</p> : null}
+
+      <Link href="/groshi" prefetch={false} className="mt-6 flex items-center justify-between rounded border border-paper-200 bg-white p-4 hover:border-cherry-juice">
+        <span className="font-display text-xl">Гроші</span>
+        <span className="text-sm text-ink-500">скоро з вашими даними →</span>
+      </Link>
 
       {down ? (
         <div className="mt-6">

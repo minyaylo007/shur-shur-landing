@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
       { source: "/client/:path*", headers: closed },
       { source: "/api/client/:path*", headers: closed },
       { source: "/api/billing/:path*", headers: closed },
+      /* «Гроші»: open by link, but nobody's search result. */
+      { source: "/groshi", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }] },
     ];
   },
   async redirects() {
