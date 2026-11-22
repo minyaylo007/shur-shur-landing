@@ -32,6 +32,16 @@ const kyivIso = (unix: number) => new Date(unix * 1000).toLocaleDateString("sv-S
 const card = "rounded-2xl border border-paper-200 bg-cream-type p-4 shadow-[0_1px_0_rgba(74,13,20,0.04),0_8px_24px_-16px_rgba(74,13,20,0.25)]";
 const eyebrow = "text-xs font-medium uppercase tracking-widest text-ink-500";
 
+/** A tile number on one line: big digits, a small «грн». */
+function Big({ kop }: { kop: number }) {
+  return (
+    <p className="mt-1 whitespace-nowrap font-display text-[1.3rem] tabular-nums">
+      {Math.round(kop / 100).toLocaleString("uk-UA")}
+      <span className="ml-1 font-body text-sm text-ink-500">грн</span>
+    </p>
+  );
+}
+
 function when(iso: string, now: number): string {
   const today = kyivIso(now);
   const tomorrow = kyivIso(now + 86_400);
@@ -71,11 +81,11 @@ export function MoneyView({ ops, accounts, plan, now, demo }: { ops: Operation[]
       <div className="grid grid-cols-2 gap-3">
         <div className={card}>
           <p className={eyebrow}>Прийшло</p>
-          <p className="mt-1 font-display text-2xl tabular-nums">{grn(m.income)}</p>
+          <Big kop={m.income} />
         </div>
         <div className={card}>
           <p className={eyebrow}>Пішло</p>
-          <p className="mt-1 font-display text-2xl tabular-nums">{grn(m.spent)}</p>
+          <Big kop={m.spent} />
         </div>
       </div>
 
