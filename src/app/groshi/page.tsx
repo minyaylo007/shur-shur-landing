@@ -1,8 +1,9 @@
-import { DEMO_ACCOUNTS, DEMO_NOW, DEMO_OPERATIONS, DEMO_PLAN } from "@/lib/money/demo";
+import { DEMO_ACCOUNTS, DEMO_BOOK, DEMO_NOW, DEMO_OPERATIONS } from "@/lib/money/demo";
 import { MoneyView } from "./money-view";
 
-/* Stage 1: made-up data only. Stage 2 swaps the source for the monobank
-   personal API; the view and the ledger stay. */
+/* The public demo: made-up data, open by link, saves nothing (every tap lives
+   in the page's memory). Sasha's own page is /cabinet/groshi — the same
+   screen over her Blob record and her bank. */
 export default function Money() {
-  return <MoneyView ops={DEMO_OPERATIONS} accounts={DEMO_ACCOUNTS} plan={DEMO_PLAN} now={DEMO_NOW} demo />;
+  return <MoneyView initial={DEMO_BOOK} bankOps={DEMO_OPERATIONS} bankAccounts={DEMO_ACCOUNTS} now={DEMO_NOW} demo />;
 }

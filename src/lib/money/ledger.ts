@@ -19,6 +19,8 @@ export interface Account {
   id: string;
   type: AccountType;
   iban: string;
+  /** a dollar FOP account counts apart: no exchange rate anywhere (owner, 22.11.2026) */
+  currency?: "UAH" | "USD";
 }
 
 /** One statement line, as the personal API returns it, plus the account it came from. */
@@ -31,6 +33,9 @@ export interface Operation {
   amount: number;
   counterName?: string;
   counterIban?: string;
+  counterEdrpou?: string;
+  /** typed in by Sasha: cash in hand, or a bank payment while the bank is not connected */
+  manual?: "cash" | "bank";
 }
 
 export type Category = "income" | "self" | "team" | "taxes" | "ads" | "other" | "sort" | "skip";
@@ -53,6 +58,8 @@ export const recipientName = (op: Operation) => op.counterName ?? op.description
 const TAX = /ДПС|казнач|ЄСВ|єдиний внесок|єдиний податок|військовий збір/i;
 /** Advertising, software, digital services, hosting, telecom. */
 const ADS_MCC = new Set([7311, 7372, 7399, 5734, 5817, 5818, 4814, 4816, 4899]);
+/** Selling dollars into the hryvnia account is the same money, not a second income. */
+const EXCHANGE = /продаж валют|купівля валют|обмін валют|конвертац/i;
 /** Money transfers: a person or a firm we have not met yet. */
 const TRANSFER_MCC = new Set([4829, 6012, 6538]);
 
@@ -61,6 +68,7 @@ export function classify(op: Operation, accounts: Account[], rules: Rules, plan:
   if (!account || account.type === "platinum") return "skip"; // pink card purchases are hers, not the business's
   const own = accounts.find((a) => op.counterIban !== undefined && a.iban === op.counterIban);
   if (own) return own.type === "platinum" && op.amount < 0 ? "self" : "skip"; // FOP ⇄ white is not money moving anywhere
+  if (EXCHANGE.test(op.description)) return "skip";
   if (op.amount > 0) return account.type === "fop" ? "income" : "skip";
   if (planRowOf(op, accounts, plan)) return "team";
   const rule = rules[recipientKey(op)];
@@ -78,7 +86,7 @@ export function remember(rules: Rules, op: Operation, category: Spend): Rules {
 
 /* ---------- the payout plan: the one setting ---------- */
 
-/** One line of the plan: who, how much, which day of the month, for which client (optional). */
+/** One line of the plan: who, how much, which day of the month, for which project (optional). */
 export interface PlanRow {
   id: string;
   name: string;
@@ -87,16 +95,20 @@ export interface PlanRow {
   /** kopecks */
   amount: number;
   day: number;
-  /** part of the payer's name as the FOP statement shows it */
-  client?: string;
+  /** the project id (lib/money/book) this payout is for */
+  project?: string;
 }
 export type Plan = PlanRow[];
 
 const DAY = 86_400;
 /** A payout a few days off its planned date is still that payout. */
 export const PLAN_SLACK_DAYS = 4;
-/** «за <клієнт>» when that client paid within this many days before the payout. */
+/** «за <проект>» when that project paid within this many days before the payout. */
 export const CLIENT_LOOKBACK_DAYS = 5;
+
+/** Which projects an incoming payment is for (lib/money/book decides); none known by default. */
+export type ProjectsOf = (op: Operation) => string[];
+const nobody: ProjectsOf = () => [];
 
 /** Kyiv calendar date of an operation, as [year, month 1..12, day]. */
 function kyivDate(time: number): [number, number, number] {
@@ -126,20 +138,20 @@ export function planRowOf(op: Operation, accounts: Account[], plan: Plan): PlanR
   });
 }
 
-/** «за <клієнт>»: the row names a client and that client paid the FOP shortly before this payout. */
-export function paidFor(op: Operation, row: PlanRow, ops: Operation[], accounts: Account[]): string | undefined {
-  if (!row.client) return undefined;
-  const client = row.client.toLowerCase();
+/** «за <проект>»: the row names a project and that project paid the FOP shortly before this payout. Its id. */
+export function paidFor(op: Operation, row: PlanRow, ops: Operation[], accounts: Account[], projectsOf: ProjectsOf = nobody): string | undefined {
+  const project = row.project;
+  if (!project) return undefined;
   const fop = new Set(accounts.filter((a) => a.type === "fop").map((a) => a.id));
   const paid = ops.some(
     (o) =>
       fop.has(o.account) &&
       o.amount > 0 &&
-      (o.counterName ?? "").toLowerCase().includes(client) &&
+      projectsOf(o).includes(project) &&
       o.time <= op.time &&
       o.time >= op.time - CLIENT_LOOKBACK_DAYS * DAY,
   );
-  return paid ? row.client : undefined;
+  return paid ? project : undefined;
 }
 
 export interface Payout {
@@ -148,18 +160,18 @@ export interface Payout {
   day: number;
   /** day of the month it was paid, when it was */
   paidOn?: number;
-  /** «за <клієнт>» when the money for it had come in */
+  /** the project id, «за <проект>», when the money for it had come in */
   forClient?: string;
 }
 
 /** Every plan row in one month, by planned day: paid (and on which day) or still due. */
-export function payouts(ops: Operation[], accounts: Account[], plan: Plan, month: string): Payout[] {
+export function payouts(ops: Operation[], accounts: Account[], plan: Plan, month: string, projectsOf: ProjectsOf = nobody): Payout[] {
   const [y, m] = month.split("-").map(Number);
   const inMonth = ops.filter((o) => monthOf(o.time) === month);
   return plan
     .map((row) => {
       const op = inMonth.find((o) => planRowOf(o, accounts, [row]) === row);
-      return { row, day: planDay(row, y, m), paidOn: op ? kyivDate(op.time)[2] : undefined, forClient: op ? paidFor(op, row, ops, accounts) : undefined };
+      return { row, day: planDay(row, y, m), paidOn: op ? kyivDate(op.time)[2] : undefined, forClient: op ? paidFor(op, row, ops, accounts, projectsOf) : undefined };
     })
     .sort((a, b) => a.day - b.day);
 }
@@ -250,7 +262,11 @@ export const monthOf = (time: number) => new Date(time * 1000).toLocaleDateStrin
 
 export interface Month {
   month: string;
+  /** hryvnias in; dollars are counted apart in `incomeUsd` (cents), never converted */
   income: number;
+  incomeUsd: number;
+  /** cash Sasha typed in, inside `income` */
+  cash: number;
   /** everything that left the business: four categories plus the not yet sorted */
   spent: number;
   by: Record<Spend, number>;
@@ -269,14 +285,21 @@ export function summarize(ops: Operation[], accounts: Account[], rules: Rules, m
   const team = new Map<string, number>();
   const toSort: Operation[] = [];
   let income = 0;
+  let incomeUsd = 0;
+  let cash = 0;
   let self = 0;
   let unsorted = 0;
   for (const op of ops) {
     if (monthOf(op.time) !== month) continue;
     const c = classify(op, accounts, rules, plan);
     const sum = Math.abs(op.amount);
-    if (c === "income") income += sum;
-    else if (c === "self") self += sum;
+    if (c === "income") {
+      if (accounts.find((a) => a.id === op.account)?.currency === "USD") incomeUsd += sum;
+      else {
+        income += sum;
+        if (op.manual === "cash") cash += sum;
+      }
+    } else if (c === "self") self += sum;
     else if (c === "sort") {
       unsorted += sum;
       toSort.push(op);
@@ -293,6 +316,8 @@ export function summarize(ops: Operation[], accounts: Account[], rules: Rules, m
   return {
     month,
     income,
+    incomeUsd,
+    cash,
     spent,
     by,
     team: [...team].map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount),
