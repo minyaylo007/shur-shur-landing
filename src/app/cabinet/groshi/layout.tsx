@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   title: "Гроші",
   robots: { index: false, follow: false, nocache: true },
   referrer: "no-referrer",
+  /* Installable from the phone's home screen like the demo; no service worker. */
+  manifest: "/cabinet/groshi.webmanifest",
+  appleWebApp: { capable: true, title: "Гроші", statusBarStyle: "black-translucent" },
   icons: {
     icon: [{ url: "/money/icon-192.png", sizes: "192x192", type: "image/png" }],
     apple: [{ url: "/money/apple-touch-icon.png", sizes: "180x180" }],
