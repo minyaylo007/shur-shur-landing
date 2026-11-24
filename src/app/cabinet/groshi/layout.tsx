@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   /* Installable from the phone's home screen like the demo; no service worker. */
   manifest: "/cabinet/groshi.webmanifest",
   appleWebApp: { capable: true, title: "Гроші", statusBarStyle: "black-translucent" },
+  /* Next writes only the new name (mobile-web-app-capable); older iOS reads this one. */
+  other: { "apple-mobile-web-app-capable": "yes" },
   icons: {
     icon: [{ url: "/money/icon-192.png", sizes: "192x192", type: "image/png" }],
     apple: [{ url: "/money/apple-touch-icon.png", sizes: "180x180" }],
