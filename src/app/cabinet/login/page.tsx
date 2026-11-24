@@ -1,3 +1,17 @@
+import type { Metadata } from "next";
+
+/* Without a session /cabinet/groshi lands here, and this is where the phone's
+   «На экран Домой» is usually pressed — so the login carries the same app
+   manifest (start_url /cabinet/groshi) and apple meta as the page itself. */
+export const metadata: Metadata = {
+  manifest: "/cabinet/groshi.webmanifest",
+  appleWebApp: { capable: true, title: "Гроші", statusBarStyle: "black-translucent" },
+  icons: {
+    icon: [{ url: "/money/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/money/apple-touch-icon.png", sizes: "180x180" }],
+  },
+};
+
 const MESSAGES: Record<string, string> = {
   bad: "Пароль не подошёл.",
   limit: "Слишком много попыток. Подождите немного и попробуйте снова.",
