@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { price } from "@/lib/billing/mono";
+import { offerLine, readOffer, type Offer } from "@/lib/billing/settings";
 import { site } from "@/lib/site";
 import { Logo } from "@/components/ui/Logo";
 
@@ -12,7 +13,8 @@ import { Logo } from "@/components/ui/Logo";
  * subscription is sold in Ukraine and charged through a Ukrainian bank.
  *
  * «[реквізити ФОП]» is a placeholder ON PURPOSE: the seller's legal details
- * are not invented here — they are filled in when the owner provides them.
+ * are not invented here. Sasha fills them in her cabinet («Оплата monobank»),
+ * the page reads them on each request; empty or unreadable → the placeholder.
  */
 
 type PageParams = { params: Promise<{ locale: string }> };
@@ -21,13 +23,23 @@ export function generateStaticParams() {
   return [{ locale: "uk" }];
 }
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Публічна оферта — підписка на бота SHUR-SHUR",
   description: "Умови підписки на чат-бота SHUR-SHUR: ціна, періодичність списання, скасування, повернення коштів, контакти.",
   alternates: { canonical: "/uk/oferta" },
 };
 
-const REQUISITES = "[реквізити ФОП]";
+const PLACEHOLDER = "[реквізити ФОП]";
+
+async function seller(): Promise<Offer | null> {
+  try {
+    return await readOffer();
+  } catch {
+    return null;
+  }
+}
 
 const h2 = "mt-8 font-display text-xl font-bold text-cherry-900";
 const p = "mt-3 leading-relaxed text-ink-700";
@@ -36,6 +48,9 @@ export default async function OfertaPage({ params }: PageParams) {
   const { locale } = await params;
   if (locale !== "uk") notFound();
   const cost = price().label;
+  const offer = await seller();
+  const party = offer?.name ? [offer.name, offer.code ? `РНОКПП ${offer.code}` : ""].filter(Boolean).join(", ") : PLACEHOLDER;
+  const requisites = offerLine(offer) ?? PLACEHOLDER;
 
   return (
     <main id="main" tabIndex={-1} className="mx-auto w-full max-w-3xl px-6 py-16 sm:px-10">
@@ -50,7 +65,7 @@ export default async function OfertaPage({ params }: PageParams) {
 
       <h2 className={h2}>1. Сторони</h2>
       <p className={p}>
-        Виконавець: {REQUISITES}, що діє під торговою назвою SHUR-SHUR. Замовник — особа, яка оформила підписку в
+        Виконавець: {party}, що діє під торговою назвою SHUR-SHUR. Замовник — особа, яка оформила підписку в
         кабінеті клієнта на сайті {site.siteUrl.replace(/^https?:\/\//, "")}.
       </p>
 
@@ -107,7 +122,7 @@ export default async function OfertaPage({ params }: PageParams) {
 
       <h2 className={h2}>8. Контакти та реквізити</h2>
       <p className={p}>
-        {REQUISITES}
+        {requisites}
         <br />
         Телефон:{" "}
         <a href={site.phone.tel} className="underline underline-offset-4">

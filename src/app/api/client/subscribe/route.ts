@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   }
   if (!client) return back(request, "/");
   const page = `/client/${client.id}`;
-  const token = monoToken(client.test);
+  const token = await monoToken(client.test);
   if (!token) return back(request, `${page}?b=soon`);
   if (!rateLimit(`client-subscribe:${clientIp(request)}`, { limit: 10 }).allowed) return back(request, `${page}?b=limit`);
 

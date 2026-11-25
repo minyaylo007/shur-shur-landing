@@ -1,5 +1,6 @@
 import { createHash, createVerify } from "node:crypto";
 import { EMPTY_BILLING, updateClient, type Billing, type Client } from "@/lib/client/clients";
+import { liveToken } from "./settings";
 
 /**
  * The 15 €/month subscription through monobank acquiring. Server-only.
@@ -29,9 +30,13 @@ export const PAGE_REUSE_MS = 23 * 60 * 60 * 1000;
 
 /* ---------- configuration ---------- */
 
-/** A test client pays in the test environment and can never reach the live token. */
-export function monoToken(test: boolean): string | null {
-  const value = (test ? process.env.MONO_TEST_TOKEN : process.env.MONO_TOKEN)?.trim();
+/**
+ * A test client pays in the test environment and can never reach the live token.
+ * The live one: env MONO_TOKEN, else the one Sasha saved in her cabinet (settings.ts).
+ */
+export async function monoToken(test: boolean): Promise<string | null> {
+  if (!test) return liveToken();
+  const value = process.env.MONO_TEST_TOKEN?.trim();
   return value ? value : null;
 }
 
@@ -88,6 +93,16 @@ async function call(token: string, method: "GET" | "POST", path: string, body?: 
     throw new MonoError(response.status, typeof code === "string" ? code.slice(0, 40) : "unknown");
   }
   return json;
+}
+
+/**
+ * The token check behind the cabinet form: one read request. Returns the
+ * merchant's name as monobank knows it; a refused token throws MonoError.
+ */
+export async function merchantDetails(token: string): Promise<{ merchantName: string | null }> {
+  const json = object(await call(token, "GET", "/api/merchant/details"));
+  const name = field(json, "merchantName", "name");
+  return { merchantName: typeof name === "string" && name.trim() ? name.trim().slice(0, 120) : null };
 }
 
 const str = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
@@ -300,7 +315,7 @@ function apply(billing: Billing, remote: Remote, nowMs: number): void {
  * fresh record, or null when there is nothing to sync.
  */
 export async function syncBilling(client: Client, seen?: string, nowMs = Date.now()): Promise<Client | null> {
-  const token = monoToken(client.test);
+  const token = await monoToken(client.test);
   const subscriptionId = client.billing.subscriptionId;
   if (!token || !subscriptionId) return null;
   const since = (client.billing.createdAt ?? nowMs) - 24 * 60 * 60 * 1000;
@@ -372,8 +387,8 @@ export type Access =
  * from an answer we failed to read, and the warning in the log is what gets
  * that fixed.
  */
-export function accessOf(client: Client, nowMs = Date.now()): Access {
-  if (!monoToken(client.test)) return { open: true, state: "no_billing" };
+export async function accessOf(client: Client, nowMs = Date.now()): Promise<Access> {
+  if (!(await monoToken(client.test))) return { open: true, state: "no_billing" };
   const { lastPaidAt, status, unclearAt } = client.billing;
   if (!lastPaidAt) return { open: false, state: "unpaid" };
   const paidUntil = addMonth(lastPaidAt);
@@ -416,7 +431,7 @@ function verify(pem: string, body: string, signature: string): boolean {
  * endpoint into a hammer on monobank's API.
  */
 export async function webhookSigned(test: boolean, body: string, signature: string | null, nowMs = Date.now()): Promise<boolean> {
-  const token = monoToken(test);
+  const token = await monoToken(test);
   if (!token || !signature || signature.length > 400) return false;
   const kind: Kind = test ? "test" : "live";
   const cached = keys[kind];

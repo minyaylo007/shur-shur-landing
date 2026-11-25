@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     if (!found) return no("no_client", 404);
     let client = found.client;
     if (!client.test) return no("not_a_test_client", 409);
-    const token = monoToken(true);
+    const token = await monoToken(true);
     if (!token) return no("no_test_token", 409);
     const { billing } = client;
 
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
         ok: true,
         ...seen,
         stored: { status: b.status, paid: b.lastPaidAt !== null, failed: b.lastFailedAt !== null, next_charge: b.nextChargeAt !== null, unclear: b.unclearAt !== null, webhooks_applied: b.seen.length },
-        access: accessOf(client),
+        access: await accessOf(client),
       },
       { headers: { "Cache-Control": "no-store" } },
     );
