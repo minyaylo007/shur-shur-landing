@@ -18,16 +18,6 @@ const STALE_MS = 6 * 60 * 60 * 1000;
 const LATEST = 12;
 const stale = (syncedAt: number | null) => Date.now() - (syncedAt ?? 0) > STALE_MS;
 
-const UPLOAD: Record<string, string> = {
-  ok: "Файл завантажено.",
-  empty: "Файл порожній або не вибраний.",
-  too_big: "Файл більший за 2 МБ.",
-  too_many_rows: "У файлі понад 5000 рядків.",
-  bad_format: "Файл не читається. Потрібен .csv або .xlsx.",
-  limit: "Забагато завантажень поспіль. Зачекайте трохи.",
-  down: "Не вдалося зберегти файл. Спробуйте пізніше.",
-};
-
 const BILLING: Record<string, string> = {
   soon: "Оплата ще не ввімкнена.",
   limit: "Забагато спроб. Зачекайте трохи.",
@@ -84,7 +74,7 @@ function Subscribe({ label }: { label: string }) {
         {label}
       </button>
       <ol className="mt-5 grid gap-3 text-sm text-ink-700 sm:grid-cols-3">
-        {["Натискаєте кнопку — відкриється захищена сторінка monobank.", "Оплачуєте карткою на сторінці monobank. Номера картки ми не бачимо — картку зберігає банк.", "Результати відкрито. Далі — списання раз на місяць, скасувати можна тут будь-коли."].map((step, i) => (
+        {["Натискаєте кнопку — відкриється захищена сторінка monobank.", "Оплачуєте карткою на сторінці monobank. Номера картки ми не бачимо — картку зберігає банк.", "Готово. Далі — списання раз на місяць, скасувати можна тут будь-коли."].map((step, i) => (
           <li key={i} className="flex gap-3">
             <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-cherry-deep text-xs font-semibold text-cream-type">{i + 1}</span>
             <span>{step}</span>
@@ -153,8 +143,7 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
   if (access.state === "no_billing") {
     return (
       <Status tone="idle" title="Оплата скоро">
-        Онлайн-оплату ще не ввімкнено — поки що результати відкриті без оплати. Коли оплата запрацює, тут з’явиться кнопка
-        й ми вас попередимо.
+        Онлайн-оплату ще не ввімкнено. Коли запрацює, тут з’явиться кнопка й ми вас попередимо.
       </Status>
     );
   }
@@ -171,8 +160,7 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
     if (access.state === "paid") {
       return (
         <Status tone="ok" title="Підписка активна" facts={[["Наступне списання", day(billing.nextChargeAt ?? access.paidUntil)], ...lastPaid]}>
-          Гроші списуються з картки автоматично раз на місяць. Скасувати можна будь-коли — результати залишаться
-          відкритими до кінця оплаченого місяця.
+          Гроші списуються з картки автоматично раз на місяць. Скасувати можна будь-коли.
           <Cancel />
         </Status>
       );
@@ -181,16 +169,14 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
     if (access.state === "grace" && !tried) {
       return (
         <Status tone="ok" title="Підписка активна" facts={[["Наступне списання", "найближчим часом"], ...lastPaid]}>
-          Оплачений місяць закінчився — списуємо оплату за наступний із вашої картки. Результати відкриті.
+          Оплачений місяць закінчився — списуємо оплату за наступний із вашої картки.
           <Cancel />
         </Status>
       );
     }
     return (
-      <Status tone="bad" title="Списання не пройшло" facts={access.state === "grace" ? [["Результати відкриті до", day(access.closesAt)], ...lastPaid] : lastPaid}>
-        {access.state === "grace"
-          ? "Чергова оплата не пройшла. Оплатіть місяць карткою — можна іншою. Результати поки залишаються відкритими."
-          : "Чергова оплата не пройшла, тому результати закрито. Оплатіть місяць карткою — можна іншою, і результати відкриються."}
+      <Status tone="bad" title="Списання не пройшло" facts={lastPaid}>
+        Чергова оплата не пройшла. Оплатіть місяць карткою — можна іншою.
         <Subscribe label={`Оплатити карткою — ${cost}`} />
         <Cancel />
       </Status>
@@ -198,7 +184,7 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
   }
   if (billing.status === "cancelled" && access.state === "paid") {
     return (
-      <Status tone="wait" title="Підписку скасовано" facts={[["Результати відкриті до", day(access.paidUntil)]]}>
+      <Status tone="wait" title="Підписку скасовано" facts={[["Оплачено до", day(access.paidUntil)]]}>
         Нових списань не буде. Передумали — відновіть підписку: наступне списання буде після кінця оплаченого місяця.
         <Subscribe label="Відновити підписку" />
       </Status>
@@ -206,7 +192,7 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
   }
   return (
     <Status tone="idle" title={billing.lastPaidAt ? "Підписка не діє" : "Підписку не оформлено"} facts={lastPaid.length ? lastPaid : undefined}>
-      Щоб бачити результати свого бота, оформіть підписку.
+      Оформіть підписку — списання раз на місяць, скасувати можна будь-коли.
       <Subscribe label={subscribe} />
     </Status>
   );
@@ -514,10 +500,10 @@ function Empty() {
   );
 }
 
-export default async function ClientCabinet({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ u?: string; b?: string; paid?: string }> }) {
+export default async function ClientCabinet({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ b?: string; paid?: string }> }) {
   const { id } = await params;
   if (!isClientId(id)) redirect("/");
-  const { u, b, paid } = await searchParams;
+  const { b, paid } = await searchParams;
   const jar = await cookies();
   let client: Client | null = null;
   // The back office (/cabinet session) sees any client's page exactly as the
@@ -544,19 +530,19 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
     }
   }
 
+  // Results are always shown — paid or not (owner, 25.11.2026). The
+  // subscription only decides the billing block above them.
   const access = await accessOf(client);
   let results: Results | null = null;
   let attempts: Awaited<ReturnType<typeof readAttempts>> = null;
   let down = false;
-  if (access.open) {
-    try {
-      [results, attempts] = await Promise.all([readResults(client.id), readAttempts(client.id)]);
-    } catch {
-      down = true;
-    }
+  try {
+    [results, attempts] = await Promise.all([readResults(client.id), readAttempts(client.id)]);
+  } catch {
+    down = true;
   }
 
-  const note = (b && BILLING[b]) || (u && UPLOAD[u]) || undefined;
+  const note = (b && BILLING[b]) || undefined;
   return (
     <div>
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
@@ -600,13 +586,16 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
       </div>
 
       <section className="mt-10">
-        <h2 className="font-display text-xl sm:text-2xl">Результати бота</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-display text-xl sm:text-2xl">Результати бота</h2>
+          {attempts || results ? (
+            <a href={`/api/client/export?id=${client.id}`} download className={quiet}>
+              Скачати результати (.csv)
+            </a>
+          ) : null}
+        </div>
         <div className="mt-4">
-          {!access.open ? (
-            <Plate title="Результати закрито">
-              Вони збережені, бот і далі їх збирає. Усе відкриється одразу після оплати підписки — кнопка вище.
-            </Plate>
-          ) : down ? (
+          {down ? (
             <Plate title="Дані тимчасово недоступні">Сховище не відповіло. Спробуйте оновити сторінку пізніше.</Plate>
           ) : !results && !attempts ? (
             <Empty />
@@ -624,21 +613,6 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
         </div>
       </section>
 
-      <details className="mt-10 rounded-2xl border border-paper-200 px-5 py-4">
-        <summary className="cursor-pointer font-semibold">Завантажити результати файлом</summary>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-700">
-          Зазвичай це не потрібно: бот надсилає результати сам. Файл — .csv або .xlsx, до 2 МБ і 5000 рядків; перший
-          рядок — назви колонок. Файл із колонками test, score, finished_at (за бажанням max_score, range_label, а далі —
-          по колонці на питання) додається до статистики проходжень. Будь-яка інша таблиця показується як є і замінює
-          попередню.
-        </p>
-        <form method="post" action="/api/client/upload" encType="multipart/form-data" className="mt-3 flex flex-wrap items-center gap-3">
-          <input type="file" name="file" accept=".csv,.xlsx" required className="max-w-full text-sm" />
-          <button type="submit" className={quiet}>
-            Завантажити
-          </button>
-        </form>
-      </details>
       </fieldset>
 
       <p className="mt-8 text-sm text-ink-700">
