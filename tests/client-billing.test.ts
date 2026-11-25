@@ -33,6 +33,8 @@ const clients = await import("../src/lib/client/clients");
 const { resultsKey, readResults, saveResults } = await import("../src/lib/client/results");
 const { attemptsKey, readAttempts } = await import("../src/lib/client/attempts");
 const mono = await import("../src/lib/billing/mono");
+const { sealCard, chargeBlock, saveMonoToken } = await import("../src/lib/billing/settings");
+const { GET: CHARGE_RUN } = await import("../src/app/api/billing/charge/route");
 const { POST: WEBHOOK } = await import("../src/app/api/billing/mono/route");
 const { POST: UPLOAD } = await import("../src/app/api/client/upload/route");
 const { POST: INGEST } = await import("../src/app/api/client/ingest/route");
@@ -54,11 +56,14 @@ const pair = () => generateKeyPairSync("ec", { namedCurve: "prime256v1" });
 const pem = (key: ReturnType<typeof pair>) => key.publicKey.export({ type: "spki", format: "pem" }).toString();
 const sign = (key: ReturnType<typeof pair>, body: string) => createSign("SHA256").update(body).sign(key.privateKey).toString("base64");
 
-/* ---- the mocked monobank ---- */
+/* ---- the mocked monobank: invoices with card saving, and charges by the saved card ---- */
 let bankKey = pair();
-let remote: { status: string; nextChargeDate?: string; payments: { status: string; chargedAt: string; amount: number; ccy: number }[] };
-/** Set to answer something else than the published schema. */
-let odd: { status?: unknown; payments?: unknown } = {};
+const CARD = "CARD-TOKEN-VALUE";
+type Invoice = { status: string; modified: number; card: string | null };
+let invoices: Map<string, Invoice>;
+let n = 0;
+/** What wallet/payment answers next: a status, or an error of monobank. */
+let wallet: { status: "success" | "processing" | "failure"; tds?: boolean } | { error: number; errText: string };
 let calls: { method: string; path: string; token: string | null; body: Record<string, unknown> | null }[];
 
 const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -66,26 +71,48 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
   if (url.origin !== "https://api.monobank.ua") throw new Error(`unexpected request to ${url.origin}`);
   const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null;
   calls.push({ method: init?.method ?? "GET", path: url.pathname, token: new Headers(init?.headers).get("x-token"), body });
-  const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+  const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
   switch (url.pathname) {
     case "/api/merchant/pubkey":
       return json({ key: Buffer.from(pem(bankKey)).toString("base64") });
-    case "/api/merchant/subscription/create":
-      return json({ subscriptionId: "s2_test", pageUrl: "https://pay.mbnk.biz/s2_test" });
-    case "/api/merchant/subscription/status":
-      if (odd.status !== undefined) return json(odd.status);
-      return json({ subscriptionId: "s2_test", status: remote.status, amount: 1500, ccy: 978, interval: "1m", nextChargeDate: remote.nextChargeDate });
-    case "/api/merchant/subscription/payments":
-      if (odd.payments !== undefined) return json(odd.payments);
-      return json({ payments: remote.payments, pagination: { totalItems: remote.payments.length, itemsPerPage: 50, currentPage: 1, totalPages: 1 } });
-    case "/api/merchant/subscription/edit":
-    case "/api/merchant/subscription/remove":
-      return new Response("", { status: 200 });
+    case "/api/merchant/invoice/create": {
+      const id = `inv_${++n}`;
+      invoices.set(id, { status: "created", modified: Date.now(), card: null });
+      return json({ invoiceId: id, pageUrl: `https://pay.mbnk.biz/${id}` });
+    }
+    case "/api/merchant/invoice/status": {
+      const id = url.searchParams.get("invoiceId") ?? "";
+      const inv = invoices.get(id);
+      if (!inv) return json({ errCode: "NOT_FOUND", errText: "invoice not found" }, 404);
+      return json({
+        invoiceId: id,
+        status: inv.status,
+        amount: 1500,
+        ccy: 978,
+        createdDate: new Date(inv.modified).toISOString(),
+        modifiedDate: new Date(inv.modified).toISOString(),
+        ...(inv.card ? { walletData: { cardToken: inv.card, walletId: "w", status: "created" } } : {}),
+      });
+    }
+    case "/api/merchant/invoice/remove": {
+      const inv = invoices.get(String(body?.invoiceId));
+      if (!inv || inv.status === "success") return json({ errCode: "BAD_REQUEST", errText: "invoice already paid" }, 400);
+      inv.status = "expired";
+      return json({});
+    }
+    case "/api/merchant/wallet/payment": {
+      if ("error" in wallet) return json({ errCode: "1001", errText: wallet.errText }, wallet.error);
+      const id = `ch_${++n}`;
+      invoices.set(id, { status: wallet.status, modified: Date.now(), card: null });
+      return json({ invoiceId: id, status: wallet.status, amount: 1500, ccy: 978, ...(wallet.tds ? { tdsUrl: "https://3ds.example/x" } : {}) });
+    }
     default:
-      return new Response(JSON.stringify({ errCode: "404", errText: "not found" }), { status: 404 });
+      return json({ errCode: "404", errText: "not found" }, 404);
   }
 });
 const called = (path: string) => calls.filter((c) => c.path.endsWith(path));
+/** The client paid invoice `id` on monobank's page; the card is saved. */
+const pay = (id: string, at = Date.now() - 60_000) => invoices.set(id, { status: "success", modified: at, card: CARD });
 
 /* ---- helpers ---- */
 let store: ReturnType<typeof useMemoryStore>;
@@ -101,15 +128,20 @@ async function newClient(name: string, test = false) {
 
 const record = async (id: string) => (await clients.readClient(id))!.client;
 
-async function subscribed(id: string, paidDaysAgo: number | null, status: "active" | "cancelled" | "pending" = "active") {
+/** A client in a given state; the first invoice is `inv_first` (paid when paidDaysAgo is set), the card saved unless said otherwise. */
+async function subscribed(id: string, paidDaysAgo: number | null, status: "active" | "cancelled" | "pending" = "active", card = paidDaysAgo !== null) {
+  const lastPaidAt = paidDaysAgo === null ? null : Date.now() - paidDaysAgo * DAY;
+  invoices.set("inv_first", lastPaidAt ? { status: "success", modified: lastPaidAt, card: CARD } : { status: "created", modified: Date.now(), card: null });
   await clients.updateClient(id, (c) => {
     c.billing = {
       ...clients.EMPTY_BILLING,
       seen: [],
-      subscriptionId: "s2_test",
+      invoiceId: "inv_first",
+      pageUrl: status === "pending" ? "https://pay.mbnk.biz/inv_first" : null,
       createdAt: Date.now() - 40 * DAY,
       status,
-      lastPaidAt: paidDaysAgo === null ? null : Date.now() - paidDaysAgo * DAY,
+      lastPaidAt,
+      card: card ? sealCard(CARD) : null,
       syncedAt: Date.now(),
     };
   });
@@ -181,7 +213,6 @@ async function page(id: string, session?: string): Promise<{ html: string; redir
 }
 
 const table = { columns: ["Дата", "Ім'я"], rows: [["2026-11-17", "Олена Петренко"]] };
-const paidNow = () => [{ status: "success", chargedAt: new Date(Date.now() - 60_000).toISOString(), amount: 1500, ccy: 978 }];
 
 beforeEach(() => {
   store = useMemoryStore();
@@ -189,9 +220,11 @@ beforeEach(() => {
   process.env.MONO_TOKEN = "live-token";
   process.env.MONO_TEST_TOKEN = "test-token";
   delete process.env.MONO_PRICE_UAH;
+  process.env.CRON_SECRET = "cron-secret";
   bankKey = pair();
-  remote = { status: "active", payments: [] };
-  odd = {};
+  invoices = new Map();
+  n = 0;
+  wallet = { status: "success" };
   calls = [];
   logged = [];
   mono.forgetWebhookKeys();
@@ -215,8 +248,8 @@ describe("webhook signature", () => {
   it("a webhook signed by monobank is applied: the state is read back from monobank", async () => {
     const a = await newClient("Кав'ярня");
     await subscribed(a.id, null, "pending");
-    remote = { status: "active", nextChargeDate: new Date(Date.now() + 30 * DAY).toISOString(), payments: paidNow() };
-    const body = JSON.stringify({ subscriptionId: "s2_test", status: "success" });
+    pay("inv_first");
+    const body = JSON.stringify({ invoiceId: "inv_first", status: "success" });
 
     const response = await WEBHOOK(webhook(a.id, body, sign(bankKey, body)));
 
@@ -225,13 +258,16 @@ describe("webhook signature", () => {
     expect(billing.status).toBe("active");
     expect(billing.lastPaidAt).toBeGreaterThan(Date.now() - 5 * 60_000);
     expect(billing.seen).toHaveLength(1);
+    // The card came back with the payment: kept, sealed — never as it came.
+    expect(billing.card).not.toBeNull();
+    expect([...store.values()].map((s) => s.text).join("\n")).not.toContain(CARD);
   });
 
   it("a webhook body cannot set the state by itself — only what monobank's API answers counts", async () => {
     const a = await newClient("Кав'ярня");
     await subscribed(a.id, null, "pending");
     // Signed correctly, claims success — but monobank knows of no payment.
-    const body = JSON.stringify({ subscriptionId: "s2_test", status: "success", amount: 1500 });
+    const body = JSON.stringify({ invoiceId: "inv_first", status: "success", amount: 1500 });
     expect((await WEBHOOK(webhook(a.id, body, sign(bankKey, body)))).status).toBe(200);
     const fresh = await record(a.id);
     expect(fresh.billing.lastPaidAt).toBeNull();
@@ -241,9 +277,9 @@ describe("webhook signature", () => {
   it("a forged, unsigned or altered webhook is refused with 401 and changes nothing", async () => {
     const a = await newClient("Кав'ярня");
     await subscribed(a.id, null, "pending");
-    remote = { status: "active", payments: paidNow() };
+    pay("inv_first");
     const before = store.get(clients.clientKey(a.id))!.text;
-    const body = JSON.stringify({ subscriptionId: "s2_test", status: "success" });
+    const body = JSON.stringify({ invoiceId: "inv_first", status: "success" });
 
     const forged = await WEBHOOK(webhook(a.id, body, sign(pair(), body)));
     const unsigned = await WEBHOOK(webhook(a.id, body, null));
@@ -252,7 +288,7 @@ describe("webhook signature", () => {
 
     expect([forged.status, unsigned.status, altered.status, garbage.status]).toEqual([401, 401, 401, 401]);
     expect(store.get(clients.clientKey(a.id))!.text).toBe(before);
-    expect(called("/subscription/status")).toHaveLength(0);
+    expect(called("/invoice/status")).toHaveLength(0);
     expect((await mono.accessOf(await record(a.id))).open).toBe(false);
   });
 
@@ -260,15 +296,15 @@ describe("webhook signature", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const a = await newClient("Кав'ярня");
     await subscribed(a.id, null, "pending");
-    const one = JSON.stringify({ subscriptionId: "s2_test", n: 1 });
+    const one = JSON.stringify({ invoiceId: "inv_first", n: 1 });
     await WEBHOOK(webhook(a.id, one, sign(bankKey, one)));
-    const two = JSON.stringify({ subscriptionId: "s2_test", n: 2 });
+    const two = JSON.stringify({ invoiceId: "inv_first", n: 2 });
     await WEBHOOK(webhook(a.id, two, sign(bankKey, two)));
     expect(called("/pubkey")).toHaveLength(1);
 
     // Forged webhooks right after: the cached key says no, no new key request.
     for (let i = 0; i < 5; i++) {
-      const junk = JSON.stringify({ subscriptionId: "s2_test", junk: i });
+      const junk = JSON.stringify({ invoiceId: "inv_first", junk: i });
       expect((await WEBHOOK(webhook(a.id, junk, sign(pair(), junk)))).status).toBe(401);
     }
     expect(called("/pubkey")).toHaveLength(1);
@@ -276,7 +312,7 @@ describe("webhook signature", () => {
     // monobank rotates its key.
     bankKey = pair();
     vi.setSystemTime(Date.now() + 60_000);
-    const three = JSON.stringify({ subscriptionId: "s2_test", n: 3 });
+    const three = JSON.stringify({ invoiceId: "inv_first", n: 3 });
     expect((await WEBHOOK(webhook(a.id, three, sign(bankKey, three)))).status).toBe(200);
     expect(called("/pubkey")).toHaveLength(2);
   });
@@ -286,31 +322,31 @@ describe("webhook repeat", () => {
   it("the same webhook delivered again answers 200 and is not applied twice", async () => {
     const a = await newClient("Кав'ярня");
     await subscribed(a.id, null, "pending");
-    remote = { status: "active", payments: paidNow() };
-    const body = JSON.stringify({ subscriptionId: "s2_test", status: "success" });
+    pay("inv_first");
+    const body = JSON.stringify({ invoiceId: "inv_first", status: "success" });
     const signature = sign(bankKey, body);
 
     expect((await WEBHOOK(webhook(a.id, body, signature))).status).toBe(200);
     const after = store.get(clients.clientKey(a.id))!;
-    const syncs = called("/subscription/status").length;
+    const syncs = called("/invoice/status").length;
 
     // monobank retries; meanwhile its API would say something else — a repeat must not re-read it.
-    remote = { status: "cancelled", payments: [] };
+    invoices.set("inv_first", { status: "reversed", modified: Date.now(), card: null });
     const again = await WEBHOOK(webhook(a.id, body, signature));
 
     expect(again.status).toBe(200);
     expect(await again.json()).toMatchObject({ ok: true, repeat: true });
-    expect(called("/subscription/status")).toHaveLength(syncs);
+    expect(called("/invoice/status")).toHaveLength(syncs);
     expect(store.get(clients.clientKey(a.id))).toEqual(after);
   });
 
-  it("a webhook about another subscription is ignored", async () => {
+  it("a webhook about another invoice is ignored", async () => {
     const a = await newClient("Кав'ярня");
     await subscribed(a.id, null, "pending");
-    const body = JSON.stringify({ subscriptionId: "s2_somebody_else", status: "success" });
+    const body = JSON.stringify({ subscriptionId: "inv_somebody_else", status: "success" });
     const response = await WEBHOOK(webhook(a.id, body, sign(bankKey, body)));
     expect(await response.json()).toMatchObject({ ok: true, ignored: true });
-    expect(called("/subscription/status")).toHaveLength(0);
+    expect(called("/invoice/status")).toHaveLength(0);
   });
 });
 
@@ -335,7 +371,7 @@ describe("results are closed without a paid subscription", () => {
     await saveResults(a.id, table, "upload");
     const client = await record(a.id);
     const paidAt = Date.UTC(2026, 9, 10, 12); // 10 Oct → paid until 10 Nov
-    client.billing = { ...clients.EMPTY_BILLING, subscriptionId: "s2_test", status: "active", lastPaidAt: paidAt };
+    client.billing = { ...clients.EMPTY_BILLING, invoiceId: "inv_first", status: "active", lastPaidAt: paidAt };
     const at = (day: number, hour = 12) => mono.accessOf(client, Date.UTC(2026, 10, day, hour));
 
     expect(await at(9)).toMatchObject({ open: true, state: "paid" });
@@ -568,7 +604,7 @@ describe("personal data stays in the cabinet", () => {
     await keep(await INGEST(ingest(a.id, key, { attempts: [{ ...attempt(5), answers: "Петренко +380501112233" }] })));
     await keep(await INGEST(ingest(a.id, "wrong-key", attempt(6, { name: "Петренко" }))));
     await keep(await UPLOAD(post("/api/client/upload", a.cookie, { file: new File(["PK\u0003\u0004 Петренко olena@example.com"], "broken.xlsx") })));
-    const body = JSON.stringify({ subscriptionId: "s2_test", payer: "Петренко", phone: "+380501112233" });
+    const body = JSON.stringify({ invoiceId: "inv_first", payer: "Петренко", phone: "+380501112233" });
     await keep(await WEBHOOK(webhook(a.id, body, sign(bankKey, body))));
     await keep(await WEBHOOK(webhook(a.id, body, "bad")));
 
@@ -617,6 +653,11 @@ describe("personal data stays in the cabinet", () => {
 });
 
 describe("money", () => {
+  const HOUR = 60 * 60 * 1000;
+  /** A moment one hour after the client's paid month ran out. */
+  const dueOf = async (id: string) => mono.addMonth((await record(id)).billing.lastPaidAt!) + HOUR;
+  const cron = (auth: string | null = "Bearer cron-secret") => CHARGE_RUN(new Request("https://shur-shur.com/api/billing/charge", { headers: auth ? { authorization: auth } : {} }));
+
   it("without a token: no button, «Оплата скоро», and nothing is created at monobank", async () => {
     delete process.env.MONO_TOKEN;
     const a = await newClient("Кав'ярня");
@@ -629,33 +670,36 @@ describe("money", () => {
 
     const response = await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
     expect(response.headers.get("location")).toBe(`https://shur-shur.com/client/${a.id}?b=soon`);
+    expect(await mono.runCharges()).toMatchObject({ no_token: 1 });
     expect(calls).toHaveLength(0);
     expect((await record(a.id)).billing.status).toBe("none");
   });
 
-  it("the subscription is 15 € monthly; a second click reuses the page instead of a second subscription", async () => {
+  it("«Оформити підписку» is one invoice for 15 € that saves the card; a second click reuses the page", async () => {
     const a = await newClient("Кав'ярня");
     const first = await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
     expect(first.status).toBe(303);
-    expect(first.headers.get("location")).toBe("https://pay.mbnk.biz/s2_test");
-    const [create] = called("/subscription/create");
+    expect(first.headers.get("location")).toBe("https://pay.mbnk.biz/inv_1");
+    const [create] = called("/invoice/create");
     expect(create.token).toBe("live-token");
     expect(create.body).toMatchObject({
       amount: 1500,
       ccy: 978,
-      interval: "1m",
+      saveCardData: { saveCard: true, walletId: a.id },
       redirectUrl: expect.stringContaining(`/client/${a.id}?paid=1`),
-      webHookUrls: { chargeUrl: expect.stringContaining(`/api/billing/mono?c=${a.id}`), statusUrl: expect.stringContaining(`/api/billing/mono?c=${a.id}`) },
+      webHookUrl: expect.stringContaining(`/api/billing/mono?c=${a.id}`),
     });
 
     const second = await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
-    expect(second.headers.get("location")).toBe("https://pay.mbnk.biz/s2_test");
-    expect(called("/subscription/create")).toHaveLength(1);
+    expect(second.headers.get("location")).toBe("https://pay.mbnk.biz/inv_1");
+    expect(called("/invoice/create")).toHaveLength(1);
 
-    // Paying already: no new subscription either.
-    await subscribed(a.id, 1);
+    // Paid: the page opens, the card is kept, and a click creates nothing more.
+    pay("inv_1");
+    await page(a.id, a.session);
+    expect((await record(a.id)).billing).toMatchObject({ status: "active", card: expect.any(String) });
     await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
-    expect(called("/subscription/create")).toHaveLength(1);
+    expect(called("/invoice/create")).toHaveLength(1);
   });
 
   it("MONO_PRICE_UAH switches the charge to hryvnia and the label says both", async () => {
@@ -663,13 +707,17 @@ describe("money", () => {
     const a = await newClient("Кав'ярня");
     expect((await page(a.id, a.session)).html).toContain("15 € (≈ 730 грн)");
     await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
-    expect(called("/subscription/create")[0].body).toMatchObject({ amount: 73000, ccy: 980 });
+    expect(called("/invoice/create")[0].body).toMatchObject({ amount: 73000, ccy: 980 });
   });
 
   it("a test client never touches the live token — and has no billing without the test one", async () => {
     const t = await newClient("Проба", true);
     await SUBSCRIBE(post("/api/client/subscribe", t.cookie));
-    expect(calls.map((c) => c.token)).toEqual(["test-token"]);
+    pay("inv_1");
+    await page(t.id, t.session);
+    await mono.runCharges(await dueOf(t.id));
+    expect(called("/wallet/payment")).toHaveLength(1);
+    expect(new Set(calls.map((c) => c.token))).toEqual(new Set(["test-token"]));
 
     delete process.env.MONO_TEST_TOKEN;
     calls = [];
@@ -678,89 +726,203 @@ describe("money", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("cancel stops future charges at monobank and keeps the paid month open", async () => {
+  it("the month's charge: 15 € by the saved card, ONE per period — a second run, a parallel run or a retry ask nothing", async () => {
+    const a = await newClient("Кав'ярня");
+    await subscribed(a.id, 20);
+    const due = await dueOf(a.id);
+    const period = due - HOUR;
+
+    // Not yet due: nothing.
+    expect(await mono.runCharges(due - 2 * HOUR)).toMatchObject({ not_due: 1 });
+    expect(called("/wallet/payment")).toHaveLength(0);
+
+    // Due: two runs at once, then the same day again.
+    wallet = { status: "processing" };
+    const [one, two] = await Promise.all([mono.chargeClient(await record(a.id), due), mono.chargeClient(await record(a.id), due)]);
+    expect([one, two].sort()).toEqual(["already", "processing"]);
+    await mono.runCharges(due + HOUR);
+    expect(called("/wallet/payment")).toHaveLength(1);
+    expect(called("/wallet/payment")[0].body).toMatchObject({ cardToken: CARD, amount: 1500, ccy: 978, initiationKind: "merchant" });
+
+    // monobank finishes it; the webhook reads it back, the month moves on.
+    const chargeId = (await record(a.id)).billing.charge!.invoiceId!;
+    invoices.set(chargeId, { status: "success", modified: due, card: null });
+    const body = JSON.stringify({ invoiceId: chargeId, status: "success" });
+    expect((await WEBHOOK(webhook(a.id, body, sign(bankKey, body)))).status).toBe(200);
+    const paid = await record(a.id);
+    expect(paid.billing.lastPaidAt).toBe(period);
+    expect(paid.billing.charge).toMatchObject({ period, status: "success" });
+    expect(await mono.accessOf(paid, due + DAY)).toMatchObject({ open: true, state: "paid" });
+
+    // Later in the same days: still one charge. The next one only a month on.
+    await mono.runCharges(due + 2 * DAY);
+    expect(called("/wallet/payment")).toHaveLength(1);
+    wallet = { status: "success" };
+    await mono.runCharges(mono.addMonth(period) + HOUR);
+    expect(called("/wallet/payment")).toHaveLength(2);
+    expect((await record(a.id)).billing.lastPaidAt).toBe(mono.addMonth(period));
+  });
+
+  it("the daily run answers only Vercel's cron: without the secret nothing is charged", async () => {
+    const a = await newClient("Кав'ярня");
+    await subscribed(a.id, 40);
+    expect((await cron(null)).status).toBe(401);
+    expect((await cron("Bearer wrong")).status).toBe(401);
+    delete process.env.CRON_SECRET;
+    expect((await cron()).status).toBe(503);
+    expect(calls).toHaveLength(0);
+    process.env.CRON_SECRET = "cron-secret";
+    expect((await cron()).status).toBe(200);
+  });
+
+  it("a paid client is not closed and not charged before the month ends", async () => {
+    const a = await newClient("Кав'ярня");
+    await saveResults(a.id, table, "upload");
+    await subscribed(a.id, 5);
+    await mono.runCharges();
+    expect(called("/wallet/payment")).toHaveLength(0);
+    expect(await mono.accessOf(await record(a.id))).toMatchObject({ open: true, state: "paid" });
+    expect((await page(a.id, a.session)).html).toContain("Олена Петренко");
+  });
+
+  it("a refused charge → three days of grace → closed; no second try in the same period", async () => {
+    const a = await newClient("Кав'ярня");
+    await saveResults(a.id, table, "upload");
+    await subscribed(a.id, 32);
+    const due = await dueOf(a.id);
+    wallet = { status: "failure" };
+
+    expect(await mono.runCharges(due)).toMatchObject({ failure: 1 });
+    const failed = await record(a.id);
+    expect(failed.billing.charge).toMatchObject({ status: "failure" });
+    expect(failed.billing.lastFailedAt).not.toBeNull();
+    expect(await mono.accessOf(failed, due + DAY)).toMatchObject({ open: true, state: "grace" });
+
+    await mono.runCharges(due + DAY);
+    await mono.runCharges(due + 2 * DAY);
+    expect(called("/wallet/payment")).toHaveLength(1);
+    expect(await mono.accessOf(failed, due + 3 * DAY)).toMatchObject({ open: false, state: "expired" });
+
+    // Today is inside her grace: her page says so and offers to pay by card.
+    const html = (await page(a.id, a.session)).html;
+    expect(html).toContain("Списання не пройшло");
+    expect(html).toContain('action="/api/client/subscribe"');
+  });
+
+  it("a charge that asks for 3-D Secure, a refused call or no answer counts as not paid and is not retried", async () => {
+    for (const [answer, note] of [
+      [{ status: "processing", tds: true }, "3ds"],
+      [{ error: 400, errText: "card expired" }, "refused 1001"],
+      [{ error: 500, errText: "internal" }, "no_answer"],
+    ] as const) {
+      const a = await newClient(`Кав'ярня ${note}`);
+      await subscribed(a.id, 20);
+      const due = await dueOf(a.id);
+      wallet = answer;
+      calls = [];
+      await mono.chargeClient(await record(a.id), due);
+      await mono.chargeClient(await record(a.id), due + DAY);
+      expect(called("/wallet/payment")).toHaveLength(1);
+      const { billing } = await record(a.id);
+      expect(billing.charge?.note).toBe(note);
+      expect(billing.lastPaidAt).toBeLessThan(due);
+    }
+  });
+
+  it("monobank refuses charges by card (h2h): the run stops, one log line, the cabinet is marked; a new token lifts it", async () => {
+    const a = await newClient("Кав'ярня");
+    const b = await newClient("Салон");
+    await subscribed(a.id, 20);
+    await subscribed(b.id, 20);
+    const due = await dueOf(a.id);
+    wallet = { error: 400, errText: "h2h not allowed" };
+
+    expect(await mono.runCharges(due)).toMatchObject({ h2h: 1 });
+    expect(called("/wallet/payment")).toHaveLength(1);
+    expect(logged.filter((line) => line.includes("h2h"))).toHaveLength(1);
+    expect(await chargeBlock()).toMatchObject({ code: "h2h" });
+
+    // The next days: nobody is asked again.
+    await mono.runCharges(due + DAY);
+    expect(called("/wallet/payment")).toHaveLength(1);
+
+    // monobank switched it on, Sasha saves the token again: charges go.
+    await saveMonoToken("live-token-2", null);
+    expect(await chargeBlock()).toBeNull();
+    wallet = { status: "success" };
+    await mono.runCharges(due + DAY);
+    expect(called("/wallet/payment").length).toBeGreaterThan(1);
+  });
+
+  it("cancel stops the charges, asks monobank nothing, and keeps the paid month open", async () => {
     const a = await newClient("Кав'ярня");
     await subscribed(a.id, 5);
-    remote = { status: "cancelled", payments: [{ status: "success", chargedAt: new Date(Date.now() - 5 * DAY).toISOString(), amount: 1500, ccy: 978 }] };
+    const due = await dueOf(a.id);
 
     const response = await CANCEL(post("/api/client/cancel", a.cookie));
 
     expect(response.headers.get("location")).toContain("?b=cancelled");
-    expect(called("/subscription/edit")[0].body).toEqual({ subscriptionId: "s2_test", action: "cancel" });
-    expect(called("/subscription/remove")).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+    const fresh = await record(a.id);
+    expect(fresh.billing.status).toBe("cancelled");
+    expect(await mono.accessOf(fresh)).toMatchObject({ open: true, state: "paid" });
+
+    await mono.runCharges(due);
+    await mono.runCharges(due + DAY);
+    expect(called("/wallet/payment")).toHaveLength(0);
+    expect(await mono.accessOf(fresh, due)).toMatchObject({ open: false, state: "expired" });
+
+    // Changed her mind inside the paid month: resumes without paying now; charged at the month's end.
+    await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
+    expect(calls).toHaveLength(0);
+    expect((await record(a.id)).billing.status).toBe("active");
+    await mono.runCharges(due);
+    expect(called("/wallet/payment")).toHaveLength(1);
+  });
+
+  it("cancel before the first payment invalidates the page at monobank", async () => {
+    const a = await newClient("Кав'ярня");
+    await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
+    await CANCEL(post("/api/client/cancel", a.cookie));
+    expect(called("/invoice/remove")[0].body).toEqual({ invoiceId: "inv_1" });
+    expect((await record(a.id)).billing).toMatchObject({ status: "none", pageUrl: null });
+  });
+
+  it("an invoice paid after all — the cancel takes the payment in instead of losing it", async () => {
+    const a = await newClient("Кав'ярня");
+    await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
+    pay("inv_1");
+    await CANCEL(post("/api/client/cancel", a.cookie));
     const fresh = await record(a.id);
     expect(fresh.billing.status).toBe("cancelled");
     expect(await mono.accessOf(fresh)).toMatchObject({ open: true, state: "paid" });
   });
 
-  it("a cancel that monobank refused is not shown as done", async () => {
+  it("neither token nor the card token reaches a log line, a page or an answer", async () => {
     const a = await newClient("Кав'ярня");
-    await subscribed(a.id, 5);
-    fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ errCode: "500", errText: "boom" }), { status: 500 }));
-    const response = await CANCEL(post("/api/client/cancel", a.cookie));
-    expect(response.headers.get("location")).toContain("?b=cancel_failed");
-    expect((await record(a.id)).billing.status).toBe("active");
-  });
-});
-
-describe("an answer of monobank that is not what the schema says", () => {
-  it("near spellings are read: a paid charge opens the cabinet", async () => {
-    const a = await newClient("Кав'ярня");
-    await subscribed(a.id, null, "pending");
-    odd.status = { State: "Active", next_charge_date: Math.floor((Date.now() + 29 * DAY) / 1000) };
-    odd.payments = { list: [{ state: "SUCCESS", chargeDate: Date.now() - 60_000 }], paging: { pages: 1 } };
-
-    const synced = await mono.syncBilling(await record(a.id));
-    expect(synced!.billing).toMatchObject({ status: "active", unclearAt: null });
-    expect(synced!.billing.nextChargeAt).toBeGreaterThan(Date.now() + 28 * DAY);
-    expect(await mono.accessOf(synced!)).toMatchObject({ open: true, state: "paid" });
-    expect(logged.join("\n")).not.toContain("not understood");
-  });
-
-  it("an answer nobody can read does not close a client who has paid; one warning names keys, never values", async () => {
-    const a = await newClient("Кав'ярня");
-    await subscribed(a.id, 31); // the paid month ended yesterday
-    odd.status = { subscription: { phase: "running" }, walletData: { cardToken: "CARD-TOKEN-VALUE" } };
-    odd.payments = { rows: [{ result: "done", when: "yesterday", payer: "SECRET-PAYER" }] };
-
-    const synced = await mono.syncBilling(await record(a.id));
-    expect(synced!.billing.status).toBe("active");
-    expect(synced!.billing.unclearAt).not.toBeNull();
-    expect(await mono.accessOf(synced!)).toMatchObject({ open: true });
-    // …and weeks later, while the answer is still unreadable.
-    expect(await mono.accessOf(synced!, Date.now() + 30 * DAY)).toMatchObject({ open: true });
-
-    const warned = logged.filter((line) => line.includes("not understood"));
-    expect(warned).toHaveLength(1);
-    expect(warned[0]).toContain("walletData");
-    expect(warned[0]).toContain("rows");
-    for (const value of ["CARD-TOKEN-VALUE", "SECRET-PAYER", "running", "yesterday"]) expect(logged.join("\n")).not.toContain(value);
-
-    // A readable answer afterwards settles it: no payment → the grace rule decides again.
-    odd = {};
-    const clear = await mono.syncBilling(await record(a.id));
-    expect(clear!.billing.unclearAt).toBeNull();
-  });
-
-  it("payments unreadable but monobank counts a paid charge → the first payment still opens the cabinet", async () => {
-    const a = await newClient("Кав'ярня");
-    await subscribed(a.id, null, "pending");
-    odd.status = { status: "active", startDate: new Date(Date.now() - 60_000).toISOString(), nextChargeDate: new Date(Date.now() + 30 * DAY).toISOString(), summary: { totalPaid: 1, totalFailed: 0 } };
-    odd.payments = { rows: [] };
-
-    const synced = await mono.syncBilling(await record(a.id));
-    expect(synced!.billing.status).toBe("active");
-    expect(await mono.accessOf(synced!)).toMatchObject({ open: true, state: "paid" });
-  });
-
-  it("an unreadable answer opens nothing for a client who never paid", async () => {
-    const a = await newClient("Кав'ярня");
-    await subscribed(a.id, null, "pending");
-    odd.status = { whatever: 1 };
-    odd.payments = "nonsense";
-    const synced = await mono.syncBilling(await record(a.id));
-    expect(synced!.billing.status).toBe("pending");
-    expect((await mono.accessOf(synced!)).open).toBe(false);
+    const t = await newClient("Проба", true);
+    const answers: string[] = [];
+    const keep = async (response: Response) => {
+      answers.push(response.headers.get("location") ?? "", await response.clone().text());
+    };
+    await keep(await SUBSCRIBE(post("/api/client/subscribe", a.cookie)));
+    pay("inv_1");
+    const body = JSON.stringify({ invoiceId: "inv_1", status: "success", walletData: { cardToken: CARD } });
+    await keep(await WEBHOOK(webhook(a.id, body, sign(bankKey, body))));
+    answers.push((await page(a.id, a.session)).html);
+    await subscribed(t.id, 20);
+    for (const w of [{ status: "success" }, { error: 400, errText: "h2h not allowed" }, { error: 500, errText: CARD }] as const) {
+      wallet = w;
+      await clients.updateClient(a.id, (c) => {
+        c.billing.charge = null;
+        c.billing.lastPaidAt = Date.now() - 40 * DAY;
+      });
+      await mono.chargeClient(await record(a.id), (await dueOf(a.id)) - 1);
+      await keep(await cron());
+    }
+    expect(called("/wallet/payment").length).toBeGreaterThan(0);
+    const outside = [...logged, ...answers].join("\n");
+    for (const secret of [CARD, "live-token", "test-token", "cron-secret"]) expect(outside).not.toContain(secret);
   });
 });
 
@@ -781,6 +943,7 @@ describe("the test pass (ops/billing/test-cycle.mjs)", () => {
 
     expect((await BILLING_TEST(call({ action: "start", client_id: demo.id }, "wrong"))).status).toBe(401);
     expect(await (await BILLING_TEST(call({ action: "start", client_id: real.id }))).json()).toMatchObject({ ok: false, error: "not_a_test_client" });
+    expect(await (await BILLING_TEST(call({ action: "charge", client_id: real.id }))).json()).toMatchObject({ ok: false, error: "not_a_test_client" });
     expect(calls).toHaveLength(0);
 
     delete process.env.MONO_TEST_TOKEN;
@@ -789,20 +952,34 @@ describe("the test pass (ops/billing/test-cycle.mjs)", () => {
 
     process.env.MONO_TEST_TOKEN = "test-token";
     const started = await (await BILLING_TEST(call({ action: "start", client_id: demo.id }))).json();
-    expect(started).toMatchObject({ ok: true, page_url: "https://pay.mbnk.biz/s2_test", ccy: 978, amount: 1500 });
+    expect(started).toMatchObject({ ok: true, page_url: "https://pay.mbnk.biz/inv_1", ccy: 978, amount: 1500 });
 
-    remote.payments = paidNow();
-    odd.status = { status: "active", walletData: { cardToken: "CARD-TOKEN-VALUE" }, nextChargeDate: new Date(Date.now() + 30 * DAY).toISOString() };
+    pay("inv_1");
     const checked = await BILLING_TEST(call({ action: "check", client_id: demo.id }));
     const text = await checked.text();
     const answer = JSON.parse(text);
-    expect(answer.status_keys).toEqual({ nextChargeDate: "string", status: "string", walletData: { cardToken: "string" } });
-    expect(answer.read).toMatchObject({ status: "active", paid_payment_found: true, not_understood: [] });
+    expect(answer.keys).toMatchObject({ status: "string", walletData: { cardToken: "string" } });
+    expect(answer.read).toMatchObject({ state: "success", card_token_read: true });
+    expect(answer.stored).toMatchObject({ status: "active", card_saved: true });
     expect(answer.access).toMatchObject({ open: true, state: "paid" });
-    expect(text).not.toContain("CARD-TOKEN-VALUE");
-    expect(logged.join("\n")).not.toContain("CARD-TOKEN-VALUE");
 
+    const charged = await BILLING_TEST(call({ action: "charge", client_id: demo.id }));
+    const chargedText = await charged.text();
+    expect(JSON.parse(chargedText)).toMatchObject({ ok: true, outcome: "success" });
+
+    for (const t of [text, chargedText, logged.join("\n")]) expect(t).not.toContain(CARD);
     expect(calls.length).toBeGreaterThan(0);
     for (const c of calls) expect(c.token).toBe("test-token");
+  });
+
+  it("the live probe: an invoice as the button builds it, then removed — no client is touched", async () => {
+    const a = await newClient("Кав'ярня");
+    const before = store.get(clients.clientKey(a.id))!.text;
+    const probe = await (await BILLING_TEST(call({ action: "probe" }))).json();
+    expect(probe).toMatchObject({ ok: true, page_url: "https://pay.mbnk.biz/inv_1", invoice_id: "inv_1", ccy: 978, amount: 1500 });
+    expect(called("/invoice/create")[0]).toMatchObject({ token: "live-token", body: { saveCardData: { saveCard: true } } });
+    expect(await (await BILLING_TEST(call({ action: "probe_remove", invoice_id: "inv_1" }))).json()).toMatchObject({ ok: true, removed: true });
+    expect(invoices.get("inv_1")!.status).toBe("expired");
+    expect(store.get(clients.clientKey(a.id))!.text).toBe(before);
   });
 });

@@ -83,7 +83,7 @@ function Subscribe({ label }: { label: string }) {
         {label}
       </button>
       <ol className="mt-5 grid gap-3 text-sm text-ink-700 sm:grid-cols-3">
-        {["Натискаєте кнопку — відкриється захищена сторінка monobank.", "Оплачуєте карткою. Дані картки ми не бачимо й не зберігаємо.", "Результати відкрито. Далі — списання раз на місяць, скасувати можна тут будь-коли."].map((step, i) => (
+        {["Натискаєте кнопку — відкриється захищена сторінка monobank.", "Оплачуєте карткою на сторінці monobank. Номера картки ми не бачимо — картку зберігає банк.", "Результати відкрито. Далі — списання раз на місяць, скасувати можна тут будь-коли."].map((step, i) => (
           <li key={i} className="flex gap-3">
             <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-cherry-deep text-xs font-semibold text-cream-type">{i + 1}</span>
             <span>{step}</span>
@@ -160,7 +160,7 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
   if (billing.status === "pending") {
     return (
       <Status tone="wait" title="Очікуємо першу оплату">
-        Підписку створено, але оплата ще не надійшла. Якщо ви щойно заплатили — оновіть сторінку за хвилину.
+        Сторінку оплати відкрито, але оплата ще не надійшла. Якщо ви щойно заплатили — оновіть сторінку за хвилину.
         <Subscribe label={`Перейти до оплати — ${cost} / міс`} />
         <Cancel label="Скасувати" />
       </Status>
@@ -176,11 +176,21 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
         </Status>
       );
     }
+    const tried = access.state === "grace" && billing.charge?.period === access.paidUntil && (billing.charge.status === "failure" || billing.charge.status === "error");
+    if (access.state === "grace" && !tried) {
+      return (
+        <Status tone="ok" title="Підписка активна" facts={[["Наступне списання", "найближчим часом"], ...lastPaid]}>
+          Оплачений місяць закінчився — списуємо оплату за наступний із вашої картки. Результати відкриті.
+          <Cancel />
+        </Status>
+      );
+    }
     return (
       <Status tone="bad" title="Списання не пройшло" facts={access.state === "grace" ? [["Результати відкриті до", day(access.closesAt)], ...lastPaid] : lastPaid}>
         {access.state === "grace"
-          ? "Чергова оплата не надійшла. Перевірте картку: monobank спробує списати ще раз, а результати поки залишаються відкритими."
-          : "Чергова оплата не надійшла, тому результати закрито. Перевірте картку або скасуйте підписку й оформіть її знову з іншою карткою."}
+          ? "Чергова оплата не пройшла. Оплатіть місяць карткою — можна іншою. Результати поки залишаються відкритими."
+          : "Чергова оплата не пройшла, тому результати закрито. Оплатіть місяць карткою — можна іншою, і результати відкриються."}
+        <Subscribe label={`Оплатити карткою — ${cost}`} />
         <Cancel />
       </Status>
     );
@@ -188,8 +198,8 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
   if (billing.status === "cancelled" && access.state === "paid") {
     return (
       <Status tone="wait" title="Підписку скасовано" facts={[["Результати відкриті до", day(access.paidUntil)]]}>
-        Нових списань не буде. Передумали — оформіть підписку знову.
-        <Subscribe label={subscribe} />
+        Нових списань не буде. Передумали — відновіть підписку: наступне списання буде після кінця оплаченого місяця.
+        <Subscribe label="Відновити підписку" />
       </Status>
     );
   }
@@ -518,7 +528,7 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
 
   // Back from monobank, still waiting, or not looked at for a while: ask monobank.
   const { billing } = client;
-  if ((await monoToken(client.test)) && billing.subscriptionId && (paid || billing.status === "pending" || stale(billing.syncedAt))) {
+  if ((await monoToken(client.test)) && (billing.invoiceId || billing.charge) && (paid || billing.status === "pending" || stale(billing.syncedAt))) {
     try {
       client = (await syncBilling(client)) ?? client;
     } catch {

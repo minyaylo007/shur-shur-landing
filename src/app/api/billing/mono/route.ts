@@ -4,7 +4,8 @@ import { readClient } from "@/lib/client/clients";
 
 export const runtime = "nodejs";
 
-/* monobank → site: «something happened to the subscription of client ?c=».
+/* monobank → site: «something happened to an invoice of client ?c=» — the
+   first payment, or a month's charge by the saved card.
    Order of checks: size → client → X-Sign (ECDSA, monobank's public key) →
    seen before? → read the truth back from monobank → one write.
 
@@ -47,14 +48,19 @@ export async function POST(request: Request) {
   const digest = webhookDigest(raw);
   if (client.billing.seen.includes(digest)) return answer(200, { ok: true, repeat: true });
 
-  // A webhook about a subscription this client no longer has (replaced, removed): nothing to do.
+  // A webhook about an invoice this client no longer waits for (replaced, removed): nothing to do.
   let about: unknown;
   try {
-    about = (JSON.parse(raw) as { subscriptionId?: unknown } | null)?.subscriptionId;
+    about = (JSON.parse(raw) as { invoiceId?: unknown } | null)?.invoiceId;
   } catch {
     about = undefined;
   }
-  if (!client.billing.subscriptionId || (typeof about === "string" && about !== client.billing.subscriptionId)) {
+  const mine = [client.billing.invoiceId, client.billing.charge?.invoiceId].filter(Boolean);
+  if (typeof about === "string" && !mine.includes(about) && client.billing.charge?.status === "started") {
+    // The charge's answer has not been written yet: let monobank come again.
+    return answer(503, { ok: false, error: "charge_in_flight" });
+  }
+  if (typeof about !== "string" || !mine.includes(about)) {
     return answer(200, { ok: true, ignored: true });
   }
 

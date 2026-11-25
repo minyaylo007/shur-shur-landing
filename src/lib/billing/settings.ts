@@ -42,19 +42,19 @@ function sealingKey(): Buffer | null {
 
 export const sealingReady = () => sealingKey() !== null;
 
-function seal(plain: string, key: Buffer): string {
+function seal(plain: string, key: Buffer, aad = AAD): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  cipher.setAAD(Buffer.from(AAD));
+  cipher.setAAD(Buffer.from(aad));
   const body = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   return [iv, cipher.getAuthTag(), body].map((part) => part.toString("base64url")).join(".");
 }
 
-function open(sealed: string, key: Buffer): string | null {
+function open(sealed: string, key: Buffer, aad = AAD): string | null {
   try {
     const [iv, tag, body] = sealed.split(".").map((part) => Buffer.from(part, "base64url"));
     const decipher = createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAAD(Buffer.from(AAD));
+    decipher.setAAD(Buffer.from(aad));
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
   } catch {
@@ -99,12 +99,15 @@ export interface MonoStatus {
   last4: string | null;
   merchant: string | null;
   savedAt: number | null;
+  /** monobank refused the monthly charge by card (h2h): charges stopped since then. */
+  blockedAt: number | null;
 }
 
 export async function monoStatus(): Promise<MonoStatus> {
-  if (process.env.MONO_TOKEN?.trim()) return { source: "env", last4: null, merchant: null, savedAt: null };
+  const blockedAt = (await chargeBlock())?.at ?? null;
+  if (process.env.MONO_TOKEN?.trim()) return { source: "env", last4: null, merchant: null, savedAt: null, blockedAt };
   const state = await readMono();
-  return state ? { source: "cabinet", last4: state.last4, merchant: state.merchant, savedAt: state.saved_at } : { source: null, last4: null, merchant: null, savedAt: null };
+  return state ? { source: "cabinet", last4: state.last4, merchant: state.merchant, savedAt: state.saved_at, blockedAt } : { source: null, last4: null, merchant: null, savedAt: null, blockedAt: null };
 }
 
 export async function saveMonoToken(token: string, merchant: string | null, nowMs = Date.now()): Promise<void> {
@@ -113,11 +116,54 @@ export async function saveMonoToken(token: string, merchant: string | null, nowM
   const state: MonoState = { sealed: seal(token, key), last4: token.slice(-4), merchant: merchant?.slice(0, 120) ?? null, saved_at: nowMs };
   await cabinetStore().write(MONO_KEY, JSON.stringify(state));
   cache = { store: cabinetStore(), at: Date.now(), state };
+  await clearChargeBlock();
 }
 
 export async function clearMonoToken(): Promise<void> {
   await cabinetStore().remove(MONO_KEY);
   cache = { store: cabinetStore(), at: Date.now(), state: null };
+  await clearChargeBlock();
+}
+
+/* ---------- the client's saved card ----------
+   monobank's card token is only good together with the merchant token, but
+   it is still a key to her money: stored sealed like the merchant token,
+   under its own label, and opened only for the charge call. */
+
+const CARD_AAD = "shur-card-token-v1";
+
+/** null: CABINET_HMAC_SECRET is missing — then the card is not kept at all. */
+export function sealCard(token: string): string | null {
+  const key = sealingKey();
+  return key ? seal(token, key, CARD_AAD) : null;
+}
+
+export function openCard(sealed: string | null): string | null {
+  const key = sealingKey();
+  return sealed && key ? open(sealed, key, CARD_AAD) : null;
+}
+
+/* ---------- monobank refused charges by card (h2h) ----------
+   The refusal is about the merchant, not about a client: one mark stops all
+   live charges until Sasha saves the token again (that is the «try again»
+   after monobank switches it on). The cabinet shows one line. */
+
+export const CHARGE_BLOCK_KEY = "cabinet/mono-charge.json";
+const blockSchema = z.object({ at: z.number(), code: z.string().max(40) });
+export type ChargeBlock = z.infer<typeof blockSchema>;
+
+export async function chargeBlock(): Promise<ChargeBlock | null> {
+  const stored = await cabinetStore().read(CHARGE_BLOCK_KEY);
+  const parsed = stored ? blockSchema.safeParse(JSON.parse(stored.text)) : null;
+  return parsed?.success ? parsed.data : null;
+}
+
+export async function setChargeBlock(code: string, nowMs = Date.now()): Promise<void> {
+  await cabinetStore().write(CHARGE_BLOCK_KEY, JSON.stringify({ at: nowMs, code: code.slice(0, 40) }));
+}
+
+export async function clearChargeBlock(): Promise<void> {
+  if (await cabinetStore().read(CHARGE_BLOCK_KEY)) await cabinetStore().remove(CHARGE_BLOCK_KEY);
 }
 
 /* ---------- the offer's details: public text, stored plain ---------- */

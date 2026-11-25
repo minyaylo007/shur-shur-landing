@@ -79,8 +79,21 @@ jobs:
             echo "· $n заведён в production"
           done
 
+      # Ежедневное списание по сохранённой карте (vercel.json → /api/billing/charge)
+      # идёт только с CRON_SECRET: Vercel шлёт его в заголовке. Заводится один
+      # раз случайным, уже заведённый не трогается.
+      - name: Секрет ежедневного списания
+        run: |
+          set -euo pipefail
+          if npx --yes "$VERCEL_CLI" env ls production --token="$VERCEL_TOKEN" 2>/dev/null | awk '{print $1}' | grep -xF CRON_SECRET > /dev/null; then
+            echo "· CRON_SECRET уже есть"
+          else
+            openssl rand -hex 32 | tr -d '\n' | npx --yes "$VERCEL_CLI" env add CRON_SECRET production --token="$VERCEL_TOKEN" > /dev/null
+            echo "· CRON_SECRET заведён в production"
+          fi
+
       - name: Что теперь в боевом окружении
         run: |
           set -euo pipefail
-          npx --yes "$VERCEL_CLI" env ls production --token="$VERCEL_TOKEN" | awk 'NR>1 {print $1}' | grep -E '^MONO_' || true
+          npx --yes "$VERCEL_CLI" env ls production --token="$VERCEL_TOKEN" | awk 'NR>1 {print $1}' | grep -E '^(MONO_|CRON_SECRET$)' || true
           echo '⚠️ Переменные подхватит только НОВЫЙ выкат: запустите Deploy (ref=main).' >> "$GITHUB_STEP_SUMMARY"
