@@ -99,9 +99,12 @@ export function ClientsSection({ clients, c, billing }: { clients: Client[] | nu
                       {client.name}
                     </a>
                     {client.test ? <span className="ml-2 rounded bg-paper-200 px-1 text-xs">тест</span> : null}
-                    <div className="text-xs text-ink-500">с {day(client.createdAt)}</div>
+                    <div className="text-xs text-ink-500">с {day(client.createdAt)} · имя открывает его страницу</div>
                   </td>
-                  <td className={td}>{client.auth.password ? "пароль задан" : client.auth.setup ? "ждёт ссылку" : "нет пароля"}</td>
+                  <td className={td}>
+                    {client.auth.password ? "пароль задан" : client.auth.setup ? "ждёт ссылку" : "нет пароля"}
+                    <div className="text-xs text-ink-500">{client.phone ? `логин +${client.phone}` : "телефона нет"}</div>
+                  </td>
                   <td className={td}>{payment(client, client.test ? testOn : live, accesses.get(client.id)!)}</td>
                   <td className={td}>{client.billing.lastPaidAt ? day(client.billing.lastPaidAt) : "—"}</td>
                   <td className={td}>
