@@ -41,6 +41,13 @@ export function MonoSection({ status, offer, b }: { status: MonoStatus | null; o
           Оплата ещё не включена: клиенты видят «Оплата скоро». Вставьте токен интернет-эквайринга из кабинета web.monobank.ua — и подписка заработает.
         </p>
       )}
+      {status?.blockedAt ? (
+        <p role="alert" className="mt-2 text-sm text-cherry-600">
+          Ежемесячные списания остановлены: monobank {new Date(status.blockedAt).toLocaleDateString("ru-RU", { timeZone: "Europe/Kyiv" })} отказал в списании по сохранённой карте (h2h — не включено для этого ФОП). Попросите
+          monobank включить оплату по токену карты (wallet/payment), затем{" "}
+          {status.source === "env" ? "напишите Игорю — он запустит списания снова." : "сохраните токен заново — списания пойдут со следующего дня."}
+        </p>
+      ) : null}
       {message ? (
         <p role={b === "saved" || b === "off" || b === "offer_saved" ? "status" : "alert"} className={`mt-2 text-sm ${b === "saved" || b === "off" || b === "offer_saved" ? "" : "text-cherry-600"}`}>
           {message}

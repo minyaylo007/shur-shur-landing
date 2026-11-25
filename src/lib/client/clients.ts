@@ -32,28 +32,44 @@ const ID_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 const ID = /^[a-z2-9]{12}$/;
 export const isClientId = (value: unknown): value is string => typeof value === "string" && ID.test(value);
 
+/** One monthly charge by the saved card. One per paid period — `period` is its key. */
+const chargeSchema = z.object({
+  /** The day the paid month ran out (ms): the month this charge pays for starts here. */
+  period: z.number(),
+  at: z.number(),
+  /** monobank's invoice of the charge; null until monobank answered. */
+  invoiceId: z.string().nullable(),
+  /** started: asked, no answer yet — never asked again for the same period. */
+  status: z.enum(["started", "processing", "success", "failure", "error"]),
+  /** A short code for the cabinet line (h2h, no_answer, 3ds, refused…). Never a card or a token. */
+  note: z.string().nullable(),
+});
+
 const billingSchema = z.object({
-  subscriptionId: z.string().nullable(),
-  /** monobank's payment page while the subscription waits for the first charge. */
+  /** The first payment: monobank's invoice that also saves the card. */
+  invoiceId: z.string().nullable().default(null),
+  /** monobank's payment page while that invoice waits. */
   pageUrl: z.string().nullable(),
   createdAt: z.number().nullable(),
   status: z.enum(["none", "pending", "active", "cancelled"]),
   ccy: z.number().nullable(),
   amount: z.number().nullable(),
+  /** Start of the last paid month. */
   lastPaidAt: z.number().nullable(),
   lastFailedAt: z.number().nullable(),
   nextChargeAt: z.number().nullable(),
-  endedAt: z.number().nullable(),
   syncedAt: z.number().nullable(),
-  /** Set while monobank's last answer was not understood (lib/billing/mono): a paid client stays open. */
-  unclearAt: z.number().nullable().default(null),
+  /** monobank's card token, SEALED (lib/billing/settings sealCard). Null: no saved card. */
+  card: z.string().nullable().default(null),
+  charge: chargeSchema.nullable().default(null),
   /** SHA-256 of the webhook bodies already applied — a repeat changes nothing. */
   seen: z.array(z.string()),
 });
 export type Billing = z.infer<typeof billingSchema>;
+export type Charge = z.infer<typeof chargeSchema>;
 
 export const EMPTY_BILLING: Billing = {
-  subscriptionId: null,
+  invoiceId: null,
   pageUrl: null,
   createdAt: null,
   status: "none",
@@ -62,9 +78,9 @@ export const EMPTY_BILLING: Billing = {
   lastPaidAt: null,
   lastFailedAt: null,
   nextChargeAt: null,
-  endedAt: null,
   syncedAt: null,
-  unclearAt: null,
+  card: null,
+  charge: null,
   seen: [],
 };
 

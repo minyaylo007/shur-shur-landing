@@ -1,13 +1,13 @@
-import { cancelSubscription, MonoError, monoToken, removeSubscription, syncBilling } from "@/lib/billing/mono";
-import { clientCookieValue, EMPTY_BILLING, signedInClient, updateClient } from "@/lib/client/clients";
+import { MonoError, monoToken, removeInvoice, syncBilling } from "@/lib/billing/mono";
+import { clientCookieValue, signedInClient, updateClient } from "@/lib/client/clients";
 import { back } from "@/lib/client/http";
 
 export const runtime = "nodejs";
 
-/* «Скасувати підписку». Never paid → the subscription is deleted (remove).
-   Paid at least once → future charges are stopped (edit, action cancel):
-   monobank refuses `remove` once there was a payment. The paid month stays
-   open; no refund is requested here. */
+/* «Скасувати підписку». The monthly charge is ours (lib/billing/mono), so
+   cancelling is a mark in the record: the daily run charges only «active».
+   The paid month stays open; no refund is requested here. An unpaid invoice
+   is invalidated at monobank so the old page cannot be paid afterwards. */
 
 export async function POST(request: Request) {
   let client;
@@ -19,38 +19,26 @@ export async function POST(request: Request) {
   if (!client) return back(request, "/");
   const page = `/client/${client.id}`;
   const token = await monoToken(client.test);
-  const subscriptionId = client.billing.subscriptionId;
-  if (!token || !subscriptionId || client.billing.status === "cancelled") return back(request, page);
+  const { status, invoiceId } = client.billing;
+  if (!token || status === "cancelled" || status === "none") return back(request, page);
 
   try {
-    let removed = false;
-    if (client.billing.status === "pending") {
+    if (status === "pending" && invoiceId) {
       try {
-        await removeSubscription(token, subscriptionId);
-        removed = true;
+        await removeInvoice(token, invoiceId);
       } catch (error) {
-        // 1001: a payment came through after our last look — cancel instead.
+        // Refused: it was paid after our last look — take that payment in, then cancel.
         if (!(error instanceof MonoError)) throw error;
+        await syncBilling(client).catch(() => null);
       }
     }
-    if (removed) {
-      await updateClient(client.id, (c) => {
-        if (c.billing.subscriptionId !== subscriptionId) return false;
-        c.billing = { ...EMPTY_BILLING, lastPaidAt: c.billing.lastPaidAt, seen: c.billing.seen };
-      });
-    } else {
-      await cancelSubscription(token, subscriptionId);
-      const synced = await syncBilling(client).catch(() => null);
-      if (!synced || synced.billing.status !== "cancelled") {
-        // monobank accepted the cancel; do not show «active» while its status catches up.
-        await updateClient(client.id, (c) => {
-          if (c.billing.subscriptionId !== subscriptionId) return false;
-          c.billing.status = "cancelled";
-          c.billing.nextChargeAt = null;
-        });
-      }
-    }
-    console.info(`[billing] subscription ${removed ? "removed" : "cancelled"}, test=${client.test}`);
+    await updateClient(client.id, (c) => {
+      if (c.billing.status === "none" || c.billing.status === "cancelled") return false;
+      c.billing.status = c.billing.lastPaidAt ? "cancelled" : "none";
+      c.billing.pageUrl = null;
+      c.billing.nextChargeAt = null;
+    });
+    console.info(`[billing] subscription cancelled, test=${client.test}`);
     return back(request, `${page}?b=cancelled`);
   } catch (error) {
     const what = error instanceof MonoError ? `monobank ${error.status} ${error.code}` : error instanceof Error ? error.name : "unknown";

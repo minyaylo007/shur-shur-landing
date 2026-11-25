@@ -1,14 +1,15 @@
-import { createSubscription, MonoError, monoToken, PAGE_REUSE_MS, removeSubscription, startSubscription } from "@/lib/billing/mono";
-import { clientCookieValue, signedInClient } from "@/lib/client/clients";
+import { accessOf, createInvoice, MonoError, monoToken, PAGE_REUSE_MS, removeInvoice, startPayment } from "@/lib/billing/mono";
+import { clientCookieValue, signedInClient, updateClient } from "@/lib/client/clients";
 import { back, clientIp } from "@/lib/client/http";
 import { rateLimit } from "@/lib/rate-limit";
 import { site } from "@/lib/site";
 
 export const runtime = "nodejs";
 
-/* «Оформити підписку»: creates a monthly subscription at monobank and sends
-   the client to monobank's payment page. The card is entered THERE — this
-   site never sees it. Without a token (lib/billing/mono) nothing is created. */
+/* «Оформити підписку»: an invoice for 15 € that also saves the card
+   (lib/billing/mono), and the client goes to monobank's payment page. The
+   card is entered THERE — this site never sees it; it keeps only monobank's
+   card token, sealed. Without a token (lib/billing/mono) nothing is created. */
 
 export async function POST(request: Request) {
   let client;
@@ -25,25 +26,38 @@ export async function POST(request: Request) {
 
   const { billing } = client;
   const now = Date.now();
-  // A live subscription, even one with a failed charge: a second one could charge twice.
-  // The way out of a stuck one is «Скасувати», then subscribe again.
-  if (billing.status === "active") return back(request, page);
-  // Clicked twice: the same payment page, not a second subscription.
+  const access = await accessOf(client, now);
+  // A month's charge in flight: a second payment could take the money twice.
+  if (billing.charge?.status === "processing" || billing.charge?.status === "started") return back(request, page);
+  if (access.state === "paid" && (billing.status === "active" || billing.status === "cancelled")) {
+    // A paid month: nothing to pay now. A cancelled one resumes — charges go on from the month's end.
+    if (billing.status === "cancelled") {
+      await updateClient(client.id, (c) => {
+        if (c.billing.status !== "cancelled") return false;
+        c.billing.status = "active";
+        c.billing.nextChargeAt = c.billing.lastPaidAt;
+      }).catch(() => null);
+      console.info(`[billing] subscription resumed, test=${client.test}`);
+    }
+    return back(request, page);
+  }
+  // Clicked twice: the same payment page, not a second invoice.
   if (billing.status === "pending" && billing.pageUrl && billing.createdAt && now - billing.createdAt < PAGE_REUSE_MS) {
     return Response.redirect(billing.pageUrl, 303);
   }
 
   try {
-    if (billing.status === "pending" && billing.subscriptionId) {
+    if (billing.status === "pending" && billing.invoiceId) {
       // The stale unpaid one must not stay payable next to the new one. Best effort.
-      await removeSubscription(token, billing.subscriptionId).catch(() => undefined);
+      await removeInvoice(token, billing.invoiceId).catch(() => undefined);
     }
-    const created = await createSubscription(token, {
+    const created = await createInvoice(token, {
+      clientId: client.id,
       redirectUrl: `${site.siteUrl}${page}?paid=1`,
-      webhookUrl: `${site.siteUrl}/api/billing/mono?c=${client.id}`,
+      reference: `${client.id}-first-${now}`,
     });
-    await startSubscription(client, created, now);
-    console.info(`[billing] subscription created, ccy=${created.price.ccy}, test=${client.test}`);
+    await startPayment(client, created, now);
+    console.info(`[billing] invoice created, ccy=${created.price.ccy}, test=${client.test}`);
     return Response.redirect(created.pageUrl, 303);
   } catch (error) {
     const what = error instanceof MonoError ? `monobank ${error.status} ${error.code}` : error instanceof Error ? error.name : "unknown";

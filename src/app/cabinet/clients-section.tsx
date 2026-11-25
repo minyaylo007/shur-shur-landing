@@ -47,9 +47,16 @@ function payment(client: Client, on: boolean, access: Access): string {
   if (billing.status === "pending") return "ждёт первой оплаты";
   if (billing.status === "none") return billing.lastPaidAt ? "подписки нет" : "не оформлял";
   if (billing.status === "cancelled") return access.open && access.state === "paid" ? `отменена, оплачено до ${day(access.paidUntil)}` : "отменена";
-  if (access.state === "paid") return `платит, след. списание ${billing.nextChargeAt ? day(billing.nextChargeAt) : day(access.paidUntil)}`;
-  if (access.state === "grace") return `списание не прошло, доступ до ${day(access.closesAt)}`;
-  return "списание не прошло, доступ закрыт";
+  const card = billing.card ? "" : " (карта не сохранена — списать нечем)";
+  if (access.state === "paid") return `платит, след. списание ${billing.nextChargeAt ? day(billing.nextChargeAt) : day(access.paidUntil)}${card}`;
+  const charge = billing.charge;
+  const why = charge?.note === "h2h" ? " (monobank: h2h)" : charge?.note === "no_answer" ? " (monobank не ответил — проверьте выписку)" : charge?.note === "3ds" ? " (банк просит 3-D Secure)" : "";
+  if (access.state === "grace") {
+    if (charge?.period === access.paidUntil && charge.status === "processing") return "списание в обработке";
+    if (charge?.period === access.paidUntil && (charge.status === "failure" || charge.status === "error")) return `списание не прошло${why}, доступ до ${day(access.closesAt)}`;
+    return `ждёт списания${card}, доступ до ${day(access.closesAt)}`;
+  }
+  return `списание не прошло${why}, доступ закрыт`;
 }
 
 export function ClientsSection({ clients, c, billing }: { clients: Client[] | null; c: string | undefined; billing: ClientsBilling }) {
