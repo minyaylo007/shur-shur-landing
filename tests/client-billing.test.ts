@@ -27,7 +27,8 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (name: string) => (cookieJar.has(name) ? { value: cookieJar.get(name) } : undefined) }),
 }));
 
-const { useMemoryStore } = await import("../src/lib/cabinet/store");
+const { useMemoryStore, AUTH_KEY } = await import("../src/lib/cabinet/store");
+const auth = await import("../src/lib/cabinet/auth");
 const { signLedgerBody } = await import("../src/lib/ledger");
 const clients = await import("../src/lib/client/clients");
 const { resultsKey, readResults, saveResults } = await import("../src/lib/client/results");
@@ -406,7 +407,7 @@ describe("one client cannot reach another", () => {
 
     for (const session of [a.session, undefined, a.session.replace(a.id, b.id), `${b.id}.9999999999.AAAA`]) {
       const got = await page(b.id, session);
-      expect(got.redirect).toBe(`/client/${b.id}/login`);
+      expect(got.redirect).toBe("/client/login");
       expect(got.html).toBe("");
     }
     expect((await page(b.id, b.session)).html).toContain("Олена Петренко");
@@ -451,6 +452,46 @@ describe("one client cannot reach another", () => {
     const session = /shur_client=([^;]+)/.exec(right.headers.get("set-cookie") ?? "")![1];
     expect(await clients.signedInClient(session, b.id)).not.toBeNull();
     expect(await clients.signedInClient(session, a.id)).toBeNull();
+  });
+
+  it("the phone is the login: set once with the password, unique, any spelling of it signs in", async () => {
+    const made = await clients.createClient("Марина", false);
+    expect((await clients.completeClientSetup(made.client.id, made.token, PASSWORD, PASSWORD, Date.now(), "12")).ok).toBe(false);
+    const done = await clients.completeClientSetup(made.client.id, made.token, PASSWORD, PASSWORD, Date.now(), "+380 (67) 123-45-67");
+    expect(done.ok).toBe(true);
+    expect((await record(made.client.id)).phone).toBe("380671234567");
+
+    const twin = await clients.createClient("Інша", false);
+    expect(await clients.completeClientSetup(twin.client.id, twin.token, PASSWORD, PASSWORD, Date.now(), "067 123 45 67")).toEqual({ ok: false, error: "phone_taken" });
+
+    const right = await LOGIN(post("/api/client/login", undefined, { phone: "0671234567", password: PASSWORD }));
+    expect(right.headers.get("location")).toMatch(new RegExp(`/client/${made.client.id}$`));
+    const session = /shur_client=([^;]+)/.exec(right.headers.get("set-cookie") ?? "")![1];
+    expect(await clients.signedInClient(session, made.client.id)).not.toBeNull();
+
+    for (const form of [{ phone: "0671234567", password: "wrong password 1" }, { phone: "0999999999", password: PASSWORD }]) {
+      const refused = await LOGIN(post("/api/client/login", undefined, form));
+      expect(refused.headers.get("location")).toMatch(/\/client\/login\?e=bad$/);
+      expect(refused.headers.get("set-cookie")).toBeNull();
+    }
+    expect(logged.join("\n")).not.toMatch(/67.?123|0999/);
+  });
+
+  it("the back office sees any client's page read-only; a forged back-office cookie sees nothing", async () => {
+    const a = await newClient("Кав'ярня");
+    const sessionKey = "ab".repeat(32);
+    store.set(AUTH_KEY, { text: JSON.stringify({ password: { salt: "", hash: "" }, sessionKey, setup: null, failures: { since: 0, count: 0 } }), etag: "a" });
+
+    cookieJar.clear();
+    cookieJar.set(auth.SESSION_COOKIE, `${Math.floor(Date.now() / 1000) + 999}.forged`);
+    await expect(ClientPage({ params: Promise.resolve({ id: a.id }), searchParams: Promise.resolve({}) })).rejects.toThrow("REDIRECT /client/login");
+
+    cookieJar.set(auth.SESSION_COOKIE, auth.makeSession(sessionKey));
+    const html = renderToStaticMarkup(await ClientPage({ params: Promise.resolve({ id: a.id }), searchParams: Promise.resolve({}) }));
+    expect(html).toContain("Перегляд адміністратора");
+    expect(html).toContain("Кав&#x27;ярня");
+    expect(html).toMatch(/<fieldset disabled=""/);
+    expect(html).not.toContain("/api/client/logout");
   });
 
   it("a bot writes with its own client's key only — never into another cabinet", async () => {

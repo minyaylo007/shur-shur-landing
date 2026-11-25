@@ -93,6 +93,8 @@ const clientSchema = z.object({
   createdAt: z.number(),
   /** A test client pays in monobank's test environment only (MONO_TEST_TOKEN). */
   test: z.boolean(),
+  /** The login: the client's phone, digits only (set with the password). Null: not given yet. */
+  phone: z.string().nullable().default(null),
   auth: z.object({
     password: z.object({ salt: z.string(), hash: z.string() }).nullable(),
     sessionKey: z.string().nullable(),
@@ -180,6 +182,7 @@ export async function createClient(name: string, test: boolean, nowMs = Date.now
     name: name.trim().slice(0, MAX_CLIENT_NAME),
     createdAt: nowMs,
     test,
+    phone: null,
     auth: {
       password: null,
       sessionKey: null,
@@ -315,15 +318,42 @@ export async function clientSetupValid(id: string, token: string | undefined, no
   return !!found && linkOk(found.client, token, nowMs);
 }
 
-export type ClientSetupOutcome = { ok: true; session: string } | { ok: false; error: "bad_link" | "weak_password" | "mismatch" };
+/* ---------- the phone as the login ----------
+   Digits only. Two numbers are the same when their last 9 digits are: +380 67…,
+   380 67… and 067… are one number (Israeli and Romanian local forms alike). */
 
-/** Spends the link and sets the password in one conditional write (the loser of a race gets `bad_link`). */
-export async function completeClientSetup(id: string, token: string, password: string, repeat: string, nowMs = Date.now()): Promise<ClientSetupOutcome> {
+export function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  return digits.length >= 9 && digits.length <= 15 ? digits : null;
+}
+
+const samePhone = (a: string, b: string) => a.slice(-9) === b.slice(-9);
+
+/** The id of the one client with this phone, or null (unknown, malformed or ambiguous). */
+export async function findClientByPhone(raw: string): Promise<string | null> {
+  const phone = normalizePhone(raw);
+  if (!phone) return null;
+  const same = (await listClients()).filter((c) => c.phone !== null && samePhone(c.phone, phone));
+  return same.length === 1 ? same[0].id : null;
+}
+
+export type ClientSetupOutcome = { ok: true; session: string } | { ok: false; error: "bad_link" | "weak_password" | "mismatch" | "bad_phone" | "phone_taken" };
+
+/** Spends the link and sets the password (and, when given, the phone) in one conditional write (the loser of a race gets `bad_link`). */
+export async function completeClientSetup(id: string, token: string, password: string, repeat: string, nowMs = Date.now(), rawPhone: string | null = null): Promise<ClientSetupOutcome> {
   const found = await readClient(id);
   if (!found || !linkOk(found.client, token, nowMs)) return { ok: false, error: "bad_link" };
+  let phone: string | null = null;
+  if (rawPhone !== null) {
+    phone = normalizePhone(rawPhone);
+    if (!phone) return { ok: false, error: "bad_phone" };
+    const other = phone;
+    if ((await listClients()).some((c) => c.id !== id && c.phone !== null && samePhone(c.phone, other))) return { ok: false, error: "phone_taken" };
+  }
   const problem = passwordProblem(password, repeat);
   if (problem) return { ok: false, error: problem };
   const client = found.client;
+  if (phone) client.phone = phone;
   client.auth = {
     password: await hashPassword(password),
     sessionKey: randomBytes(32).toString("hex"),

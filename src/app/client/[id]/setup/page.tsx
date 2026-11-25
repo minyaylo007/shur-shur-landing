@@ -8,7 +8,9 @@ const MESSAGES: Record<string, string> = {
   mismatch: "Паролі не збіглися.",
   limit: "Забагато спроб. Зачекайте трохи.",
   down: "Кабінет тимчасово недоступний. Спробуйте пізніше.",
-  bad_link: "Посилання вже використане або застаріло — попросіть нове.",
+  bad_phone: "Перевірте номер телефону — він буде вашим логіном.",
+  phone_taken: "Цей номер уже використано для іншого кабінету. Напишіть нам.",
+  bad_link:"Посилання вже використане або застаріло — попросіть нове.",
 };
 
 const input = "mt-1 block w-full rounded-xl border border-ink-500/50 bg-white px-4 py-3 text-ink-900 placeholder:text-ink-500";
@@ -43,11 +45,17 @@ export default async function ClientSetup({ params, searchParams }: { params: Pr
   const message = e ? MESSAGES[e] : undefined;
   return (
     <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-paper-200 bg-cream-type p-6 shadow-[0_8px_24px_-16px_rgba(74,13,20,0.25)] sm:mt-12 sm:p-8">
-      <h1 className="font-display text-2xl">Задайте пароль</h1>
-      <p className="mt-2 text-sm text-ink-700">Не коротший за {MIN_PASSWORD} символів. Посилання спрацює один раз.</p>
+      <h1 className="font-display text-2xl">Вхід до кабінету</h1>
+      <p className="mt-2 text-sm text-ink-700">
+        Логін — ваш номер телефону, пароль — не коротший за {MIN_PASSWORD} символів. Посилання спрацює один раз.
+      </p>
       <form method="post" action="/api/client/setup" className="mt-6 space-y-4">
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="t" value={t} />
+        <label className="block">
+          <span className="text-sm text-ink-700">Номер телефону</span>
+          <input type="tel" name="phone" required autoComplete="tel" placeholder="+380 67 123 45 67" className={input} />
+        </label>
         <label className="block">
           <span className="text-sm text-ink-700">Новий пароль</span>
           <input type="password" name="password" required minLength={MIN_PASSWORD} autoComplete="new-password" className={input} />
@@ -62,7 +70,7 @@ export default async function ClientSetup({ params, searchParams }: { params: Pr
           </p>
         ) : null}
         <button type="submit" className="w-full rounded-full bg-cherry-juice px-6 py-3.5 font-semibold text-cream-type shadow-sm hover:bg-juice-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cherry-deep">
-          Зберегти пароль
+          Зберегти
         </button>
       </form>
     </div>

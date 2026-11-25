@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { accessOf, monoToken, price, syncBilling, type Access } from "@/lib/billing/mono";
 import { readAttempts, summarize, type Attempt } from "@/lib/client/attempts";
 import { CherryIcon } from "@/components/ui/icons";
-import { CLIENT_COOKIE, isClientId, signedInClient, type Client } from "@/lib/client/clients";
+import { isSignedIn, SESSION_COOKIE } from "@/lib/cabinet/auth";
+import { CLIENT_COOKIE, isClientId, readClient, signedInClient, type Client } from "@/lib/client/clients";
 import { readResults, SHOWN_ROWS, splitByDay, type Results } from "@/lib/client/results";
 import { site } from "@/lib/site";
 
@@ -519,12 +520,19 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
   const { u, b, paid } = await searchParams;
   const jar = await cookies();
   let client: Client | null = null;
+  // The back office (/cabinet session) sees any client's page exactly as the
+  // client does, read-only: every button is disabled and posts nothing.
+  let admin = false;
   try {
     client = await signedInClient(jar.get(CLIENT_COOKIE)?.value, id);
+    if (!client && (await isSignedIn(jar.get(SESSION_COOKIE)?.value))) {
+      client = (await readClient(id))?.client ?? null;
+      admin = client !== null;
+    }
   } catch {
-    redirect(`/client/${id}/login?e=down`);
+    redirect("/client/login?e=down");
   }
-  if (!client) redirect(`/client/${id}/login`);
+  if (!client) redirect("/client/login");
 
   // Back from monobank, still waiting, or not looked at for a while: ask monobank.
   const { billing } = client;
@@ -556,13 +564,25 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
           <p className={eyebrow}>Ваш бот</p>
           <h1 className="mt-1 font-display text-2xl leading-tight sm:text-4xl">{client.name}</h1>
         </div>
-        <form method="post" action="/api/client/logout">
-          <input type="hidden" name="id" value={client.id} />
-          <button type="submit" className={quiet}>
-            Вийти
-          </button>
-        </form>
+        {admin ? (
+          <Link href="/cabinet" prefetch={false} className={quiet}>
+            ← До бек-офісу
+          </Link>
+        ) : (
+          <form method="post" action="/api/client/logout">
+            <input type="hidden" name="id" value={client.id} />
+            <button type="submit" className={quiet}>
+              Вийти
+            </button>
+          </form>
+        )}
       </header>
+      {admin ? (
+        <p className="mt-4 rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-900 ring-1 ring-sky-200">
+          Перегляд адміністратора: так цю сторінку бачить клієнт{client.phone ? ` (логін +${client.phone})` : " (номер ще не задано)"}. Кнопки тут не діють.
+        </p>
+      ) : null}
+      <fieldset disabled={admin} className="contents">
       {client.test ? (
         <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-sm text-amber-900 ring-1 ring-amber-200">
           <span aria-hidden="true" className="size-2 rounded-full bg-amber-500" />
@@ -619,6 +639,7 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
           </button>
         </form>
       </details>
+      </fieldset>
 
       <p className="mt-8 text-sm text-ink-700">
         Питання щодо бота чи оплати — <a href={site.phone.tel} className="underline">{site.phone.display}</a>.
