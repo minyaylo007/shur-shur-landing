@@ -55,6 +55,7 @@ export async function POST(request: Request) {
       clientId: client.id,
       redirectUrl: `${site.siteUrl}${page}?paid=1`,
       reference: `${client.id}-first-${now}`,
+      amount: billing.first?.amount,
     });
     await startPayment(client, created, now);
     console.info(`[billing] invoice created, ccy=${created.price.ccy}, test=${client.test}`);

@@ -138,8 +138,9 @@ const DESTINATION = "Підписка SHUR-SHUR: результати бота, 
  * The first payment: an invoice that also saves the card into the wallet
  * named after the client. `walletId` is the client id — not personal data.
  */
-export async function createInvoice(token: string, input: { clientId: string; redirectUrl: string; reference: string }): Promise<{ invoiceId: string; pageUrl: string; price: Price }> {
-  const p = price();
+export async function createInvoice(token: string, input: { clientId: string; redirectUrl: string; reference: string; amount?: number }): Promise<{ invoiceId: string; pageUrl: string; price: Price }> {
+  // `amount`: the owner's one-off card check (billing.first) — same currency, another sum.
+  const p = input.amount ? { ...price(), amount: input.amount } : price();
   const json = object(
     await call(token, "POST", "/api/merchant/invoice/create", {
       amount: p.amount,
@@ -256,6 +257,17 @@ export function addMonth(ms: number): number {
   return d.getTime();
 }
 
+/** The start of a "month" that ends at `endMs` (the short first period of a card check). */
+export function monthEndingAt(endMs: number): number {
+  const d = new Date(endMs);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, last));
+  return d.getTime() + (endMs - addMonth(d.getTime()));
+}
+
 /* ---------- state ---------- */
 
 const SEEN_KEPT = 50;
@@ -273,7 +285,10 @@ function applyFirst(billing: Billing, read: InvoiceRead, nowMs: number): void {
     billing.status = "active";
     billing.pageUrl = null;
     billing.charge = null;
-    paid(billing, read.at ?? nowMs);
+    const at = read.at ?? nowMs;
+    // A card check pays a little for a few days; the monthly charge comes when they end.
+    paid(billing, billing.first ? monthEndingAt(at + billing.first.days * 24 * 60 * 60 * 1000) : at);
+    billing.first = null;
   } else if (read.state === "failure") {
     // Expired or declined: the next click opens a fresh page. A subscriber who
     // tried another card in her grace days keeps the subscription and the old card.
