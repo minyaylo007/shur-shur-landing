@@ -62,6 +62,8 @@ const billingSchema = z.object({
   /** monobank's card token, SEALED (lib/billing/settings sealCard). Null: no saved card. */
   card: z.string().nullable().default(null),
   charge: chargeSchema.nullable().default(null),
+  /** A one-off first payment (owner's card check): this amount opens this many days, then the usual monthly charge. */
+  first: z.object({ amount: z.number().int().min(1), days: z.number().int().min(1).max(31) }).nullable().default(null),
   /** SHA-256 of the webhook bodies already applied — a repeat changes nothing. */
   seen: z.array(z.string()),
 });
@@ -81,6 +83,7 @@ export const EMPTY_BILLING: Billing = {
   syncedAt: null,
   card: null,
   charge: null,
+  first: null,
   seen: [],
 };
 

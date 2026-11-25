@@ -10,6 +10,7 @@
 //   node ops/billing/test-cycle.mjs --probe              счёт ровно как от кнопки: ссылка на страницу monobank и сумма
 //   node ops/billing/test-cycle.mjs --remove <invoiceId> погасить этот счёт (invoice/remove) — платить его не нужно
 //   node ops/billing/test-cycle.mjs --unblock            снять остановку списаний после отказа h2h (когда monobank включил)
+//   node ops/billing/test-cycle.mjs --card-trial         клиент «Перевірка картки» для СВОЕЙ карты: 1 цент за 7 дней, потом 15 € в месяц
 //
 // Скрипт сам в monobank не ходит и токенов не читает: он подписанно
 // (CABINET_HMAC_SECRET) просит сайт — так проверяется ровно тот код, что
@@ -19,13 +20,14 @@ import { parseArgs } from "node:util";
 import { config, postSigned } from "../cabinet/lib.mjs";
 
 const { values } = parseArgs({
-  options: { id: { type: "string" }, check: { type: "boolean" }, charge: { type: "boolean" }, probe: { type: "boolean" }, remove: { type: "string" }, unblock: { type: "boolean" } },
+  options: { id: { type: "string" }, check: { type: "boolean" }, charge: { type: "boolean" }, probe: { type: "boolean" }, remove: { type: "string" }, unblock: { type: "boolean" }, "card-trial": { type: "boolean" } },
 });
 
 let body;
 if (values.probe) body = { action: "probe" };
 else if (values.remove) body = { action: "probe_remove", invoice_id: values.remove };
 else if (values.unblock) body = { action: "unblock" };
+else if (values["card-trial"]) body = { action: "card_trial" };
 else if (values.id) body = { action: values.check ? "check" : values.charge ? "charge" : "start", client_id: values.id };
 else {
   console.error("нужно: --id <id тестового клиента> [--check|--charge] | --probe | --remove <invoiceId> | --unblock");
@@ -58,6 +60,13 @@ switch (body.action) {
     break;
   case "probe_remove":
     console.log("Счёт погашен (invoice/remove).");
+    break;
+  case "card_trial":
+    console.log(`Клиент «Перевірка картки» создан: ${answer.client_id}`);
+    console.log("1) Откройте ссылку и задайте пароль (одноразовая, 7 дней):");
+    console.log(answer.setup_url);
+    console.log("2) В кабинете — «Оформити підписку»: monobank попросит 0,01 €, карта сохранится, доступ на 7 дней.");
+    console.log("3) Через 7 дней ежедневный прогон спишет с этой карты 15 €. Отменить — «Скасувати» в кабинете.");
     break;
   case "unblock":
     console.log("Остановка списаний снята: следующий ежедневный прогон попробует списать снова.");

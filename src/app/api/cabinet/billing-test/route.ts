@@ -3,7 +3,7 @@ import { z } from "zod";
 import { accessOf, chargeClient, createInvoice, inspectInvoice, MonoError, monoToken, removeInvoice, startPayment, syncBilling } from "@/lib/billing/mono";
 import { clearChargeBlock } from "@/lib/billing/settings";
 import { readSignedBody, storeFailure } from "@/lib/cabinet/signed";
-import { isClientId, readClient, type Client } from "@/lib/client/clients";
+import { createClient, isClientId, readClient, updateClient, type Client } from "@/lib/client/clients";
 import { site } from "@/lib/site";
 
 export const runtime = "nodejs";
@@ -26,12 +26,15 @@ export const runtime = "nodejs";
    action "probe_remove": invalidates that invoice (invoice/remove);
    action "unblock":      lifts the h2h stop of monthly charges (after monobank
                           switched charges by card on), when the token is in env.
+   action "card_trial":   a new ordinary client for the owner's own card: the
+                          button there asks 1 cent for 7 days, then 15 € monthly.
+                          Answers its one-time setup link.
 
    No value of monobank's answer except the page link is returned or logged;
    neither token ever is. */
 
 const schema = z.strictObject({
-  action: z.enum(["start", "check", "charge", "probe", "probe_remove", "unblock"]),
+  action: z.enum(["start", "check", "charge", "probe", "probe_remove", "unblock", "card_trial"]),
   client_id: z.string().refine(isClientId).optional(),
   invoice_id: z.string().regex(/^[A-Za-z0-9_-]{4,64}$/).optional(),
 });
@@ -64,6 +67,17 @@ export async function POST(request: Request) {
       await clearChargeBlock();
       console.info("[billing] charge block cleared (signed call)");
       return ok({ unblocked: true });
+    }
+    if (action === "card_trial") {
+      // The owner checks his own card with LIVE money: a new ordinary client whose
+      // first payment is 1 cent for 7 days; then the daily run charges the full month.
+      if (!(await monoToken(false))) return no("no_live_token", 409);
+      const { client, token } = await createClient("Перевірка картки", false);
+      await updateClient(client.id, (c) => {
+        c.billing.first = { amount: 1, days: 7 };
+      });
+      console.info("[billing] card check client created (signed call)");
+      return ok({ client_id: client.id, setup_url: `${site.siteUrl}/client/${client.id}/setup?t=${token}` });
     }
     if (action === "probe" || action === "probe_remove") {
       const live = await monoToken(false);

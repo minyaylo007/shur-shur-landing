@@ -982,4 +982,31 @@ describe("the test pass (ops/billing/test-cycle.mjs)", () => {
     expect(invoices.get("inv_1")!.status).toBe("expired");
     expect(store.get(clients.clientKey(a.id))!.text).toBe(before);
   });
+
+  it("the owner's card check: 1 cent opens 7 days on the live token, then the daily run charges 15 € by that card", async () => {
+    const trial = await (await BILLING_TEST(call({ action: "card_trial" }))).json();
+    expect(trial).toMatchObject({ ok: true, client_id: expect.any(String), setup_url: expect.stringContaining("/setup?t=") });
+    const id = trial.client_id as string;
+    const token = new URL(trial.setup_url).searchParams.get("t")!;
+    const done = await clients.completeClientSetup(id, token, PASSWORD, PASSWORD);
+    if (!done.ok) throw new Error("setup failed");
+    const cookie = `${clients.CLIENT_COOKIE}=${done.session}`;
+
+    await SUBSCRIBE(post("/api/client/subscribe", cookie));
+    expect(called("/invoice/create")[0]).toMatchObject({ token: "live-token", body: { amount: 1, ccy: 978, saveCardData: { saveCard: true } } });
+
+    const at = Date.now() - 60_000;
+    pay("inv_1", at);
+    await page(id, done.session);
+    const fresh = await record(id);
+    expect(fresh.billing).toMatchObject({ status: "active", first: null, card: expect.any(String) });
+    const until = mono.addMonth(fresh.billing.lastPaidAt!);
+    expect(Math.abs(until - (at + 7 * DAY))).toBeLessThan(DAY);
+    expect(await mono.accessOf(fresh)).toMatchObject({ open: true, state: "paid" });
+
+    await mono.runCharges(at + 6 * DAY);
+    expect(called("/wallet/payment")).toHaveLength(0);
+    await mono.runCharges(until + 60 * 60 * 1000);
+    expect(called("/wallet/payment")[0].body).toMatchObject({ cardToken: CARD, amount: 1500, ccy: 978 });
+  });
 });
