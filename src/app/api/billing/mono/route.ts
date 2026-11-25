@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   }
   if (!found) return answer(404, { ok: false, error: "no_client" });
   const { client } = found;
-  if (!monoToken(client.test)) return answer(503, { ok: false, error: "not_configured" });
+  if (!(await monoToken(client.test))) return answer(503, { ok: false, error: "not_configured" });
 
   let signed = false;
   try {

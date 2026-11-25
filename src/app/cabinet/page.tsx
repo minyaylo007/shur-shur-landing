@@ -10,7 +10,9 @@ import { MetaGuide } from "./meta-guide";
 import { metaMessage, pixelToFill, readPixelHints } from "./meta-messages";
 import { opsBotStatus, type OpsBotStatus } from "@/lib/cabinet/ops-bot";
 import { OpsBotSection } from "./ops-bot-section";
-import { ClientsSection } from "./clients-section";
+import { clientsBilling, ClientsSection } from "./clients-section";
+import { MonoSection } from "./mono-section";
+import { monoStatus, readOffer, type MonoStatus, type Offer } from "@/lib/billing/settings";
 import { listClients, type Client } from "@/lib/client/clients";
 
 /* The cabinet itself. No session → the login page. Numbers come from the
@@ -207,8 +209,8 @@ function Markdown({ text }: { text: string }) {
 
 const kyiv = (ms: number) => new Date(ms).toLocaleString("ru-RU", { timeZone: "Europe/Kyiv" });
 
-export default async function Cabinet({ searchParams }: { searchParams: Promise<{ m?: string; px?: string | string[]; o?: string; c?: string }> }) {
-  const { m, px, o, c } = await searchParams;
+export default async function Cabinet({ searchParams }: { searchParams: Promise<{ m?: string; px?: string | string[]; o?: string; c?: string; b?: string }> }) {
+  const { m, px, o, c, b } = await searchParams;
   const jar = await cookies();
   let signedIn = false;
   try {
@@ -238,12 +240,20 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
   } catch {
     opsBot = null;
   }
+  let mono: MonoStatus | null = null;
+  let offer: Offer | null = null;
+  try {
+    [mono, offer] = await Promise.all([monoStatus(), readOffer()]);
+  } catch {
+    mono = null;
+  }
   let clients: Client[] | null = null;
   try {
     clients = await listClients();
   } catch {
     clients = null;
   }
+  const billing = await clientsBilling(clients);
   const hints = readPixelHints(px);
   const metaText = m && m !== "saved" ? metaMessage(m, hints) : undefined;
 
@@ -383,7 +393,9 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
 
       <OpsBotSection status={opsBot} o={o} />
 
-      <ClientsSection clients={clients} c={c} />
+      <MonoSection status={mono} offer={offer} b={b} />
+
+      <ClientsSection clients={clients} c={c} billing={billing} />
     </div>
   );
 }

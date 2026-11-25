@@ -1,4 +1,17 @@
-import { accessOf, monoToken, price } from "@/lib/billing/mono";
+import { accessOf, monoToken, price, type Access } from "@/lib/billing/mono";
+
+/** What the table needs from monobank's side, read once by the page (async). */
+export interface ClientsBilling {
+  live: boolean;
+  testOn: boolean;
+  access: Map<string, Access>;
+}
+
+export async function clientsBilling(clients: Client[] | null): Promise<ClientsBilling> {
+  const [live, testOn] = await Promise.all([monoToken(false), monoToken(true)]);
+  const access = new Map(await Promise.all((clients ?? []).map(async (client) => [client.id, await accessOf(client)] as const)));
+  return { live: live !== null, testOn: testOn !== null, access };
+}
 import type { Client } from "@/lib/client/clients";
 
 /* Clients of the bot subscription: who they are, whether they pay, and the
@@ -28,10 +41,9 @@ const small = "rounded border border-ink-500 px-2 py-1 text-sm hover:bg-paper-10
 
 const day = (ms: number) => new Date(ms).toLocaleDateString("ru-RU", { timeZone: "Europe/Kyiv" });
 
-function payment(client: Client): string {
-  if (!monoToken(client.test)) return "оплата не включена";
+function payment(client: Client, on: boolean, access: Access): string {
+  if (!on) return "оплата не включена";
   const { billing } = client;
-  const access = accessOf(client);
   if (billing.status === "pending") return "ждёт первой оплаты";
   if (billing.status === "none") return billing.lastPaidAt ? "подписки нет" : "не оформлял";
   if (billing.status === "cancelled") return access.open && access.state === "paid" ? `отменена, оплачено до ${day(access.paidUntil)}` : "отменена";
@@ -40,9 +52,9 @@ function payment(client: Client): string {
   return "списание не прошло, доступ закрыт";
 }
 
-export function ClientsSection({ clients, c }: { clients: Client[] | null; c: string | undefined }) {
+export function ClientsSection({ clients, c, billing }: { clients: Client[] | null; c: string | undefined; billing: ClientsBilling }) {
   const message = c ? MESSAGES[c] : undefined;
-  const live = monoToken(false) !== null;
+  const { live, testOn, access: accesses } = billing;
   return (
     <section id="clients" className="mt-10">
       <h2 className="font-display text-xl">Клиенты ботов</h2>
@@ -83,7 +95,7 @@ export function ClientsSection({ clients, c }: { clients: Client[] | null; c: st
                     <div className="text-xs text-ink-500">с {day(client.createdAt)}</div>
                   </td>
                   <td className={td}>{client.auth.password ? "пароль задан" : client.auth.setup ? "ждёт ссылку" : "нет пароля"}</td>
-                  <td className={td}>{payment(client)}</td>
+                  <td className={td}>{payment(client, client.test ? testOn : live, accesses.get(client.id)!)}</td>
                   <td className={td}>{client.billing.lastPaidAt ? day(client.billing.lastPaidAt) : "—"}</td>
                   <td className={td}>
                     <div className="flex flex-wrap items-center gap-2">

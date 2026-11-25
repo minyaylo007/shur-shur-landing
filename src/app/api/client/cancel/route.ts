@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   }
   if (!client) return back(request, "/");
   const page = `/client/${client.id}`;
-  const token = monoToken(client.test);
+  const token = await monoToken(client.test);
   const subscriptionId = client.billing.subscriptionId;
   if (!token || !subscriptionId || client.billing.status === "cancelled") return back(request, page);
 

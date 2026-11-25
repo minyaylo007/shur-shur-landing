@@ -235,7 +235,7 @@ describe("webhook signature", () => {
     expect((await WEBHOOK(webhook(a.id, body, sign(bankKey, body)))).status).toBe(200);
     const fresh = await record(a.id);
     expect(fresh.billing.lastPaidAt).toBeNull();
-    expect(mono.accessOf(fresh).open).toBe(false);
+    expect((await mono.accessOf(fresh)).open).toBe(false);
   });
 
   it("a forged, unsigned or altered webhook is refused with 401 and changes nothing", async () => {
@@ -253,7 +253,7 @@ describe("webhook signature", () => {
     expect([forged.status, unsigned.status, altered.status, garbage.status]).toEqual([401, 401, 401, 401]);
     expect(store.get(clients.clientKey(a.id))!.text).toBe(before);
     expect(called("/subscription/status")).toHaveLength(0);
-    expect(mono.accessOf(await record(a.id)).open).toBe(false);
+    expect((await mono.accessOf(await record(a.id))).open).toBe(false);
   });
 
   it("the public key is cached; a rotated key is fetched again, forged floods do not hammer monobank", async () => {
@@ -338,15 +338,15 @@ describe("results are closed without a paid subscription", () => {
     client.billing = { ...clients.EMPTY_BILLING, subscriptionId: "s2_test", status: "active", lastPaidAt: paidAt };
     const at = (day: number, hour = 12) => mono.accessOf(client, Date.UTC(2026, 10, day, hour));
 
-    expect(at(9)).toMatchObject({ open: true, state: "paid" });
-    expect(at(11)).toMatchObject({ open: true, state: "grace" });
-    expect(at(13, 11)).toMatchObject({ open: true, state: "grace" });
-    expect(at(13, 13)).toMatchObject({ open: false, state: "expired" });
+    expect(await at(9)).toMatchObject({ open: true, state: "paid" });
+    expect(await at(11)).toMatchObject({ open: true, state: "grace" });
+    expect(await at(13, 11)).toMatchObject({ open: true, state: "grace" });
+    expect(await at(13, 13)).toMatchObject({ open: false, state: "expired" });
 
     // Cancelled: the paid month and not a day more.
     client.billing.status = "cancelled";
-    expect(at(9).open).toBe(true);
-    expect(at(11).open).toBe(false);
+    expect((await at(9)).open).toBe(true);
+    expect((await at(11)).open).toBe(false);
 
     // And on the page itself.
     await subscribed(a.id, 40);
@@ -690,7 +690,7 @@ describe("money", () => {
     expect(called("/subscription/remove")).toHaveLength(0);
     const fresh = await record(a.id);
     expect(fresh.billing.status).toBe("cancelled");
-    expect(mono.accessOf(fresh)).toMatchObject({ open: true, state: "paid" });
+    expect(await mono.accessOf(fresh)).toMatchObject({ open: true, state: "paid" });
   });
 
   it("a cancel that monobank refused is not shown as done", async () => {
@@ -713,7 +713,7 @@ describe("an answer of monobank that is not what the schema says", () => {
     const synced = await mono.syncBilling(await record(a.id));
     expect(synced!.billing).toMatchObject({ status: "active", unclearAt: null });
     expect(synced!.billing.nextChargeAt).toBeGreaterThan(Date.now() + 28 * DAY);
-    expect(mono.accessOf(synced!)).toMatchObject({ open: true, state: "paid" });
+    expect(await mono.accessOf(synced!)).toMatchObject({ open: true, state: "paid" });
     expect(logged.join("\n")).not.toContain("not understood");
   });
 
@@ -726,9 +726,9 @@ describe("an answer of monobank that is not what the schema says", () => {
     const synced = await mono.syncBilling(await record(a.id));
     expect(synced!.billing.status).toBe("active");
     expect(synced!.billing.unclearAt).not.toBeNull();
-    expect(mono.accessOf(synced!)).toMatchObject({ open: true });
+    expect(await mono.accessOf(synced!)).toMatchObject({ open: true });
     // …and weeks later, while the answer is still unreadable.
-    expect(mono.accessOf(synced!, Date.now() + 30 * DAY)).toMatchObject({ open: true });
+    expect(await mono.accessOf(synced!, Date.now() + 30 * DAY)).toMatchObject({ open: true });
 
     const warned = logged.filter((line) => line.includes("not understood"));
     expect(warned).toHaveLength(1);
@@ -750,7 +750,7 @@ describe("an answer of monobank that is not what the schema says", () => {
 
     const synced = await mono.syncBilling(await record(a.id));
     expect(synced!.billing.status).toBe("active");
-    expect(mono.accessOf(synced!)).toMatchObject({ open: true, state: "paid" });
+    expect(await mono.accessOf(synced!)).toMatchObject({ open: true, state: "paid" });
   });
 
   it("an unreadable answer opens nothing for a client who never paid", async () => {
@@ -760,7 +760,7 @@ describe("an answer of monobank that is not what the schema says", () => {
     odd.payments = "nonsense";
     const synced = await mono.syncBilling(await record(a.id));
     expect(synced!.billing.status).toBe("pending");
-    expect(mono.accessOf(synced!).open).toBe(false);
+    expect((await mono.accessOf(synced!)).open).toBe(false);
   });
 });
 

@@ -518,7 +518,7 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
 
   // Back from monobank, still waiting, or not looked at for a while: ask monobank.
   const { billing } = client;
-  if (monoToken(client.test) && billing.subscriptionId && (paid || billing.status === "pending" || stale(billing.syncedAt))) {
+  if ((await monoToken(client.test)) && billing.subscriptionId && (paid || billing.status === "pending" || stale(billing.syncedAt))) {
     try {
       client = (await syncBilling(client)) ?? client;
     } catch {
@@ -526,7 +526,7 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
     }
   }
 
-  const access = accessOf(client);
+  const access = await accessOf(client);
   let results: Results | null = null;
   let attempts: Awaited<ReturnType<typeof readAttempts>> = null;
   let down = false;
