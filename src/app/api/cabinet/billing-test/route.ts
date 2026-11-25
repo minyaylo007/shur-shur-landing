@@ -3,7 +3,7 @@ import { z } from "zod";
 import { accessOf, chargeClient, createInvoice, inspectInvoice, MonoError, monoToken, removeInvoice, startPayment, syncBilling } from "@/lib/billing/mono";
 import { clearChargeBlock } from "@/lib/billing/settings";
 import { readSignedBody, storeFailure } from "@/lib/cabinet/signed";
-import { createClient, isClientId, readClient, updateClient, type Client } from "@/lib/client/clients";
+import { createClient, isClientId, readClient, setupPath, updateClient, type Client } from "@/lib/client/clients";
 import { site } from "@/lib/site";
 
 export const runtime = "nodejs";
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
         c.billing.first = { amount: 1, days: 7 };
       });
       console.info("[billing] card check client created (signed call)");
-      return ok({ client_id: client.id, setup_url: `${site.siteUrl}/client/${client.id}/setup?t=${token}` });
+      return ok({ client_id: client.id, setup_url: `${site.siteUrl}${setupPath(client.id, token)}` });
     }
     if (action === "probe" || action === "probe_remove") {
       const live = await monoToken(false);

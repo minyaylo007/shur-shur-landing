@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readSignedBody, storeFailure } from "@/lib/cabinet/signed";
 import { attemptsKey } from "@/lib/client/attempts";
-import { createClient, deleteClient, isClientId, issueIngestKey, listClients, MAX_CLIENT_NAME, readClient } from "@/lib/client/clients";
+import { createClient, deleteClient, isClientId, issueIngestKey, listClients, MAX_CLIENT_NAME, readClient, reissueSetup, setupPath } from "@/lib/client/clients";
+import { site } from "@/lib/site";
 import { resultsKey } from "@/lib/client/results";
 
 export const runtime = "nodejs";
@@ -16,6 +17,10 @@ export const runtime = "nodejs";
                     returned once, in this answer — the caller writes it to a
                     file and prints nothing. A created client also gets its
                     one-time setup token.
+   action "list":   id, name, whether a password is set — to find a client.
+   action "link":   a NEW one-time setup link (short form, 7 days); the
+                    password set by it replaces the old one and signs out
+                    every earlier session.
    action "delete": removes the client and its data; refused while a
                     subscription is charging. */
 
@@ -23,6 +28,8 @@ const schema = z.union([
   z.strictObject({ action: z.literal("key"), client_id: z.string().refine(isClientId) }),
   z.strictObject({ action: z.literal("key"), name: z.string().trim().min(1).max(MAX_CLIENT_NAME), test: z.boolean().optional() }),
   z.strictObject({ action: z.literal("delete"), client_id: z.string().refine(isClientId) }),
+  z.strictObject({ action: z.literal("list") }),
+  z.strictObject({ action: z.literal("link"), client_id: z.string().refine(isClientId) }),
 ]);
 
 const no = (error: string, status: number) => NextResponse.json({ ok: false, error }, { status });
@@ -42,6 +49,17 @@ export async function POST(request: Request) {
       await deleteClient(input.client_id, [resultsKey(input.client_id), attemptsKey(input.client_id)]);
       console.info("[cabinet] client deleted (signed call)");
       return NextResponse.json({ ok: true });
+    }
+
+    if (input.action === "list") {
+      const clients = (await listClients()).map((c) => ({ id: c.id, name: c.name, test: c.test, password_set: c.auth.password !== null }));
+      return NextResponse.json({ ok: true, clients }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (input.action === "link") {
+      const token = await reissueSetup(input.client_id);
+      if (!token) return no("no_client", 404);
+      console.info("[cabinet] client setup link reissued (signed call)");
+      return NextResponse.json({ ok: true, setup_url: `${site.siteUrl}${setupPath(input.client_id, token)}` }, { headers: { "Cache-Control": "no-store" } });
     }
 
     let id: string;

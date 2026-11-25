@@ -169,9 +169,12 @@ function newId(): string {
   return id;
 }
 
+/** The short form of a client's one-time setup link (app/c/[id]/[t] redirects to /client/<id>/setup). 128-bit token. */
+export const setupPath = (id: string, token: string) => `/c/${id}/${token}`;
+
 /** A new client with a fresh one-time setup link. The token is returned once and never stored. */
 export async function createClient(name: string, test: boolean, nowMs = Date.now()): Promise<{ client: Client; token: string }> {
-  const token = randomBytes(32).toString("base64url");
+  const token = randomBytes(16).toString("base64url");
   const client: Client = {
     id: newId(),
     name: name.trim().slice(0, MAX_CLIENT_NAME),
@@ -193,7 +196,7 @@ export async function createClient(name: string, test: boolean, nowMs = Date.now
 
 /** A new setup link for an existing client; replaces an unused older one. */
 export async function reissueSetup(id: string, nowMs = Date.now()): Promise<string | null> {
-  const token = randomBytes(32).toString("base64url");
+  const token = randomBytes(16).toString("base64url");
   const client = await updateClient(id, (c) => {
     c.auth.setup = { tokenHash: hashSetupToken(token), expiresAt: nowMs + CLIENT_SETUP_TTL_MS };
   });

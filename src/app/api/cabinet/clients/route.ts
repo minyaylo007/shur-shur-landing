@@ -48,7 +48,7 @@ function linkPage(request: Request, name: string, id: string, token: string): Re
   return oncePage(
     `Ссылка для клиента «${name}»`,
     `<p>Отправьте её клиенту. По ней он один раз задаст свой пароль; ссылка живёт 7 дней. <strong>Показывается только сейчас</strong> — если потеряется, выпустите новую в кабинете.</p>
-${copyBox(`${origin}/client/${id}/setup?t=${token}`, 3)}
+${copyBox(`${origin}/c/${id}/${token}`, 3)}
 <p>Адрес кабинета клиента (для входа с паролем): ${escape(`${origin}/client/${id}`)}</p>`,
   );
 }
