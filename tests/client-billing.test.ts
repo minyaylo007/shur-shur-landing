@@ -985,9 +985,9 @@ describe("the test pass (ops/billing/test-cycle.mjs)", () => {
 
   it("the owner's card check: 1 cent opens 7 days on the live token, then the daily run charges 15 € by that card", async () => {
     const trial = await (await BILLING_TEST(call({ action: "card_trial" }))).json();
-    expect(trial).toMatchObject({ ok: true, client_id: expect.any(String), setup_url: expect.stringContaining("/setup?t=") });
+    expect(trial).toMatchObject({ ok: true, client_id: expect.any(String), setup_url: expect.stringMatching(/\/c\/[a-z0-9]+\/[A-Za-z0-9_-]{22}$/) });
     const id = trial.client_id as string;
-    const token = new URL(trial.setup_url).searchParams.get("t")!;
+    const token = trial.setup_url.split("/").pop()!;
     const done = await clients.completeClientSetup(id, token, PASSWORD, PASSWORD);
     if (!done.ok) throw new Error("setup failed");
     const cookie = `${clients.CLIENT_COOKIE}=${done.session}`;

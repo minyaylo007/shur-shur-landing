@@ -4,6 +4,12 @@
 //   node ops/cabinet/client-key.mjs --name "<название клиента>" --out <файл> [--test]
 //   node ops/cabinet/client-key.mjs --id <id клиента> --out <файл>
 //   node ops/cabinet/client-key.mjs --id <id клиента> --delete
+//   node ops/cabinet/client-key.mjs --list
+//   node ops/cabinet/client-key.mjs --id <id клиента> --link
+//
+// --list: id, название, задан ли пароль. --link: НОВАЯ одноразовая короткая
+// ссылка (7 дней); пароль, заданный по ней, заменяет прежний и выходит из
+// всех прежних сессий; ключ бота не меняется.
 //
 // --name: клиент с таким названием; нет такого — будет создан. Каждый запуск
 // выпускает НОВЫЙ секрет, прежний перестаёт действовать сразу.
@@ -20,16 +26,36 @@ import { parseArgs } from "node:util";
 import { config, postSigned } from "./lib.mjs";
 
 const { values } = parseArgs({
-  options: { name: { type: "string" }, id: { type: "string" }, out: { type: "string" }, test: { type: "boolean" }, delete: { type: "boolean" } },
+  options: { name: { type: "string" }, id: { type: "string" }, out: { type: "string" }, test: { type: "boolean" }, delete: { type: "boolean" }, list: { type: "boolean" }, link: { type: "boolean" } },
 });
 const usage = () => {
   console.error('нужно: --name "<название>" --out <файл> [--test] | --id <id> --out <файл> | --id <id> --delete');
   process.exit(2);
 };
-if (values.delete ? !values.id : !values.out || !values.name === !values.id) usage();
+if (!values.list && (values.delete || values.link ? !values.id : !values.out || !values.name === !values.id)) usage();
 
 const { secret, site } = config();
 const call = (payload) => postSigned(`${site}/api/cabinet/client-key`, secret, payload);
+
+if (values.list) {
+  const { status, answer } = await call({ action: "list" });
+  if (status !== 200) {
+    console.error(`сайт не дал список: HTTP ${status} ${answer?.error ?? ""}`);
+    process.exit(1);
+  }
+  for (const c of answer.clients) console.log(`${c.id}  ${c.name}${c.test ? " (тест)" : ""}  пароль: ${c.password_set ? "есть" : "нет"}`);
+  process.exit(0);
+}
+
+if (values.link) {
+  const { status, answer } = await call({ action: "link", client_id: values.id });
+  if (status !== 200 || !answer?.setup_url) {
+    console.error(`сайт не выдал ссылку: HTTP ${status} ${answer?.error ?? ""}`);
+    process.exit(1);
+  }
+  console.log(`одноразовая ссылка для пароля (7 дней):\n${answer.setup_url}\nпотом вход: ${site}/client/${values.id}`);
+  process.exit(0);
+}
 
 if (values.delete) {
   const { status, answer } = await call({ action: "delete", client_id: values.id });
@@ -59,7 +85,7 @@ if (answer.setup_token) {
   const link = `${values.out}.setup`;
   write(
     link,
-    ["Кабинет клиента SHUR-SHUR — одноразовая ссылка для установки пароля (7 дней).", "", `${site}/client/${answer.client_id}/setup?t=${answer.setup_token}`, "", `Потом вход: ${site}/client/${answer.client_id}`],
+    ["Кабинет клиента SHUR-SHUR — одноразовая ссылка для установки пароля (7 дней).", "", `${site}/c/${answer.client_id}/${answer.setup_token}`, "", `Потом вход: ${site}/client/${answer.client_id}`],
     0o600,
   );
   console.log(`ссылка для пароля клиента — в ${link} (600)`);
