@@ -6,10 +6,16 @@
 //   node ops/cabinet/client-key.mjs --id <id клиента> --delete
 //   node ops/cabinet/client-key.mjs --list
 //   node ops/cabinet/client-key.mjs --id <id клиента> --link
+//   node ops/cabinet/client-key.mjs --id <id клиента> --login <логин> --password-file <файл>
 //
 // --list: id, название, задан ли пароль. --link: НОВАЯ одноразовая короткая
 // ссылка (7 дней); пароль, заданный по ней, заменяет прежний и выходит из
 // всех прежних сессий; ключ бота не меняется.
+//
+// --login + --password-file: простой логин (латиница/цифры, 3–32, регистр не
+// важен) и пароль (от 5 знаков) без ссылки. Пароль — первая строка файла
+// (держать 600); не печатается. Прежние сессии и неиспользованная ссылка
+// перестают действовать.
 //
 // --name: клиент с таким названием; нет такого — будет создан. Каждый запуск
 // выпускает НОВЫЙ секрет, прежний перестаёт действовать сразу.
@@ -20,19 +26,21 @@
 // по которой клиент задаёт пароль своего кабинета; ссылка живёт 7 дней.
 // --delete убирает клиента и его данные (сайт откажет, пока идёт подписка).
 
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 import { config, postSigned } from "./lib.mjs";
 
 const { values } = parseArgs({
-  options: { name: { type: "string" }, id: { type: "string" }, out: { type: "string" }, test: { type: "boolean" }, delete: { type: "boolean" }, list: { type: "boolean" }, link: { type: "boolean" } },
+  options: { name: { type: "string" }, id: { type: "string" }, out: { type: "string" }, test: { type: "boolean" }, delete: { type: "boolean" }, list: { type: "boolean" }, link: { type: "boolean" }, login: { type: "string" }, "password-file": { type: "string" } },
 });
 const usage = () => {
-  console.error('нужно: --name "<название>" --out <файл> [--test] | --id <id> --out <файл> | --id <id> --delete');
+  console.error('нужно: --name "<название>" --out <файл> [--test] | --id <id> --out <файл> | --id <id> --delete | --id <id> --login <логин> --password-file <файл>');
   process.exit(2);
 };
-if (!values.list && (values.delete || values.link ? !values.id : !values.out || !values.name === !values.id)) usage();
+if (values.login !== undefined || values["password-file"] !== undefined) {
+  if (!values.id || !values.login || !values["password-file"]) usage();
+} else if (!values.list && (values.delete || values.link ? !values.id : !values.out || !values.name === !values.id)) usage();
 
 const { secret, site } = config();
 const call = (payload) => postSigned(`${site}/api/cabinet/client-key`, secret, payload);
@@ -43,7 +51,18 @@ if (values.list) {
     console.error(`сайт не дал список: HTTP ${status} ${answer?.error ?? ""}`);
     process.exit(1);
   }
-  for (const c of answer.clients) console.log(`${c.id}  ${c.name}${c.test ? " (тест)" : ""}  пароль: ${c.password_set ? "есть" : "нет"}`);
+  for (const c of answer.clients) console.log(`${c.id}  ${c.name}${c.test ? " (тест)" : ""}  логин: ${c.login ?? "—"}  пароль: ${c.password_set ? "есть" : "нет"}`);
+  process.exit(0);
+}
+
+if (values.login) {
+  const password = readFileSync(values["password-file"], "utf8").split(/\r?\n/)[0];
+  const { status, answer } = await call({ action: "password", client_id: values.id, login: values.login, password });
+  if (status !== 200) {
+    console.error(`сайт не задал логин и пароль: HTTP ${status} ${answer?.error ?? ""}`);
+    process.exit(1);
+  }
+  console.log(`логин и пароль заданы; вход: ${site}/client/login`);
   process.exit(0);
 }
 

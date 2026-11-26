@@ -1,14 +1,15 @@
-import { CLIENT_COOKIE, clientCookieOptions, clientLogin, findClientByPhone } from "@/lib/client/clients";
+import { CLIENT_COOKIE, clientCookieOptions, clientLogin, findClientByLogin, findClientByPhone } from "@/lib/client/clients";
 import { back, clientIp, field, idField } from "@/lib/client/http";
 import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-/* A client's login form posts here: phone + password (/client/login), or the
-   older form with the cabinet id + password (/client/<id>/login). 303 back
-   either way; the password and the phone are never logged, echoed or put in a
-   URL. Per IP: 5 tries per 10 minutes (this instance); per client: 10
-   failures an hour (lib/client/clients). An unknown phone answers like a
+/* A client's login form posts here: login + password (/client/login; the
+   «login» field also takes the phone of a client who set one by the link), or
+   the older form with the cabinet id + password (/client/<id>/login). 303 back
+   either way; the password, the login and the phone are never logged, echoed
+   or put in a URL. Per IP: 5 tries per 10 minutes (this instance); per client: 10
+   failures an hour (lib/client/clients). An unknown login answers like a
    wrong password. */
 
 export async function POST(request: Request) {
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   try {
     const form = await request.formData();
     id = idField(form);
-    phone = field(form, "phone");
+    phone = field(form, "login") || field(form, "phone");
     password = field(form, "password");
   } catch {
     return back(request, "/");
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
 
   let outcome;
   try {
-    if (byPhone) id = (await findClientByPhone(phone)) ?? "";
+    if (byPhone) id = (await findClientByLogin(phone)) ?? (await findClientByPhone(phone)) ?? "";
     outcome = id ? await clientLogin(id, password) : ({ ok: false, error: "bad_password" } as const);
   } catch (error) {
     console.error(`[client] login store failed: ${error instanceof Error ? error.name : "unknown"}`);
