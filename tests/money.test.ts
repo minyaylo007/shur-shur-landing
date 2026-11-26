@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEMO_ACCOUNTS, DEMO_NOW, DEMO_OPERATIONS, DEMO_PLAN } from "../src/lib/money/demo";
-import { apply, emptyBook, everything, paused, payerKeys, payerName, projectsMonth, projectsOf, type Book } from "../src/lib/money/book";
-import { classify, nextPayout, payouts, planRowOf, remember, remindTomorrow, summarize, taxes, type Operation, type Plan } from "../src/lib/money/ledger";
+import { apply, bookSchema, emptyBook, everything, paused, payerKeys, payerName, projectsMonth, projectsOf, type Book } from "../src/lib/money/book";
+import { accountLabel, classify, nextPayout, payouts, planRowOf, remember, remindTomorrow, summarize, taxes, type Operation, type Plan } from "../src/lib/money/ledger";
 
 /*
  * «Гроші» — MONEY only (owner's rule 13.10.2026): how a statement line is
@@ -93,6 +93,51 @@ describe("the month", () => {
     expect(summarize(ops, accounts, {}, "2026-11").spent).toBe(4_000_00);
     expect(summarize(ops, accounts, {}, "2026-11").toSort).toHaveLength(1);
     expect(summarize(ops, accounts, remember({}, ops[0], "other"), "2026-11").by.other).toBe(4_000_00);
+  });
+});
+
+describe("«Дивіденди» and the account (owner 26.11: «отметить как для себе», «напиши хоть с какого счёта»)", () => {
+  it("«Дивіденди» never reach «Пішло»; they stay inside «Залишилось» and show apart", () => {
+    const ops = [
+      op({ account: FOP.id, amount: 100_000_00, counterName: "ТОВ А", counterIban: "UA99" }),
+      op({ account: WHITE.id, amount: -10_000_00, description: "Особа" }),
+      op({ account: WHITE.id, amount: -3_000_00, mcc: 5812, description: "Ресторан" }),
+    ];
+    let rules = remember({}, ops[1], "team");
+    rules = remember(rules, ops[2], "dividends");
+    const m = summarize(ops, accounts, rules, "2026-11");
+    expect(m.spent).toBe(10_000_00);
+    expect(m.dividends).toBe(3_000_00);
+    expect(m.by.dividends).toBe(3_000_00);
+    expect(m.left).toBe(100_000_00 - 10_000_00 - m.tax.setAside);
+    expect(m.toSort).toEqual([]);
+  });
+
+  it("«Дивіденди» is remembered by the recipient, like «Команда»: the next payment there is sorted by itself", () => {
+    const rules = remember({}, op({ account: WHITE.id, amount: -2_000_00, description: "Маша Д." }), "dividends");
+    expect(classify(op({ account: WHITE.id, amount: -900_00, description: "Переказ: МАША Д. *4321", time: nov(25) }), accounts, rules)).toBe("dividends");
+    expect(classify(op({ account: FOP.id, amount: -900_00, description: "Маша Д." }), accounts, rules)).toBe("dividends");
+    // a rule overrides the automatic guess (a restaurant by MCC is «Інше» until marked)
+    const cafe = op({ account: WHITE.id, amount: -700_00, mcc: 5812, description: "Кафе" });
+    expect(classify(cafe, accounts, {})).toBe("other");
+    expect(classify(cafe, accounts, remember({}, cafe, "dividends"))).toBe("dividends");
+  });
+
+  it("the book stores it, «Скасувати» takes it back exactly, and a book saved before reads as is", () => {
+    const old = bookSchema.parse({ version: 1, projects: [], plan: [], rules: { "маша д.": { category: "team", name: "Маша Д." } }, payers: {}, entries: [] });
+    const set = apply(old, { type: "rule.set", key: "кафе", name: "Кафе", category: "dividends" }, () => "x");
+    expect(bookSchema.parse(set).rules["кафе"].category).toBe("dividends");
+    expect(apply(set, { type: "rule.remove", key: "кафе" }, () => "x")).toEqual(old);
+  });
+
+  it("each operation is labelled with its account; an unknown one by its last 4 digits only", () => {
+    expect(accountLabel(op({ account: FOP.id, amount: -1 }), accounts)).toBe("ФОП");
+    expect(accountLabel(op({ account: WHITE.id, amount: -1 }), accounts)).toBe("Біла");
+    expect(accountLabel(op({ account: PINK.id, amount: -1 }), accounts)).toBe("Рожева");
+    expect(accountLabel(op({ account: "manual-uah", amount: -1, manual: "bank" }), accounts)).toBe("Вручну");
+    const label = accountLabel(op({ account: "x", amount: -1 }), [...accounts, { id: "x", type: "fop" as never, iban: "UA003220010000026200000009876" }].map((a) => (a.id === "x" ? { ...a, type: "eur" as never } : a)));
+    expect(label).toBe("·9876");
+    expect(label).not.toContain("UA00");
   });
 });
 

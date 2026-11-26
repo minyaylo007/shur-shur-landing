@@ -40,10 +40,26 @@ export interface Operation {
   spend?: Spend;
 }
 
-export type Category = "income" | "self" | "team" | "taxes" | "ads" | "other" | "sort" | "skip";
+export type Category = "income" | "self" | "team" | "taxes" | "ads" | "other" | "dividends" | "sort" | "skip";
 /** What Sasha can put an unknown recipient into with one tap. */
-export type Spend = "team" | "taxes" | "ads" | "other";
-export const SPENDS: Spend[] = ["team", "taxes", "ads", "other"];
+export type Spend = "team" | "taxes" | "ads" | "other" | "dividends";
+export const SPENDS: Spend[] = ["team", "taxes", "ads", "other", "dividends"];
+/** The business's spending: what «Пішло» adds up. «Дивіденди» (owner 26.11: white-card spending «на себе»)
+ *  is not the business's — it is shown apart, under the total, like the pink card. */
+export const BUSINESS: Exclude<Spend, "dividends">[] = ["team", "taxes", "ads", "other"];
+
+/* ---------- which account ---------- */
+
+/** A short name of the account an operation went from: «ФОП», «Біла», «Рожева», «Вручну»; an unknown one — its last 4 digits. */
+export function accountLabel(op: Operation, accounts: Account[]): string {
+  if (op.manual) return "Вручну";
+  const account = accounts.find((a) => a.id === op.account);
+  if (account?.type === "fop") return account.currency === "USD" ? "ФОП $" : "ФОП";
+  if (account?.type === "white") return "Біла";
+  if (account?.type === "platinum") return "Рожева";
+  const digits = (account?.iban || op.account).replace(/\D/g, "");
+  return digits.length >= 4 ? `·${digits.slice(-4)}` : "Рахунок";
+}
 
 /** A remembered decision about one recipient: once sorted — sorted forever. */
 export interface Rule {
@@ -290,13 +306,16 @@ export interface Month {
   incomeUsd: number;
   /** cash Sasha typed in, inside `income` */
   cash: number;
-  /** everything that left the business: four categories plus the not yet sorted */
+  /** everything that left the business: four categories plus the not yet sorted; never «Дивіденди» */
   spent: number;
   by: Record<Spend, number>;
   /** team members, biggest first */
   team: { name: string; amount: number }[];
   toSort: Operation[];
+  /** moved to the pink card */
   self: number;
+  /** spent «на себе» from the white card or the FOP (category «Дивіденди»), not in `spent` */
+  dividends: number;
   tax: TaxDue;
   /** income − spent − taxes still to put aside */
   left: number;
@@ -304,7 +323,7 @@ export interface Month {
 
 /** All sums positive, in kopecks. */
 export function summarize(ops: Operation[], accounts: Account[], rules: Rules, month: string, plan: Plan = []): Month {
-  const by: Record<Spend, number> = { team: 0, taxes: 0, ads: 0, other: 0 };
+  const by: Record<Spend, number> = { team: 0, taxes: 0, ads: 0, other: 0, dividends: 0 };
   const team = new Map<string, number>();
   const toSort: Operation[] = [];
   let income = 0;
@@ -346,6 +365,7 @@ export function summarize(ops: Operation[], accounts: Account[], rules: Rules, m
     team: [...team].map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount),
     toSort: toSort.sort((a, b) => b.time - a.time),
     self,
+    dividends: by.dividends,
     tax,
     left: income - spent - tax.setAside,
   };
