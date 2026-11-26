@@ -141,14 +141,22 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
   const subscribe = `Оформити підписку — ${cost} / міс`;
   const lastPaid: [string, string][] = billing.lastPaidAt ? [["Остання оплата", day(billing.lastPaidAt)]] : [];
 
-  // The free week (owner, 26.11.2026): one line, no button, nothing to pay.
-  // `freeUntil` is the first moment that is not free, so the last free day is a millisecond before it.
+  // The free days (owner, 26.11.2026): payment starts at `freeUntil`, and it can
+  // be paid ahead — the paid month then starts at `freeUntil`, the free days are
+  // not lost (lib/billing/mono applyFirst). Nothing is closed either way.
   if (isFree(client) && billing.status !== "active" && billing.status !== "pending") {
+    const from = day(client.freeUntil).slice(0, 5);
     return (
       <section aria-label="Підписка" className={card}>
         <p className="font-semibold">
-          Безкоштовно до {day(client.freeUntil - 1).slice(0, 5)}. Далі — {PRICE_EUR} € на місяць
+          Оплата з {from} — {PRICE_EUR} € на місяць
         </p>
+        {access.state === "no_billing" ? null : (
+          <>
+            <p className="mt-1 text-sm text-ink-700">Можна оплатити вже зараз: оплачений місяць почнеться з {from}, безкоштовні дні не згорають.</p>
+            <Subscribe label="Оплатити" />
+          </>
+        )}
       </section>
     );
   }

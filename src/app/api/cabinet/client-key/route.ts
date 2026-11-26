@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readSignedBody, storeFailure } from "@/lib/cabinet/signed";
 import { attemptsKey } from "@/lib/client/attempts";
-import { createClient, deleteClient, isClientId, issueIngestKey, listClients, MAX_CLIENT_NAME, readClient, reissueSetup, setClientSheet, setLoginPassword, setupPath } from "@/lib/client/clients";
+import { createClient, deleteClient, isClientId, issueIngestKey, listClients, MAX_CLIENT_NAME, readClient, reissueSetup, setClientSheet, setLoginPassword, setupPath, updateClient } from "@/lib/client/clients";
 import { sheetSchema, syncSheet } from "@/lib/client/sheet";
 import { site } from "@/lib/site";
 import { resultsKey } from "@/lib/client/results";
@@ -28,6 +28,8 @@ export const runtime = "nodejs";
    action "sheet":  points the cabinet at the bot's public Google Sheet
                     ({id, name}) or away from it (null); reads it at once
                     and answers how many rows it has and how many were new.
+   action "free_until": moves the client's free days to end at `free_until`
+                    (ms) — payment is asked from then on (owner, 26.11.2026).
    action "delete": removes the client and its data; refused while a
                     subscription is charging. */
 
@@ -38,6 +40,7 @@ const schema = z.union([
   z.strictObject({ action: z.literal("list") }),
   z.strictObject({ action: z.literal("link"), client_id: z.string().refine(isClientId) }),
   z.strictObject({ action: z.literal("sheet"), client_id: z.string().refine(isClientId), sheet: sheetSchema.nullable() }),
+  z.strictObject({ action: z.literal("free_until"), client_id: z.string().refine(isClientId), free_until: z.number().int().min(Date.UTC(2026, 0, 1)).max(Date.UTC(2100, 0, 1)) }),
   z.strictObject({ action: z.literal("password"), client_id: z.string().refine(isClientId), login: z.string().max(64), password: z.string().max(200) }),
 ]);
 
@@ -65,6 +68,13 @@ export async function POST(request: Request) {
       if (!outcome.ok) return no(outcome.error, outcome.error === "no_client" ? 404 : outcome.error === "login_taken" ? 409 : 400);
       console.info("[cabinet] client login and password set (signed call)");
       return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    if (input.action === "free_until") {
+      const client = await updateClient(input.client_id, (c) => void (c.freeUntil = input.free_until));
+      if (!client) return no("no_client", 404);
+      console.info("[cabinet] client free days set (signed call)");
+      return NextResponse.json({ ok: true, free_until: client.freeUntil }, { headers: { "Cache-Control": "no-store" } });
     }
 
     if (input.action === "sheet") {
