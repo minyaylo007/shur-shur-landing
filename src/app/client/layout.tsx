@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Logo } from "@/components/ui/Logo";
+import { PanelLogo } from "@/components/ui/PanelLogo";
 import { latinFontClass } from "../fonts";
 import "../globals.css";
 
@@ -26,9 +26,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     <html lang="uk" className={latinFontClass}>
       <body className="cabinet min-h-screen font-body antialiased">
         <header className="bg-cherry-deep text-cream-type">
-          <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-            <Logo className="text-xl" />
-            <span className="text-xs uppercase tracking-widest text-cream-type/70">кабінет клієнта</span>
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+            <PanelLogo />
+            <span className="text-sm text-cream-type/70">Кабінет клієнта</span>
           </div>
         </header>
         <main className="mx-auto max-w-5xl px-4 pb-16 pt-6 sm:px-6 sm:pt-10">{children}</main>
