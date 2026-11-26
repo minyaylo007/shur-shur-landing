@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { MIN_PASSWORD } from "@/lib/cabinet/auth";
 import { clientSetupValid, isClientId } from "@/lib/client/clients";
+import { site } from "@/lib/site";
 
 const MESSAGES: Record<string, string> = {
   weak_password: `Пароль — не коротший за ${MIN_PASSWORD} символів.`,
@@ -10,7 +11,7 @@ const MESSAGES: Record<string, string> = {
   down: "Кабінет тимчасово недоступний. Спробуйте пізніше.",
   bad_phone: "Перевірте номер телефону — він буде вашим логіном.",
   phone_taken: "Цей номер уже використано для іншого кабінету. Напишіть нам.",
-  bad_link:"Посилання вже використане або застаріло — попросіть нове.",
+  bad_link: "Посилання вже використане або застаріло — попросіть нове.",
 };
 
 const input = "mt-1 block w-full rounded-xl border border-ink-500/50 bg-white px-4 py-3 text-ink-900 placeholder:text-ink-500";
@@ -29,14 +30,19 @@ export default async function ClientSetup({ params, searchParams }: { params: Pr
   if (!valid) {
     return (
       <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-paper-200 bg-cream-type p-6 shadow-[0_8px_24px_-16px_rgba(74,13,20,0.25)] sm:mt-12 sm:p-8">
-        <h1 className="font-display text-2xl">Посилання недійсне</h1>
-        <p className="mt-4 text-ink-700">
-          Посилання для встановлення пароля одноразове й діє 7 днів. Це вже використане або застаріло — попросіть нове.
-        </p>
-        <p className="mt-4">
-          <Link href={`/client/${id}/login`} className="font-medium text-cherry-700 underline">
-            Увійти з паролем
-          </Link>
+        <h1 className="font-display text-2xl">Посилання вже не діє</h1>
+        <p className="mt-4 text-ink-700">Воно одноразове. Якщо пароль уже є — просто увійдіть.</p>
+        <Link
+          href={`/client/${id}/login`}
+          className="mt-6 flex w-full items-center justify-center rounded-full bg-cherry-juice px-6 py-3.5 font-semibold text-cream-type shadow-sm hover:bg-juice-500"
+        >
+          Увійти
+        </Link>
+        <p className="mt-6 text-sm text-ink-700">
+          Пароля немає? Подзвоніть або напишіть — надішлемо нове посилання:{" "}
+          <a href={site.phone.tel} className="font-medium text-cherry-700 underline underline-offset-4">
+            <span dir="ltr">{site.phone.display}</span>
+          </a>
         </p>
       </div>
     );
