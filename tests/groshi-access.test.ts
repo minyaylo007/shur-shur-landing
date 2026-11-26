@@ -70,11 +70,11 @@ afterEach(() => {
 
 describe("/cabinet/groshi: closed without a session", () => {
   it("no cookie, a forged one or a stale one → the login page, nothing rendered", async () => {
-    await expect(CabinetMoney()).rejects.toThrow("REDIRECT /cabinet/login");
+    await expect(CabinetMoney()).rejects.toThrow("REDIRECT /login");
     cookieJar.set(auth.SESSION_COOKIE, `${Math.floor(Date.now() / 1000) + 999}.forged`);
-    await expect(CabinetMoney()).rejects.toThrow("REDIRECT /cabinet/login");
+    await expect(CabinetMoney()).rejects.toThrow("REDIRECT /login");
     cookieJar.set(auth.SESSION_COOKIE, auth.makeSession(SESSION_KEY, Date.now() - (auth.SESSION_TTL_SECONDS + 10) * 1000));
-    await expect(CabinetMoney()).rejects.toThrow("REDIRECT /cabinet/login");
+    await expect(CabinetMoney()).rejects.toThrow("REDIRECT /login");
   });
 
   it("with her session the page renders (and asks no bank without a key)", async () => {

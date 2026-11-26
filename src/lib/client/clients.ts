@@ -354,9 +354,11 @@ export async function findClientByPhone(raw: string): Promise<string | null> {
    are one login. Set by the owner together with the password (setLoginPassword). */
 
 const LOGIN = /^[a-z0-9]{3,32}$/;
+/** «admin» on /login is the owner's cabinet (app/api/login), never a client. */
+export const ADMIN_LOGIN = "admin";
 export function normalizeLogin(raw: string): string | null {
   const login = raw.trim().toLowerCase();
-  return LOGIN.test(login) ? login : null;
+  return LOGIN.test(login) && login !== ADMIN_LOGIN ? login : null;
 }
 
 /** The id of the client with this login, or null. */

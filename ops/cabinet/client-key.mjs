@@ -62,7 +62,7 @@ if (values.login) {
     console.error(`сайт не задал логин и пароль: HTTP ${status} ${answer?.error ?? ""}`);
     process.exit(1);
   }
-  console.log(`логин и пароль заданы; вход: ${site}/client/login`);
+  console.log(`логин и пароль заданы; вход: ${site}/login`);
   process.exit(0);
 }
 

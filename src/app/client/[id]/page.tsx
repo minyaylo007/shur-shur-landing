@@ -528,9 +528,9 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
       admin = client !== null;
     }
   } catch {
-    redirect("/client/login?e=down");
+    redirect("/login?e=down");
   }
-  if (!client) redirect("/client/login");
+  if (!client) redirect("/login");
 
   // Back from monobank, still waiting, or not looked at for a while: ask monobank.
   const { billing } = client;

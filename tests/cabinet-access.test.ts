@@ -113,7 +113,7 @@ afterEach(() => {
 describe("cabinet: closed without a session", () => {
   it("no cookie → redirect to login, no data rendered", async () => {
     store.set(SNAPSHOT_KEY, { text: JSON.stringify(snapshot()), etag: "x" });
-    await expect(CabinetPage()).rejects.toThrow("REDIRECT /cabinet/login");
+    await expect(CabinetPage()).rejects.toThrow("REDIRECT /login");
   });
 
   it("a forged or stale cookie → redirect to login", async () => {
@@ -125,12 +125,12 @@ describe("cabinet: closed without a session", () => {
     const value = /shur_cabinet=([^;]+)/.exec(real)![1];
 
     cookieJar.set(auth.SESSION_COOKIE, `${value.split(".")[0]}.forged`);
-    await expect(CabinetPage()).rejects.toThrow("REDIRECT /cabinet/login");
+    await expect(CabinetPage()).rejects.toThrow("REDIRECT /login");
 
     const { state } = await auth.readAuth();
     const old = auth.makeSession(state.sessionKey!, Date.now() - (auth.SESSION_TTL_SECONDS + 10) * 1000);
     cookieJar.set(auth.SESSION_COOKIE, old);
-    await expect(CabinetPage()).rejects.toThrow("REDIRECT /cabinet/login");
+    await expect(CabinetPage()).rejects.toThrow("REDIRECT /login");
 
     cookieJar.set(auth.SESSION_COOKIE, value);
     await expect(CabinetPage()).resolves.toBeTruthy();
@@ -408,7 +408,7 @@ describe("cabinet: her Meta key is write-only", () => {
 
   it("the cabinet form without a session stores nothing", async () => {
     const res = await META(form("/api/cabinet/meta", FIELDS));
-    expect(res.headers.get("location")).toMatch(/\/cabinet\/login$/);
+    expect(res.headers.get("location")).toMatch(/\/login$/);
     expect(store.has(META_STORE_KEY)).toBe(false);
   });
 
@@ -572,7 +572,7 @@ describe("cabinet: her ops-bot token is write-only", () => {
 
   it("without a session or a signature nothing is stored or handed out", async () => {
     const res = await OPS_BOT(botForm(null, { bot_token: TOKEN }));
-    expect(res.headers.get("location")).toMatch(/\/cabinet\/login$/);
+    expect(res.headers.get("location")).toMatch(/\/login$/);
     expect(store.has(OPS_BOT_STORE_KEY)).toBe(false);
     const foreign = await OPS_PICKUP(signed("/api/cabinet/ops-pickup", { action: "take" }, "ledger-secret"));
     expect(foreign.status).toBe(401);

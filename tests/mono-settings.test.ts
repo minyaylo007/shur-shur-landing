@@ -93,14 +93,14 @@ describe("monobank token in the cabinet", () => {
   it("without her session: the API stores nothing, the cabinet redirects to login", async () => {
     const res = await MONO(form({ action: "save", token: GOOD }, ""));
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toContain("/cabinet/login");
+    expect(res.headers.get("location")).toContain("/login");
     const forged = await MONO(form({ action: "save", token: GOOD }, `${session.split(".")[0]}.forged`));
-    expect(forged.headers.get("location")).toContain("/cabinet/login");
+    expect(forged.headers.get("location")).toContain("/login");
     expect(store.has(MONO_KEY)).toBe(false);
     expect(bankCalls).toHaveLength(0);
 
     cookieJar.clear();
-    await expect(cabinetHtml()).rejects.toThrow("REDIRECT /cabinet/login");
+    await expect(cabinetHtml()).rejects.toThrow("REDIRECT /login");
   });
 
   it("a token monobank refuses is not stored and billing stays off", async () => {
@@ -168,7 +168,7 @@ describe("offer details", () => {
 
   it("without her session the details are not changed", async () => {
     const res = await MONO(form({ action: "offer", name: "Хтось", code: "", contact: "" }, ""));
-    expect(res.headers.get("location")).toContain("/cabinet/login");
+    expect(res.headers.get("location")).toContain("/login");
     expect(await oferta()).toContain("[реквізити ФОП]");
   });
 });

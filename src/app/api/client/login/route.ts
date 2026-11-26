@@ -25,8 +25,8 @@ export async function POST(request: Request) {
     return back(request, "/");
   }
   const byPhone = !id;
-  if (byPhone && !phone) return back(request, "/client/login");
-  const page = byPhone ? "/client/login" : `/client/${id}/login`;
+  if (byPhone && !phone) return back(request, "/login");
+  const page = byPhone ? "/login" : `/client/${id}/login`;
   if (!rateLimit(`client-login:${clientIp(request)}`).allowed) return back(request, `${page}?e=limit`);
 
   let outcome;

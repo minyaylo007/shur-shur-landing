@@ -21,6 +21,9 @@ const nextConfig: NextConfig = {
       { key: "Referrer-Policy", value: "no-referrer" },
     ];
     return [
+      /* The one login for both. */
+      { source: "/login", headers: closed },
+      { source: "/api/login", headers: closed },
       { source: "/cabinet", headers: closed },
       { source: "/cabinet/:path*", headers: closed },
       { source: "/api/cabinet/:path*", headers: closed },

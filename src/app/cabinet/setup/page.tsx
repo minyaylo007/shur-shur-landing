@@ -29,7 +29,7 @@ export default async function CabinetSetup({ searchParams }: { searchParams: Pro
           Ссылка для установки пароля одноразовая и живёт 7 дней. Эта уже использована или устарела — попросите новую.
         </p>
         <p className="mt-4">
-          <Link href="/cabinet/login" className="font-medium text-cherry-700 underline">
+          <Link href="/login" className="font-medium text-cherry-700 underline">
             Войти с паролем
           </Link>
         </p>

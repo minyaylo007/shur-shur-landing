@@ -142,7 +142,7 @@ export function MoneyView({
       status = res.status;
       if (res.status === 401) {
         keepUnsaved(local(), action);
-        window.location.href = "/cabinet/login";
+        window.location.href = "/login";
         return null;
       }
       const answer = await res.json();

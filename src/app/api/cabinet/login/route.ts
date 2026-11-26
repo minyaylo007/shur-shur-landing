@@ -15,7 +15,7 @@ function back(request: Request, path: string): NextResponse {
 export async function POST(request: Request) {
   const ip = (request.headers.get("x-forwarded-for") ?? "").split(",")[0]?.trim() || "unknown";
   if (!rateLimit(`cabinet-login:${ip}`).allowed) {
-    return back(request, "/cabinet/login?e=limit");
+    return back(request, "/login?e=limit");
   }
 
   let password = "";
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const value = form.get("password");
     password = typeof value === "string" ? value : "";
   } catch {
-    return back(request, "/cabinet/login?e=bad");
+    return back(request, "/login?e=bad");
   }
 
   let outcome;
@@ -32,11 +32,11 @@ export async function POST(request: Request) {
     outcome = await login(password);
   } catch (error) {
     console.error(`[cabinet] login store failed: ${error instanceof Error ? error.name : "unknown"}`);
-    return back(request, "/cabinet/login?e=down");
+    return back(request, "/login?e=down");
   }
   if (!outcome.ok) {
     console.info(`[cabinet] login refused: ${outcome.error}`);
-    return back(request, `/cabinet/login?e=${outcome.error === "bad_password" ? "bad" : outcome.error === "locked" ? "limit" : "unset"}`);
+    return back(request, `/login?e=${outcome.error === "bad_password" ? "bad" : outcome.error === "locked" ? "limit" : "unset"}`);
   }
   const response = back(request, "/cabinet");
   response.cookies.set(SESSION_COOKIE, outcome.session, sessionCookieOptions);

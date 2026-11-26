@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   } catch {
     return back(request, "down");
   }
-  if (!signedIn) return NextResponse.redirect(new URL("/cabinet/login", request.url), 303);
+  if (!signedIn) return NextResponse.redirect(new URL("/login", request.url), 303);
 
   let form: FormData;
   try {
