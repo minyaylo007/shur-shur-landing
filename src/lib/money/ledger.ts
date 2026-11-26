@@ -36,6 +36,8 @@ export interface Operation {
   counterEdrpou?: string;
   /** typed in by Sasha: cash in hand, or a bank payment while the bank is not connected */
   manual?: "cash" | "bank";
+  /** typed in by hand as spending, already in its category */
+  spend?: Spend;
 }
 
 export type Category = "income" | "self" | "team" | "taxes" | "ads" | "other" | "sort" | "skip";
@@ -86,6 +88,7 @@ const TRANSFER_MCC = new Set([4829, 6012, 6538]);
 export function classify(op: Operation, accounts: Account[], rules: Rules, plan: Plan = []): Category {
   const account = accounts.find((a) => a.id === op.account);
   if (!account || account.type === "platinum") return "skip"; // pink card purchases are hers, not the business's
+  if (op.spend) return op.spend;
   const own = accounts.find((a) => op.counterIban !== undefined && a.iban === op.counterIban);
   if (own) return own.type === "platinum" && op.amount < 0 ? "self" : "skip"; // FOP ⇄ white is not money moving anywhere
   if (EXCHANGE.test(op.description)) return "skip";

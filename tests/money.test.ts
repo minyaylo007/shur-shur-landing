@@ -226,6 +226,23 @@ describe("projects: who paid this month", () => {
     expect(summarize(left.ops, left.accounts, {}, "2026-11").income).toBe(0);
   });
 
+  it("a spending typed in by hand lands in «Пішло» under its category, not in «Прийшло», and survives removing a project", () => {
+    let b = apply(book(), { type: "entry.add", entry: { date: "2026-11-12", amount: 6_000_00, currency: "UAH", projects: ["b"], cash: true } }, id);
+    b = apply(b, { type: "entry.add", entry: { date: "2026-11-13", amount: 1_500_00, currency: "UAH", projects: [], cash: false, spend: "ads" } }, id);
+    const { ops, accounts: all } = everything(b, [], accounts);
+    const m = summarize(ops, all, b.rules, "2026-11");
+    expect(m.income).toBe(6_000_00);
+    expect(m.by.ads).toBe(1_500_00);
+    expect(m.spent).toBe(1_500_00);
+    const before = everything(apply(book(), { type: "entry.add", entry: { date: "2026-11-12", amount: 6_000_00, currency: "UAH", projects: ["b"], cash: true } }, id), [], accounts);
+    expect(summarize(before.ops, before.accounts, {}, "2026-11").left - m.left).toBe(1_500_00);
+    expect(projectsMonth(b, ops, all, "2026-11").toSort).toEqual([]);
+    expect(apply(b, { type: "project.remove", id: "b" }, id).entries).toHaveLength(1);
+    // income still needs a project; a spending is hryvnias, with no project
+    expect(() => apply(b, { type: "entry.add", entry: { date: "2026-11-13", amount: 1_00, currency: "UAH", projects: [], cash: true } }, id)).toThrow("no_project");
+    expect(() => apply(b, { type: "entry.add", entry: { date: "2026-11-13", amount: 1_00, currency: "USD", projects: [], cash: false, spend: "other" } }, id)).toThrow("invalid");
+  });
+
   it("a pause covers its months only; «до» is the month it pays again", () => {
     const z = book().projects[3];
     expect(paused(z, "2026-09")).toBe(false);

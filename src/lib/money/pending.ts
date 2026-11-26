@@ -43,6 +43,7 @@ export const retryable = (status: number) => status === 409 || status >= 500 || 
 /** The server's answer code → what Sasha reads. A refusal says why; only a dead store says «ще раз». */
 export function problemText(error: string, status: number): string {
   if (error === "unknown_project") return "Такого проекту вже немає — онови сторінку.";
+  if (error === "no_project") return "Вибери, за який проект прийшли гроші.";
   if (error === "invalid" || error === "bad_request") return "Запис не пройшов перевірку: глянь суму, дату і що вибрано.";
   if (status === 409) return "Не збереглось — хтось змінив дані тієї ж миті. Введене на місці.";
   return "Не збереглось — сховище не відповіло. Введене на місці.";

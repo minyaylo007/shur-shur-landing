@@ -9,7 +9,8 @@ import { classify, monthOf, SPENDS, type Account, type Operation, type Plan, typ
  *  - the payout plan; remembered recipients (where money went);
  *  - remembered payers (who pays for which projects): the money comes from
  *    some FOP, not under the project's name, and the FOP changes;
- *  - what she typed in by hand: cash, or a bank payment while no bank key.
+ *  - what she typed in by hand: cash, or a bank payment while no bank key;
+ *    and a spending the bank does not show (cash out), straight into its category.
  *
  * Simplicity rule: a project is paid in a month when at least one incoming
  * payment is put on it. Sums are not reconciled, dollars are not converted.
@@ -41,8 +42,11 @@ const entryFields = {
   date,
   amount: minor.min(1),
   currency: z.enum(CURRENCIES),
-  projects: z.array(id).min(1).max(20),
+  /** income: the projects it is for (at least one); a spending has none */
+  projects: z.array(id).max(20),
   cash: z.boolean(),
+  /** set → this is money that WENT, into this category (hryvnias only) */
+  spend: z.enum(SPENDS).optional(),
 };
 const entrySchema = z.object({ id, ...entryFields });
 export type Entry = z.infer<typeof entrySchema>;
@@ -108,11 +112,15 @@ export function apply(book: Book, action: Action, newId: () => string): Book {
         projects: book.projects.filter((p) => p.id !== action.id),
         plan: book.plan.map((r) => (r.project === action.id ? { ...r, project: undefined } : r)),
         payers: Object.fromEntries(Object.entries(book.payers).map(([k, v]) => [k, { ...v, projects: drop(v.projects) }]).filter(([, v]) => (v as Payer).projects.length)),
-        entries: book.entries.map((e) => ({ ...e, projects: drop(e.projects) })).filter((e) => e.projects.length),
+        entries: book.entries.map((e) => ({ ...e, projects: drop(e.projects) })).filter((e) => e.spend || e.projects.length),
       };
     }
-    case "entry.add":
-      return { ...book, entries: [...book.entries, { id: newId(), ...action.entry, projects: known(action.entry.projects) }] };
+    case "entry.add": {
+      const { spend, currency, projects } = action.entry;
+      if (spend && (currency !== "UAH" || projects.length)) throw new BookError("invalid");
+      if (!spend && !projects.length) throw new BookError("no_project");
+      return { ...book, entries: [...book.entries, { id: newId(), ...action.entry, projects: known(projects) }] };
+    }
     case "entry.remove":
       return { ...book, entries: book.entries.filter((e) => e.id !== action.id) };
     case "payer.assign": {
@@ -163,8 +171,9 @@ export function entryOps(book: Book): Operation[] {
     time: Date.UTC(Number(e.date.slice(0, 4)), Number(e.date.slice(5, 7)) - 1, Number(e.date.slice(8, 10)), 10) / 1000,
     description: e.cash ? "Готівка" : "Внесено вручну",
     mcc: 0,
-    amount: e.amount,
+    amount: e.spend ? -e.amount : e.amount,
     manual: e.cash ? "cash" : "bank",
+    ...(e.spend ? { spend: e.spend } : {}),
   }));
 }
 export const entryIdOf = (op: Operation) => (op.id.startsWith(ENTRY) ? op.id.slice(ENTRY.length) : undefined);

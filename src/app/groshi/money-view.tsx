@@ -29,6 +29,7 @@ import {
   type Operation,
   type Spend,
 } from "@/lib/money/ledger";
+import { AddMoney } from "./add-money";
 import { dropUnsaved, keepUnsaved, problemText, readUnsaved, retryable } from "@/lib/money/pending";
 
 /* One column, phone first. Big numbers, almost no words: «прийшло / пішло /
@@ -87,6 +88,9 @@ function Chips({ projects, chosen, onChange }: { projects: Project[]; chosen: st
   );
 }
 
+/** Projects shown before «Усі проекти»: the unpaid ones come first anyway. */
+const FIRST_PROJECTS = 5;
+
 export type BankState = "off" | "ok" | "stale";
 
 export function MoneyView({
@@ -123,11 +127,12 @@ export function MoneyView({
   }, [demo]);
 
   /** The demo changes its memory; the cabinet saves first and shows what was saved. */
-  async function run(action: Action): Promise<boolean> {
+  async function run(action: Action): Promise<Book | null> {
     setProblem("");
     if (demo) {
-      setBook((b) => apply(b, action, () => Math.random().toString(36).slice(2, 10)));
-      return true;
+      const next = apply(book, action, () => Math.random().toString(36).slice(2, 10));
+      setBook(next);
+      return next;
     }
     setBusy(true);
     let status = 0;
@@ -138,14 +143,14 @@ export function MoneyView({
       if (res.status === 401) {
         keepUnsaved(local(), action);
         window.location.href = "/cabinet/login";
-        return false;
+        return null;
       }
       const answer = await res.json();
       if (answer.ok) {
         setBook(answer.book);
         setUnsaved(null);
         dropUnsaved(local());
-        return true;
+        return answer.book as Book;
       }
       error = String(answer.error ?? "");
     } catch {
@@ -161,13 +166,14 @@ export function MoneyView({
       setUnsaved(null);
       dropUnsaved(local());
     }
-    return false;
+    return null;
   }
 
   const { ops, accounts } = useMemo(() => everything(book, bankOps, bankAccounts), [book, bankOps, bankAccounts]);
   const current = monthOf(now);
   const months = useMemo(() => [...new Set([...monthsOf(ops), current])].sort(), [ops, current]);
   const [month, setMonth] = useState(current);
+  const [allProjects, setAllProjects] = useState(false);
   const plan = ledgerPlan(book);
   const of = projectsOf(book);
   const names = new Map(book.projects.map((p) => [p.id, p.name]));
@@ -246,14 +252,30 @@ export function MoneyView({
             Заплатили <strong className="tabular-nums">{pm.paid}</strong> з <span className="tabular-nums">{pm.total}</span>
           </p>
           <ul className="mt-2 divide-y divide-paper-100">
-            {pm.rows.map((r) => (
+            {(allProjects ? pm.rows : pm.rows.slice(0, FIRST_PROJECTS)).map((r) => (
               <ProjectLine key={r.project.id} row={r} month={month} names={names} currencyOf={currencyOf} busy={busy} onRemove={(id) => run({ type: "entry.remove", id })} />
             ))}
           </ul>
+          {pm.rows.length > FIRST_PROJECTS ? (
+            <button type="button" onClick={() => setAllProjects(!allProjects)} className="mt-1 min-h-11 w-full text-sm font-medium text-cherry-deep">
+              {allProjects ? "Згорнути" : `Усі проекти (${pm.rows.length})`}
+            </button>
+          ) : null}
         </section>
       ) : null}
 
-      <AddIncome projects={book.projects} today={kyivIso(now)} busy={busy} onAdd={(entry) => run({ type: "entry.add", entry })} />
+      <AddMoney
+        projects={pm.rows.map((r) => r.project)}
+        today={kyivIso(now)}
+        yesterday={kyivIso(now - 86_400)}
+        busy={busy}
+        problem={problem}
+        onSave={async (entry) => {
+          const saved = await run({ type: "entry.add", entry });
+          return saved?.entries.at(-1)?.id ?? null;
+        }}
+        onUndo={async (id) => !!(await run({ type: "entry.remove", id }))}
+      />
 
       {pm.toSort.length && book.projects.length ? (
         <section className={card}>
@@ -378,6 +400,8 @@ export function MoneyView({
       ) : null}
 
       <Settings book={book} busy={busy} run={run} />
+      {/* room under the floating «＋ Внести» */}
+      <div className="h-20" aria-hidden />
     </div>
   );
 }
@@ -478,70 +502,9 @@ function SortIncome({ op, money: sum, projects, busy, onDone }: { op: Operation;
   );
 }
 
-function AddIncome({ projects, today, busy, onAdd }: { projects: Project[]; today: string; busy: boolean; onAdd: (e: { date: string; amount: number; currency: Currency; projects: string[]; cash: boolean }) => Promise<boolean> }) {
-  const [open, setOpen] = useState(false);
-  const [sum, setSum] = useState("");
-  const [currency, setCurrency] = useState<Currency>("UAH");
-  const [cash, setCash] = useState(true);
-  const [chosen, setChosen] = useState<string[]>([]);
-  const [date, setDate] = useState(today);
-  const amount = toMinor(sum);
-  const ok = amount > 0 && chosen.length > 0 && /^\d{4}-\d{2}-\d{2}$/.test(date);
-
-  if (!projects.length) return null;
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} className="w-full rounded-2xl border-2 border-dashed border-paper-200 py-3 font-semibold text-cherry-deep">
-        + Додати прихід
-        <span className="block text-xs font-normal text-ink-500">готівка або на рахунок</span>
-      </button>
-    );
-  }
-  return (
-    <form
-      className={`${card} space-y-3`}
-      onSubmit={async (e) => {
-        e.preventDefault();
-        if (!ok) return;
-        if (await onAdd({ date, amount, currency, projects: chosen, cash })) {
-          setSum("");
-          setChosen([]);
-          setOpen(false);
-        }
-      }}
-    >
-      <h2 className={eyebrow}>Новий прихід</h2>
-      <div className="flex gap-2">
-        <button type="button" aria-pressed={cash} onClick={() => setCash(true)} className={chip(cash)}>
-          💵 Готівка
-        </button>
-        <button type="button" aria-pressed={!cash} onClick={() => setCash(false)} className={chip(!cash)}>
-          На рахунок
-        </button>
-      </div>
-      <div className="flex gap-2">
-        <input inputMode="decimal" aria-label="Сума" placeholder="Сума" value={sum} onChange={(e) => setSum(e.target.value)} className={input} />
-        <button type="button" aria-label="Валюта" onClick={() => setCurrency(currency === "UAH" ? "USD" : "UAH")} className={`${chip(false)} shrink-0`}>
-          {currency === "UAH" ? "грн" : "$"}
-        </button>
-      </div>
-      <Chips projects={projects} chosen={chosen} onChange={setChosen} />
-      <input type="date" aria-label="Дата" value={date} onChange={(e) => setDate(e.target.value)} className={input} />
-      <div className="flex gap-2">
-        <button type="submit" disabled={busy || !ok} className={primary}>
-          Додати
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="px-3 text-sm text-ink-500">
-          Скасувати
-        </button>
-      </div>
-    </form>
-  );
-}
-
 /* ---------- the two settings ---------- */
 
-function Settings({ book, busy, run }: { book: Book; busy: boolean; run: (a: Action) => Promise<boolean> }) {
+function Settings({ book, busy, run }: { book: Book; busy: boolean; run: (a: Action) => Promise<unknown> }) {
   return (
     <details className={card} open={!book.projects.length}>
       <summary className="cursor-pointer font-medium">Налаштування: проекти й виплати</summary>
@@ -553,7 +516,7 @@ function Settings({ book, busy, run }: { book: Book; busy: boolean; run: (a: Act
 
 const emptyProject = { name: "", sum: "", currency: "UAH" as Currency, pausedFrom: "", pausedUntil: "" };
 
-function ProjectsEditor({ projects, busy, run }: { projects: Project[]; busy: boolean; run: (a: Action) => Promise<boolean> }) {
+function ProjectsEditor({ projects, busy, run }: { projects: Project[]; busy: boolean; run: (a: Action) => Promise<unknown> }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [f, setF] = useState(emptyProject);
   const amount = toMinor(f.sum);
@@ -647,7 +610,7 @@ function ProjectsEditor({ projects, busy, run }: { projects: Project[]; busy: bo
 
 const emptyRow = { name: "", recipient: "", sum: "", day: "", project: "" };
 
-function PlanEditor({ book, busy, run }: { book: Book; busy: boolean; run: (a: Action) => Promise<boolean> }) {
+function PlanEditor({ book, busy, run }: { book: Book; busy: boolean; run: (a: Action) => Promise<unknown> }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [f, setF] = useState(emptyRow);
   const amount = toMinor(f.sum);
