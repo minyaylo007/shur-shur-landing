@@ -51,8 +51,28 @@ export interface Rule {
 }
 export type Rules = Record<string, Rule>;
 
+/** The bank's words around a person's name in a card transfer. */
+const TRANSFER_WORDS = /^(?:переказ(?:\s+(?:на\s+картку|на\s+карту|від|для|з\s+картки))?|поповнення|від|для|кому|отримувач)\s*[:\-–—]?\s*/iu;
+/** A card number, whole or masked: «4441 **** **** 1234», «*1234», «(…1234)». */
+const CARD = /\(?\s*(?:\d{4}[\s*•x]*)?[*•…]+[\s*•x\d]*\d{2,4}\s*\)?/giu;
+
+/**
+ * One person = one key, whatever the bank wrapped the name in this time:
+ * «Переказ: Маша Д.», «маша д. *1234», «МАША  Д.» → «маша д.». IBAN first, then
+ * the name, then the description — each normalized the same way.
+ */
+export function normalizeRecipient(text: string): string {
+  let t = text.normalize("NFC").toLowerCase().replace(/[\u00ab\u00bb\u0022\u0027\u0060\u2019]/g, "").replace(CARD, " ");
+  for (let i = 0; i < 3 && TRANSFER_WORDS.test(t.trim()); i++) t = t.trim().replace(TRANSFER_WORDS, "");
+  t = t.replace(/\s+/g, " ").trim();
+  return t || text.trim().toLowerCase();
+}
 /** The recipient an operation is remembered by: IBAN first, then name, then the bank's description. */
-export const recipientKey = (op: Operation) => op.counterIban ?? op.counterName ?? op.description;
+export const recipientKey = (op: Operation) => normalizeRecipient(op.counterIban ?? op.counterName ?? op.description);
+/** How rules were keyed before 26.11.2026 — still read, so nothing Sasha sorted is lost. */
+const legacyKey = (op: Operation) => op.counterIban ?? op.counterName ?? op.description;
+/** The remembered decision for this recipient, by today's key or the old one. */
+export const ruleOf = (op: Operation, rules: Rules): Rule | undefined => rules[recipientKey(op)] ?? rules[legacyKey(op)];
 export const recipientName = (op: Operation) => op.counterName ?? op.description;
 
 const TAX = /ДПС|казнач|ЄСВ|єдиний внесок|єдиний податок|військовий збір/i;
@@ -71,7 +91,7 @@ export function classify(op: Operation, accounts: Account[], rules: Rules, plan:
   if (EXCHANGE.test(op.description)) return "skip";
   if (op.amount > 0) return account.type === "fop" ? "income" : "skip";
   if (planRowOf(op, accounts, plan)) return "team";
-  const rule = rules[recipientKey(op)];
+  const rule = ruleOf(op, rules);
   if (rule) return rule.category;
   if (TAX.test(op.description) || TAX.test(op.counterName ?? "")) return "taxes";
   if (ADS_MCC.has(op.mcc)) return "ads";
@@ -128,7 +148,7 @@ export function planRowOf(op: Operation, accounts: Account[], plan: Plan): PlanR
   const [y, m, d] = kyivDate(op.time);
   const today = dayNumber(y, m, d);
   return plan.find((row) => {
-    if (row.recipient !== recipientKey(op) || row.amount !== -op.amount) return false;
+    if (normalizeRecipient(row.recipient) !== recipientKey(op) || row.amount !== -op.amount) return false;
     // the planned date this month, last month and next month — a payout on the 30th may be the 2nd's
     return [-1, 0, 1].some((shift) => {
       const pm = ((m - 1 + shift + 12) % 12) + 1;
@@ -306,7 +326,7 @@ export function summarize(ops: Operation[], accounts: Account[], rules: Rules, m
     } else if (c !== "skip") {
       by[c] += sum;
       if (c === "team") {
-        const name = planRowOf(op, accounts, plan)?.name ?? rules[recipientKey(op)]?.name ?? recipientName(op);
+        const name = planRowOf(op, accounts, plan)?.name ?? ruleOf(op, rules)?.name ?? recipientName(op);
         team.set(name, (team.get(name) ?? 0) + sum);
       }
     }

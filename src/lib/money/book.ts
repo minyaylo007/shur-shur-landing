@@ -57,15 +57,15 @@ const planFields = {
 };
 const planSchema = z.object({ id, ...planFields });
 
-const payerSchema = z.object({ name: z.string().max(160), projects: z.array(id).min(1).max(20) });
+const payerSchema = z.object({ name: z.string().max(300), projects: z.array(id).min(1).max(20) });
 export type Payer = z.infer<typeof payerSchema>;
 
 export const bookSchema = z.object({
   version: z.literal(1),
   projects: z.array(projectSchema).max(200),
   plan: z.array(planSchema).max(100),
-  rules: z.record(z.string().max(200), z.object({ category: z.enum(SPENDS), name: z.string().max(160) })),
-  payers: z.record(z.string().max(200), payerSchema),
+  rules: z.record(z.string().max(300), z.object({ category: z.enum(SPENDS), name: z.string().max(300) })),
+  payers: z.record(z.string().max(300), payerSchema),
   entries: z.array(entrySchema).max(5000),
 });
 export type Book = z.infer<typeof bookSchema>;
@@ -79,8 +79,8 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("project.remove"), id }),
   z.object({ type: z.literal("entry.add"), entry: z.object(entryFields) }),
   z.object({ type: z.literal("entry.remove"), id }),
-  z.object({ type: z.literal("payer.assign"), keys: z.array(z.string().min(1).max(200)).min(1).max(3), name: z.string().max(160), projects: z.array(id).min(1).max(20) }),
-  z.object({ type: z.literal("rule.set"), key: z.string().min(1).max(200), name: z.string().max(160), category: z.enum(SPENDS) }),
+  z.object({ type: z.literal("payer.assign"), keys: z.array(z.string().min(1).max(300)).min(1).max(3), name: z.string().max(300), projects: z.array(id).min(1).max(20) }),
+  z.object({ type: z.literal("rule.set"), key: z.string().min(1).max(300), name: z.string().max(300), category: z.enum(SPENDS) }),
   z.object({ type: z.literal("plan.save"), row: z.object({ id: id.optional(), ...planFields }) }),
   z.object({ type: z.literal("plan.remove"), id }),
 ]);

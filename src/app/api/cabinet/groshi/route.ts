@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { isSignedIn, SESSION_COOKIE } from "@/lib/cabinet/auth";
+import { ZodError } from "zod";
+import { StoreConflictError } from "@/lib/cabinet/store";
 import { actionSchema, BookError } from "@/lib/money/book";
 import { act } from "@/lib/money/store";
 
@@ -35,14 +37,18 @@ export async function POST(request: Request) {
     return fail("bad_request", 400);
   }
   const action = actionSchema.safeParse(body);
-  if (!action.success) return fail("bad_request", 400);
+  if (!action.success) return fail("invalid", 400);
 
   try {
     const book = await act(action.data);
     return NextResponse.json({ ok: true, book }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    // Her input or the book refused it: say why (400), never «try in a minute».
     if (error instanceof BookError) return fail(error.message, 400);
+    if (error instanceof ZodError) return fail("invalid", 400);
     console.error(`[groshi] ${action.data.type} failed: ${error instanceof Error ? error.name : "unknown"}`);
+    // The book kept moving under us three times: the same tap again will do.
+    if (error instanceof StoreConflictError) return fail("conflict", 409);
     return fail("store_unavailable", 503);
   }
 }

@@ -17,10 +17,6 @@ on:
       since:
         description: окно
         default: 33m
-      diag:
-        description: temporary groshi diag
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -39,20 +35,6 @@ jobs:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
-      - if: ${{ inputs.diag }}
-        uses: actions/checkout@v4
-      - if: ${{ inputs.diag }}
-        name: Groshi diag (temporary, read-only, counts only)
-        run: |
-          mkdir -p "$RUNNER_TEMP/d" && cp ops/groshi-diag.mjs "$RUNNER_TEMP/d/" && cd "$RUNNER_TEMP/d"
-          npm init -y >/dev/null && npm i --silent @vercel/blob@2.8.2 >/dev/null
-          npx --yes vercel@65.2.0 link --yes --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" >/dev/null 2>&1 || echo "link failed"
-          npx --yes vercel@65.2.0 env pull .env.prod --environment production --yes --token "$VERCEL_TOKEN" --scope "$VERCEL_ORG_ID" >/dev/null 2>&1 || echo "env pull failed"
-          BLOB_READ_WRITE_TOKEN="$(grep '^BLOB_READ_WRITE_TOKEN=' .env.prod | cut -d= -f2- | tr -d '"')"
-          export BLOB_READ_WRITE_TOKEN
-          rm -f .env.prod
-          test -n "$BLOB_READ_WRITE_TOKEN" || echo "no blob token"
-          node groshi-diag.mjs
       # `vercel logs` с --json/--since/--environment — CLI 65; версия закреплена.
       - name: Ошибки функций за 33 мин
         run: |

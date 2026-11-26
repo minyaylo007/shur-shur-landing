@@ -53,6 +53,23 @@ describe("classify", () => {
   });
 });
 
+describe("a recipient is sorted ONCE (owner 26.11: «Маша Данилюк — команда», not asked 50 times)", () => {
+  it("the same person under the bank's other wrappings is already in her category", () => {
+    const first = op({ account: WHITE.id, amount: -3_000_00, description: "Маша Данилюк" });
+    const rules = remember({}, first, "team");
+    for (const description of ["Переказ: Маша Данилюк", "МАША  ДАНИЛЮК", "Маша Данилюк *4321", "Переказ на картку «Маша Данилюк» 5375 **** **** 4321", "Від: маша данилюк"]) {
+      expect(classify(op({ account: WHITE.id, amount: -5_000_00, description, time: nov(20) }), accounts, rules), description).toBe("team");
+    }
+    // another person stays a question
+    expect(classify(op({ account: WHITE.id, amount: -5_000_00, description: "Маша Іваненко" }), accounts, rules)).toBe("sort");
+  });
+
+  it("rules saved under the old raw key are still read", () => {
+    const old = { "Владислава Б": { category: "team" as const, name: "Владислава Б" } };
+    expect(classify(op({ account: WHITE.id, amount: -1_000_00, description: "Владислава Б" }), accounts, old)).toBe("team");
+  });
+});
+
 describe("the month", () => {
   it("own transfers and the pink card never reach «Пішло»; «Собі» stays inside «Залишилось»", () => {
     const ops = [
