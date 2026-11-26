@@ -39,6 +39,7 @@ import {
   type Spend,
 } from "@/lib/money/ledger";
 import { AddMoney } from "./add-money";
+import { NewOrOther } from "./new-or-other";
 import { dropUnsaved, keepUnsaved, problemText, readUnsaved, retryable } from "@/lib/money/pending";
 
 /* One column, phone first, the way monobank does it. On top the month and
@@ -452,7 +453,7 @@ export function MoneyView({
             {pm.rows.map((r) => (
               <ProjectLine key={r.project.id} row={r} month={month} names={names} currencyOf={currencyOf} busy={busy} onRemove={(id) => run({ type: "entry.remove", id })} change={change} />
             ))}
-            {pm.other.length ? <OtherLine ops={pm.other} currencyOf={currencyOf} busy={busy} change={change} /> : null}
+            {pm.other.length ? <OtherLine ops={pm.other} month={month} currencyOf={currencyOf} busy={busy} change={change} onRemove={(id) => run({ type: "entry.remove", id })} /> : null}
           </ul>
         </Group>
       ) : null}
@@ -509,11 +510,12 @@ export function MoneyView({
         yesterday={kyivIso(now - 86_400)}
         busy={busy}
         problem={problem}
-        onSave={async (entry) => {
-          const saved = await run({ type: "entry.add", entry });
-          return saved?.entries.at(-1)?.id ?? null;
+        onSave={async ({ create, other, ...entry }) => {
+          const saved = await run({ type: "entry.add", entry, ...(other ? { other } : {}), ...(create ? { create: { name: create } } : {}) });
+          if (!saved) return null;
+          return { id: saved.entries.at(-1)!.id, created: create ? saved.projects.at(-1)?.id : undefined };
         }}
-        onUndo={async (id) => !!(await run({ type: "entry.remove", id }))}
+        onUndo={async ({ id, created }) => !!(await run({ type: "entry.remove", id, ...(created ? { drop: created } : {}) }))}
       />
 
       <Settings book={book} busy={busy} run={run} />
@@ -609,25 +611,12 @@ function SortIncome({
   onCancel?: () => void;
 }) {
   const [chosen, setChosen] = useState<string[]>(initial);
-  const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState("");
-  const create = adding ? title.trim() : "";
+  const [title, setTitle] = useState<string | null>(null);
+  const create = title?.trim() ?? "";
   return (
     <div>
       <Chips projects={projects} chosen={chosen} onChange={setChosen} />
-      <div className="mt-2 flex flex-wrap gap-2">
-        {adding ? null : (
-          <button type="button" onClick={() => setAdding(true)} className={chip(false)}>
-            + Новий проект
-          </button>
-        )}
-        <button type="button" disabled={busy} onClick={() => onDone([])} className={chip(false)}>
-          Інше
-        </button>
-      </div>
-      {adding ? (
-        <input autoFocus aria-label="Назва" placeholder="Назва нового проекту" value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} className={`mt-2 ${input}`} />
-      ) : null}
+      <NewOrOther title={title} onTitle={setTitle} onOther={() => onDone([])} busy={busy} button={chip(false)} field={input} />
       <div className="mt-3 flex gap-2">
         <button type="button" disabled={busy || (!chosen.length && !create)} onClick={() => onDone(chosen, create || undefined)} className={primary}>
           Готово
@@ -669,20 +658,50 @@ function ChangeForm({ op, change, busy }: { op: Operation; change: Change; busy:
 }
 
 /** Incoming money Sasha put into «Інше»: in «Прийшло», for no project. */
-function OtherLine({ ops, currencyOf, busy, change }: { ops: Operation[]; currencyOf: (op: Operation) => Currency; busy: boolean; change: Change }) {
+function OtherLine({
+  ops,
+  month,
+  currencyOf,
+  busy,
+  change,
+  onRemove,
+}: {
+  ops: Operation[];
+  month: string;
+  currencyOf: (op: Operation) => Currency;
+  busy: boolean;
+  change: Change;
+  onRemove: (entryId: string) => void;
+}) {
   const open = ops.find((op) => change.open === `other:${op.id}`);
   return (
     <li className="py-2">
       <div className="flex items-start justify-between gap-3">
         <span className="min-w-0 text-ink-700">Інше</span>
         <span className="shrink-0 text-right">
-          {ops.map((op) => (
-            <span key={op.id} className="block tabular-nums">
-              {money(op.amount, currencyOf(op))}
-              <span className="ml-1 text-xs text-ink-500">{opDay(op)}</span>
-              <ChangeButton id={`other:${op.id}`} change={change} busy={busy} />
-            </span>
-          ))}
+          {ops.map((op) => {
+            // typed in as «Інше»: removed like any typed-in entry; a bank payment is re-sorted with «Змінити»
+            const entry = entryIdOf(op);
+            return (
+              <span key={op.id} className="block tabular-nums">
+                {op.manual === "cash" ? "💵 " : ""}
+                {money(op.amount, currencyOf(op))}
+                <span className="ml-1 text-xs text-ink-500">{opDay(op)}</span>
+                {entry && monthOf(op.time) === month ? (
+                  <button
+                    type="button"
+                    aria-label="Видалити запис"
+                    disabled={busy}
+                    onClick={() => window.confirm("Видалити цей запис?") && onRemove(entry)}
+                    className="ml-1 px-1 text-ink-500 hover:text-cherry-juice"
+                  >
+                    ×
+                  </button>
+                ) : null}
+                {entry ? null : <ChangeButton id={`other:${op.id}`} change={change} busy={busy} />}
+              </span>
+            );
+          })}
         </span>
       </div>
       {open ? <ChangeForm key={open.id} op={open} change={change} busy={busy} /> : null}

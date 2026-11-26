@@ -25,10 +25,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#4a0d14", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function MoneyLayout({ children }: { children: React.ReactNode }) {
+  // bottom padding: the floating «+ Внести» (3.5rem + 1rem) never covers the end of the page
   return (
     <html lang="uk" className={latinFontClass}>
       <body className="cabinet min-h-screen font-body antialiased">
-        <main className="mx-auto max-w-md px-4 pb-16 pt-[max(1rem,env(safe-area-inset-top))]">{children}</main>
+        <main className="mx-auto max-w-md px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">{children}</main>
       </body>
     </html>
   );
