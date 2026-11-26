@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { isClientId } from "@/lib/client/clients";
+import { site } from "@/lib/site";
 
 const MESSAGES: Record<string, string> = {
   bad: "Пароль не підійшов.",
@@ -38,7 +39,12 @@ export default async function ClientLogin({ params, searchParams }: { params: Pr
           Увійти
         </button>
       </form>
-      <p className="mt-6 text-sm text-ink-700">Забули пароль — напишіть нам, надішлемо нове посилання.</p>
+      <p className="mt-6 text-sm text-ink-700">
+        Забули пароль? Подзвоніть або напишіть:{" "}
+        <a href={site.phone.tel} className="font-medium text-cherry-700 underline underline-offset-4">
+          <span dir="ltr">{site.phone.display}</span>
+        </a>
+      </p>
     </div>
   );
 }
