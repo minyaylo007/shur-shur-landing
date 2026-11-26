@@ -815,6 +815,12 @@ describe("the free week", () => {
     const response = await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
     expect(response.headers.get("location")).toBe("https://pay.mbnk.biz/inv_1");
     expect(called("/invoice/create")[0].body).toMatchObject({ amount: 1500, ccy: 978 });
+    // The page opened, not paid yet: still «Оплата з» and «Оплатити», which takes her back to the same page.
+    const waiting = (await page(a.id, a.session)).html;
+    expect(waiting).toContain("Оплата з 27.11 — 15 € на місяць");
+    expect(waiting).toMatch(/<button[^>]*>Оплатити<\/button>/);
+    expect((await SUBSCRIBE(post("/api/client/subscribe", a.cookie))).headers.get("location")).toBe("https://pay.mbnk.biz/inv_1");
+    expect(called("/invoice/create")).toHaveLength(1);
     pay("inv_1", paidAt + 60_000);
     vi.setSystemTime(paidAt + 2 * 60_000);
     const html = (await page(a.id, a.session)).html;
