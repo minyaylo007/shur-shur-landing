@@ -144,7 +144,8 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
   // The free days (owner, 26.11.2026): payment starts at `freeUntil`, and it can
   // be paid ahead — the paid month then starts at `freeUntil`, the free days are
   // not lost (lib/billing/mono applyFirst). Nothing is closed either way.
-  if (isFree(client) && billing.status !== "active" && billing.status !== "pending") {
+  // A page opened and not paid (pending) is the same here: the button takes her back to it.
+  if (isFree(client) && billing.status !== "active" && access.state !== "paid") {
     const from = day(client.freeUntil).slice(0, 5);
     return (
       <section aria-label="Підписка" className={card}>
