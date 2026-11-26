@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *  - a webhook counts only with monobank's signature; a forged or unsigned
  *    one changes nothing; a rotated key is picked up;
  *  - the same webhook twice is applied once;
- *  - results are closed without a paid subscription and after the grace days;
+ *  - results are ALWAYS shown, paid or not (owner, 25.11.2026); the .csv
+ *    download answers only the cabinet's own client or the back office, and
+ *    carries nothing of the client (no phone);
  *  - one client can neither read nor write another client's cabinet;
  *  - a bot writes only into its own client's cabinet, with that client's key;
  *    a name, a username or a telegram id is refused, not stored;
@@ -37,7 +39,8 @@ const mono = await import("../src/lib/billing/mono");
 const { sealCard, chargeBlock, saveMonoToken } = await import("../src/lib/billing/settings");
 const { GET: CHARGE_RUN } = await import("../src/app/api/billing/charge/route");
 const { POST: WEBHOOK } = await import("../src/app/api/billing/mono/route");
-const { POST: UPLOAD } = await import("../src/app/api/client/upload/route");
+const { storeUpload } = await import("../src/lib/client/http");
+const { GET: EXPORT } = await import("../src/app/api/client/export/route");
 const { POST: INGEST } = await import("../src/app/api/client/ingest/route");
 const { POST: SUBSCRIBE } = await import("../src/app/api/client/subscribe/route");
 const { POST: CANCEL } = await import("../src/app/api/client/cancel/route");
@@ -213,6 +216,11 @@ async function page(id: string, session?: string): Promise<{ html: string; redir
   }
 }
 
+function download(id: string, cookie?: string): Promise<Response> {
+  return EXPORT(new Request(`https://shur-shur.com/api/client/export?id=${id}`, { headers: cookie ? { cookie } : {} }));
+}
+const file = (text: string, name = "r.csv") => new File([text], name);
+
 const table = { columns: ["Дата", "Ім'я"], rows: [["2026-11-17", "Олена Петренко"]] };
 
 beforeEach(() => {
@@ -351,15 +359,17 @@ describe("webhook repeat", () => {
   });
 });
 
-describe("results are closed without a paid subscription", () => {
-  it("no payment → the table is not rendered; a payment opens it", async () => {
+describe("results are always open — paid or not", () => {
+  it("no payment → the table is shown, with the subscribe button and the download", async () => {
     const a = await newClient("Кав'ярня");
     await saveResults(a.id, table, "upload");
 
-    const closed = await page(a.id, a.session);
-    expect(closed.html).toContain("Результати закрито");
-    expect(closed.html).not.toContain("Петренко");
-    expect(closed.html).toContain('action="/api/client/subscribe"');
+    const unpaid = await page(a.id, a.session);
+    expect(unpaid.html).toContain("Олена Петренко");
+    expect(unpaid.html).not.toContain("закрито");
+    expect(unpaid.html).toContain('action="/api/client/subscribe"');
+    expect(unpaid.html).toContain(`href="/api/client/export?id=${a.id}"`);
+    expect(unpaid.html).not.toContain("/api/client/upload");
 
     await subscribed(a.id, 2);
     const open = await page(a.id, a.session);
@@ -367,7 +377,7 @@ describe("results are closed without a paid subscription", () => {
     expect(open.html).toContain("Підписка активна");
   });
 
-  it("a failed charge: three days of grace after the paid month, then closed", async () => {
+  it("a failed charge: three days of grace after the paid month, then expired — the results stay shown", async () => {
     const a = await newClient("Кав'ярня");
     await saveResults(a.id, table, "upload");
     const client = await record(a.id);
@@ -385,11 +395,11 @@ describe("results are closed without a paid subscription", () => {
     expect((await at(9)).open).toBe(true);
     expect((await at(11)).open).toBe(false);
 
-    // And on the page itself.
+    // And on the page itself: expired billing, results still there.
     await subscribed(a.id, 40);
     const html = (await page(a.id, a.session)).html;
-    expect(html).toContain("Результати закрито");
-    expect(html).not.toContain("Петренко");
+    expect(html).toContain("Олена Петренко");
+    expect(html).not.toContain("закрито");
   });
 
   it("a month is a calendar month, the 31st does not skip one", () => {
@@ -413,23 +423,56 @@ describe("one client cannot reach another", () => {
     expect((await page(b.id, b.session)).html).toContain("Олена Петренко");
   });
 
-  it("an upload goes to the session's client even when the form names another", async () => {
+  it("the .csv download: own cabinet or the back office only; no session, another's or a forged one → 401", async () => {
     const a = await newClient("Кав'ярня");
     const b = await newClient("Салон");
     await saveResults(b.id, table, "upload");
-    const before = store.get(resultsKey(b.id))!.text;
 
-    const response = await UPLOAD(post("/api/client/upload", a.cookie, { id: b.id, file: new File(["x,y\n1,2\n"], "r.csv") }));
+    for (const cookie of [undefined, a.cookie, `${clients.CLIENT_COOKIE}=${a.session.replace(a.id, b.id)}`, `${clients.CLIENT_COOKIE}=${b.id}.9999999999.AAAA`, `${auth.SESSION_COOKIE}=${Math.floor(Date.now() / 1000) + 999}.forged`]) {
+      const refused = await download(b.id, cookie);
+      expect(refused.status).toBe(401);
+      expect(await refused.text()).toBe("");
+    }
+    expect((await download("not-an-id", a.cookie)).status).toBe(401);
 
-    expect(response.headers.get("location")).toBe(`https://shur-shur.com/client/${a.id}?u=ok`);
-    expect(store.get(resultsKey(b.id))!.text).toBe(before);
-    expect((await readResults(a.id))!.rows).toEqual([["1", "2"]]);
+    const own = await download(b.id, b.cookie);
+    expect(own.status).toBe(200);
+    expect(own.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    expect(own.headers.get("content-disposition")).toBe(`attachment; filename="shur-results-${b.id}.csv"`);
+    const bytes = new Uint8Array(await own.arrayBuffer());
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(new TextDecoder().decode(bytes)).toContain("Олена Петренко");
+
+    const sessionKey = "ab".repeat(32);
+    store.set(AUTH_KEY, { text: JSON.stringify({ password: { salt: "", hash: "" }, sessionKey, setup: null, failures: { since: 0, count: 0 } }), etag: "a" });
+    expect((await download(b.id, `${auth.SESSION_COOKIE}=${auth.makeSession(sessionKey)}`)).status).toBe(200);
   });
 
-  it("no session → upload, subscribe and cancel do nothing", async () => {
+  it("the .csv of an unpaid client: every attempt with its answers, and not the client's phone", async () => {
+    const made = await clients.createClient("Марина", false);
+    const done = await clients.completeClientSetup(made.client.id, made.token, PASSWORD, PASSWORD, Date.now(), "+380 (67) 123-45-67");
+    if (!done.ok) throw new Error("setup failed");
+    const id = made.client.id;
+    await subscribed(id, null);
+    const key = await botKey(id);
+    await INGEST(ingest(id, key, { attempts: [0, 1, 2].map((n) => attempt(n)) }));
+    expect((await mono.accessOf(await record(id))).open).toBe(false);
+
+    const response = await download(id, `${clients.CLIENT_COOKIE}=${done.session}`);
+    expect(response.status).toBe(200);
+    const text = (await response.text()).replace(/^\uFEFF/, "");
+    const lines = text.trim().split("\r\n");
+    expect(lines[0]).toBe("Дата (Київ),Тест,Бал,Макс. бал,Діапазон,Чи є у вас план продажів?,Хто веде фінанси?");
+    expect(lines).toHaveLength(4);
+    expect(text).toContain("5–8: є з чого почати");
+    expect(text).toContain("Я сам");
+    expect(text).not.toMatch(/380671234567|67.?123.?45.?67|Марина/);
+  });
+
+  it("no session → subscribe and cancel do nothing", async () => {
     const b = await newClient("Салон");
     await subscribed(b.id, 1);
-    for (const [route, path] of [[UPLOAD, "upload"], [SUBSCRIBE, "subscribe"], [CANCEL, "cancel"]] as const) {
+    for (const [route, path] of [[SUBSCRIBE, "subscribe"], [CANCEL, "cancel"]] as const) {
       const response = await route(post(`/api/client/${path}`, undefined, { id: b.id, file: new File(["x\n1\n"], "r.csv") }));
       expect(response.headers.get("location")).toBe("https://shur-shur.com/");
     }
@@ -608,18 +651,17 @@ describe("one client cannot reach another", () => {
     expect(store.has(attemptsKey(a.id))).toBe(false);
   });
 
-  it("an uploaded sheet with the bot's columns drops the person columns", async () => {
+  it("a sheet the back office uploads with the bot's columns drops the person columns", async () => {
     const a = await newClient("Кав'ярня");
     await subscribed(a.id, 1);
     const sheet = `finished_at,telegram id,username,имя,test,score,max_score,range_label,Питання 1\n2026-11-18 14:05:12,100000001,olena_p,Олена Петренко,Тест,7,12,5–8,Б\n`;
-    const response = await UPLOAD(post("/api/client/upload", a.cookie, { file: new File([sheet], "answers.csv") }));
-    expect(response.headers.get("location")).toContain("?u=ok");
+    expect(await storeUpload(a.id, file(sheet, "answers.csv"), "admin")).toBe("ok");
     const text = store.get(attemptsKey(a.id))!.text;
     expect(text).not.toMatch(/Петренко|olena_p|100000001/);
     const [one] = (await readAttempts(a.id))!.attempts;
     expect(one).toMatchObject({ test: "Тест", score: 7, max: 12, range: "5–8", answers: [{ q: "Питання 1", a: "Б" }] });
     // The same file again adds nothing.
-    await UPLOAD(post("/api/client/upload", a.cookie, { file: new File([sheet], "answers.csv") }));
+    await storeUpload(a.id, file(sheet, "answers.csv"), "admin");
     expect((await readAttempts(a.id))!.attempts).toHaveLength(1);
   });
 });
@@ -635,7 +677,7 @@ describe("personal data stays in the cabinet", () => {
     };
 
     const key = await botKey(a.id);
-    await keep(await UPLOAD(post("/api/client/upload", a.cookie, { file: new File([CSV], "Олена Петренко +380501112233.csv") })));
+    answers.push(await storeUpload(a.id, file(CSV, "Олена Петренко +380501112233.csv"), "admin"));
     // An answer is free text: a person may type anything into it.
     await keep(await INGEST(ingest(a.id, key, attempt(1, { answers: [{ q: "Ваш контакт?", a: "Петренко +380501112233 olena@example.com", points: 0 }] }))));
     // Refused pushes: an unknown field, a key that is itself the data, a cell too long, a wrong shape, a bad signature.
@@ -644,7 +686,7 @@ describe("personal data stays in the cabinet", () => {
     await keep(await INGEST(ingest(a.id, key, attempt(4, { test: `Петренко olena@example.com ${"x".repeat(600)}` }))));
     await keep(await INGEST(ingest(a.id, key, { attempts: [{ ...attempt(5), answers: "Петренко +380501112233" }] })));
     await keep(await INGEST(ingest(a.id, "wrong-key", attempt(6, { name: "Петренко" }))));
-    await keep(await UPLOAD(post("/api/client/upload", a.cookie, { file: new File(["PK\u0003\u0004 Петренко olena@example.com"], "broken.xlsx") })));
+    answers.push(await storeUpload(a.id, file("PK\u0003\u0004 Петренко olena@example.com", "broken.xlsx"), "admin"));
     const body = JSON.stringify({ invoiceId: "inv_first", payer: "Петренко", phone: "+380501112233" });
     await keep(await WEBHOOK(webhook(a.id, body, sign(bankKey, body))));
     await keep(await WEBHOOK(webhook(a.id, body, "bad")));
@@ -666,23 +708,19 @@ describe("personal data stays in the cabinet", () => {
   it("the page splits an uploaded table by day and counts it", async () => {
     const a = await newClient("Кав'ярня");
     await subscribed(a.id, 1);
-    await UPLOAD(post("/api/client/upload", a.cookie, { file: new File([CSV], "r.csv") }));
+    await storeUpload(a.id, file(CSV), "admin");
     const html = (await page(a.id, a.session)).html;
     expect(html).toContain("За днями");
     expect(html).toContain("17.11.2026");
     expect(html).toContain("18.11.2026");
   });
 
-  it("the bot's attempts become statistics; they are closed without a paid subscription too", async () => {
+  it("the bot's attempts become statistics — shown without a paid subscription too", async () => {
     const a = await newClient("Кав'ярня");
     const key = await botKey(a.id);
     await INGEST(ingest(a.id, key, { attempts: [0, 1, 2, 3, 4, 5].map((n) => attempt(n)) }));
+    await subscribed(a.id, null);
 
-    const closed = (await page(a.id, a.session)).html;
-    expect(closed).toContain("Результати закрито");
-    expect(closed).not.toContain("Ваш бізнес готовий до зростання?");
-
-    await subscribed(a.id, 1);
     const html = (await page(a.id, a.session)).html;
     expect(html).toContain("Ваш бізнес готовий до зростання?");
     expect(html).toMatch(/Проходжень: <strong[^>]*>6<\/strong>/);
