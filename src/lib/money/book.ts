@@ -61,7 +61,8 @@ const planFields = {
 };
 const planSchema = z.object({ id, ...planFields });
 
-const payerSchema = z.object({ name: z.string().max(300), projects: z.array(id).min(1).max(20) });
+/** A remembered payer: the projects it pays for; none — «Інше» (income, but for no project). */
+const payerSchema = z.object({ name: z.string().max(300), projects: z.array(id).max(20) });
 export type Payer = z.infer<typeof payerSchema>;
 
 export const bookSchema = z.object({
@@ -83,7 +84,21 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("project.remove"), id }),
   z.object({ type: z.literal("entry.add"), entry: z.object(entryFields) }),
   z.object({ type: z.literal("entry.remove"), id }),
-  z.object({ type: z.literal("payer.assign"), keys: z.array(z.string().min(1).max(300)).min(1).max(3), name: z.string().max(300), projects: z.array(id).min(1).max(20) }),
+  /** projects: none and nothing created — «Інше»; `create` makes a project (sum 0) right from «Розібрати» and adds it */
+  z.object({
+    type: z.literal("payer.assign"),
+    keys: z.array(z.string().min(1).max(300)).min(1).max(3),
+    name: z.string().max(300),
+    projects: z.array(id).max(20),
+    create: z.object({ name, currency: z.enum(CURRENCIES) }).optional(),
+  }),
+  /** «Скасувати» right after sorting or changing an incoming payment: each key back as it was (null — a question
+   *  again), and the project that tap created, if any, removed */
+  z.object({
+    type: z.literal("payer.restore"),
+    payers: z.array(z.object({ key: z.string().min(1).max(300), payer: payerSchema.nullable() })).min(1).max(3),
+    drop: id.optional(),
+  }),
   z.object({ type: z.literal("rule.set"), key: z.string().min(1).max(300), name: z.string().max(300), category: z.enum(SPENDS) }),
   /** «Скасувати» right after a tap: the recipient is a question again */
   z.object({ type: z.literal("rule.remove"), key: z.string().min(1).max(300) }),
@@ -113,7 +128,12 @@ export function apply(book: Book, action: Action, newId: () => string): Book {
         ...book,
         projects: book.projects.filter((p) => p.id !== action.id),
         plan: book.plan.map((r) => (r.project === action.id ? { ...r, project: undefined } : r)),
-        payers: Object.fromEntries(Object.entries(book.payers).map(([k, v]) => [k, { ...v, projects: drop(v.projects) }]).filter(([, v]) => (v as Payer).projects.length)),
+        // a payer left without projects by this removal is a question again; one in «Інше» stays there
+        payers: Object.fromEntries(
+          Object.entries(book.payers)
+            .filter(([, v]) => !v.projects.includes(action.id) || v.projects.length > 1)
+            .map(([k, v]) => [k, { ...v, projects: drop(v.projects) }]),
+        ),
         entries: book.entries.map((e) => ({ ...e, projects: drop(e.projects) })).filter((e) => e.spend || e.projects.length),
       };
     }
@@ -126,8 +146,24 @@ export function apply(book: Book, action: Action, newId: () => string): Book {
     case "entry.remove":
       return { ...book, entries: book.entries.filter((e) => e.id !== action.id) };
     case "payer.assign": {
-      const payer = { name: action.name, projects: known(action.projects) };
-      return { ...book, payers: { ...book.payers, ...Object.fromEntries(action.keys.map((k) => [k, payer])) } };
+      const projects = known(action.projects);
+      let next = book;
+      if (action.create) {
+        const created = { id: newId(), name: action.create.name, amount: 0, currency: action.create.currency };
+        next = { ...book, projects: [...book.projects, created] };
+        projects.push(created.id);
+      }
+      const payer = { name: action.name, projects };
+      return { ...next, payers: { ...next.payers, ...Object.fromEntries(action.keys.map((k) => [k, payer])) } };
+    }
+    case "payer.restore": {
+      const base = action.drop ? apply(book, { type: "project.remove", id: action.drop }, newId) : book;
+      const payers = { ...base.payers };
+      for (const { key, payer } of action.payers) {
+        if (!payer) delete payers[key];
+        else payers[key] = { name: payer.name, projects: payer.projects.filter((p) => base.projects.some((x) => x.id === p)) };
+      }
+      return { ...base, payers };
     }
     case "rule.set":
       return { ...book, rules: { ...book.rules, [action.key]: { category: action.category, name: action.name } } };
@@ -185,11 +221,17 @@ export function entryOps(book: Book): Operation[] {
 }
 export const entryIdOf = (op: Operation) => (op.id.startsWith(ENTRY) ? op.id.slice(ENTRY.length) : undefined);
 
+/** The remembered payer of an incoming payment, if any (by its first known key). */
+export const payerOf = (book: Book, op: Operation): Payer | undefined => payerKeys(op).map((k) => book.payers[k]).find(Boolean);
+
 /** Which projects an incoming payment is for: typed in with it, or the remembered payer's. */
 export function projectsOf(book: Book): ProjectsOf {
   const typed = new Map(book.entries.map((e) => [ENTRY + e.id, e.projects]));
-  return (op) => typed.get(op.id) ?? payerKeys(op).map((k) => book.payers[k]?.projects).find(Boolean) ?? [];
+  return (op) => typed.get(op.id) ?? payerOf(book, op)?.projects ?? [];
 }
+
+/** Sasha has said what this incoming payment is: typed in, or its payer is remembered (a project or «Інше»). */
+export const sortedIncome = (book: Book, op: Operation) => !!entryIdOf(op) || !!payerOf(book, op);
 
 /** Bank statement + typed-in payments, and the accounts that hold them. */
 export function everything(book: Book, bankOps: Operation[], bankAccounts: Account[]) {
@@ -214,8 +256,10 @@ export interface ProjectRow {
   payments: Payment[];
 }
 export interface ProjectsMonth {
-  /** paying projects first (unpaid on top), the paused ones last */
+  /** paying projects first (unpaid on top), the paused ones last; a project with sum 0 is owed nothing */
   rows: ProjectRow[];
+  /** incoming payments Sasha put into «Інше»: income, for no project */
+  other: Operation[];
   paid: number;
   total: number;
   /** incoming payments nobody has said what they are for */
@@ -230,12 +274,15 @@ export function projectsMonth(book: Book, ops: Operation[], accounts: Account[],
     paused: paused(project, m),
     payments: incoming.filter((o) => of(o).includes(project.id)).map((op) => ({ op, with: of(op).filter((p) => p !== project.id) })),
   }));
-  const active = rows.filter((r) => !r.paused);
-  const rank = (r: ProjectRow) => (r.paused ? 2 : r.payments.length ? 1 : 0);
+  // a project with sum 0 (made right from «Розібрати») is not a debt until Sasha gives it a sum
+  const owed = rows.filter((r) => !r.paused && r.project.amount > 0);
+  const rank = (r: ProjectRow) => (r.paused ? 3 : r.payments.length ? 1 : r.project.amount > 0 ? 0 : 2);
+  const newest = (a: Operation, b: Operation) => b.time - a.time;
   return {
     rows: rows.sort((a, b) => rank(a) - rank(b)),
-    paid: active.filter((r) => r.payments.length).length,
-    total: active.length,
-    toSort: incoming.filter((o) => of(o).length === 0).sort((a, b) => b.time - a.time),
+    other: incoming.filter((o) => sortedIncome(book, o) && of(o).length === 0).sort(newest),
+    paid: owed.filter((r) => r.payments.length).length,
+    total: owed.length,
+    toSort: incoming.filter((o) => !sortedIncome(book, o)).sort(newest),
   };
 }

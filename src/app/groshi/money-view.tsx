@@ -13,6 +13,7 @@ import {
   type Action,
   type Book,
   type Currency,
+  type Payer,
   type Project,
   type ProjectRow,
 } from "@/lib/money/book";
@@ -175,12 +176,9 @@ function Chips({ projects, chosen, onChange }: { projects: Project[]; chosen: st
 export type BankState = "off" | "ok" | "stale";
 
 /** What the last tap changed, so «Скасувати» can put the book back exactly. */
-interface LastPick {
-  key: string;
-  name: string;
-  category: Spend;
-  before?: Rule;
-}
+type LastPick =
+  | { kind: "spend"; key: string; name: string; category: Spend; before?: Rule }
+  | { kind: "income"; name: string; label: string; before: { key: string; payer: Payer | null }[]; created?: string };
 
 export function MoneyView({
   initial,
@@ -204,6 +202,8 @@ export function MoneyView({
   const [unsaved, setUnsaved] = useState<Action | null>(null);
   const [last, setLast] = useState<LastPick | null>(null);
   const [at, setAt] = useState(0);
+  /** The bank payment whose project is being changed in «Проекти»: "<row>:<op id>". */
+  const [changing, setChanging] = useState<string | null>(null);
   const local = () => (typeof window === "undefined" ? undefined : window.localStorage);
 
   useEffect(() => {
@@ -271,12 +271,29 @@ export function MoneyView({
     const key = recipientKey(op);
     const name = recipientName(op);
     const before = book.rules[key];
-    if (await run({ type: "rule.set", key, name, category })) setLast({ key, name, category, before });
+    if (await run({ type: "rule.set", key, name, category })) setLast({ kind: "spend", key, name, category, before });
+  }
+  /** Say what an incoming payment is (projects, a new project, or none — «Інше»); the payer is remembered. */
+  async function assign(op: Operation, projects: string[], create?: string) {
+    const keys = payerKeys(op);
+    const name = payerName(op);
+    const before = keys.map((key) => ({ key, payer: book.payers[key] ?? null }));
+    const saved = await run({ type: "payer.assign", keys, name, projects, ...(create ? { create: { name: create, currency: currencyOf(op) } } : {}) });
+    if (!saved) return false;
+    const created = create ? saved.projects.at(-1)?.id : undefined;
+    const label = projects.map((p) => names.get(p)).concat(create ? [create] : []).join(", ") || "Інше";
+    setLast({ kind: "income", name, label, before, created });
+    setChanging(null);
+    return true;
   }
   async function undo() {
     if (!last) return;
-    const { key, before } = last;
     setLast(null);
+    if (last.kind === "income") {
+      await run({ type: "payer.restore", payers: last.before, ...(last.created ? { drop: last.created } : {}) });
+      return;
+    }
+    const { key, before } = last;
     await run(before ? { type: "rule.set", key, name: before.name, category: before.category } : { type: "rule.remove", key });
   }
 
@@ -313,6 +330,7 @@ export function MoneyView({
   const onPick = (op: Operation) => (changeable(op) ? (s: Spend) => pick(op, s) : undefined);
 
   const toSortIn = book.projects.length ? pm.toSort : [];
+  const change: Change = { projects: book.projects, open: changing, setOpen: setChanging, of, assign };
   const toSortCount = m.toSort.length + toSortIn.length;
   const toSortSum = m.toSort.reduce((s, o) => s - o.amount, 0);
   const onSelf = m.self + m.dividends;
@@ -389,7 +407,7 @@ export function MoneyView({
             projects={book.projects}
             busy={busy}
             onSpend={pick}
-            onIncome={(op, projects) => run({ type: "payer.assign", keys: payerKeys(op), name: payerName(op), projects })}
+            onIncome={assign}
           />
         </Group>
       ) : null}
@@ -432,8 +450,9 @@ export function MoneyView({
         <Group title="Проекти" right={<span className="text-sm text-ink-700">заплатили {pm.paid} з {pm.total}</span>}>
           <ul className="divide-y divide-paper-100">
             {pm.rows.map((r) => (
-              <ProjectLine key={r.project.id} row={r} month={month} names={names} currencyOf={currencyOf} busy={busy} onRemove={(id) => run({ type: "entry.remove", id })} />
+              <ProjectLine key={r.project.id} row={r} month={month} names={names} currencyOf={currencyOf} busy={busy} onRemove={(id) => run({ type: "entry.remove", id })} change={change} />
             ))}
+            {pm.other.length ? <OtherLine ops={pm.other} currencyOf={currencyOf} busy={busy} change={change} /> : null}
           </ul>
         </Group>
       ) : null}
@@ -504,9 +523,7 @@ export function MoneyView({
           role="status"
           className="fixed inset-x-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl bg-ink-900 px-4 py-2 text-sm text-cream-type shadow-lg"
         >
-          <span className="min-w-0 truncate">
-            {ICON[last.category]} {last.name} → {LABEL[last.category]}
-          </span>
+          <span className="min-w-0 truncate">{last.kind === "spend" ? `${ICON[last.category]} ${last.name} → ${LABEL[last.category]}` : `→ ${last.label} · ${last.name}`}</span>
           <button type="button" disabled={busy} onClick={undo} className="min-h-11 shrink-0 px-2 font-semibold text-amber-200">
             Скасувати
           </button>
@@ -541,7 +558,7 @@ function SortOne({
   projects: Project[];
   busy: boolean;
   onSpend: (op: Operation, s: Spend) => void;
-  onIncome: (op: Operation, projects: string[]) => void;
+  onIncome: (op: Operation, projects: string[], create?: string) => void;
 }) {
   const all = [...spend, ...income];
   const k = all.length ? at % all.length : 0;
@@ -562,7 +579,7 @@ function SortOne({
         </p>
       </div>
       <p className="mb-2 mt-3 text-sm text-ink-700">{isIncome ? "За який проект? Можна кілька" : "Куди це?"}</p>
-      {isIncome ? <SortIncome key={op.id} busy={busy} projects={projects} onDone={(ids) => onIncome(op, ids)} /> : <CategoryButtons busy={busy} onPick={(s) => onSpend(op, s)} />}
+      {isIncome ? <SortIncome key={op.id} busy={busy} projects={projects} onDone={(ids, create) => onIncome(op, ids, create)} /> : <CategoryButtons busy={busy} onPick={(s) => onSpend(op, s)} />}
       {all.length > 1 ? (
         <div className="mt-3 flex items-center justify-between text-sm text-ink-500">
           <span className="tabular-nums">
@@ -577,15 +594,99 @@ function SortOne({
   );
 }
 
-function SortIncome({ projects, busy, onDone }: { projects: Project[]; busy: boolean; onDone: (ids: string[]) => void }) {
-  const [chosen, setChosen] = useState<string[]>([]);
+/** For which projects: tap the projects (several allowed), or type a new one's name, or «Інше» — income for no project. */
+function SortIncome({
+  projects,
+  busy,
+  initial = [],
+  onDone,
+  onCancel,
+}: {
+  projects: Project[];
+  busy: boolean;
+  initial?: string[];
+  onDone: (ids: string[], create?: string) => void;
+  onCancel?: () => void;
+}) {
+  const [chosen, setChosen] = useState<string[]>(initial);
+  const [adding, setAdding] = useState(false);
+  const [title, setTitle] = useState("");
+  const create = adding ? title.trim() : "";
   return (
     <div>
       <Chips projects={projects} chosen={chosen} onChange={setChosen} />
-      <button type="button" disabled={busy || !chosen.length} onClick={() => onDone(chosen)} className={`mt-3 ${primary}`}>
-        Готово
-      </button>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {adding ? null : (
+          <button type="button" onClick={() => setAdding(true)} className={chip(false)}>
+            + Новий проект
+          </button>
+        )}
+        <button type="button" disabled={busy} onClick={() => onDone([])} className={chip(false)}>
+          Інше
+        </button>
+      </div>
+      {adding ? (
+        <input autoFocus aria-label="Назва" placeholder="Назва нового проекту" value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} className={`mt-2 ${input}`} />
+      ) : null}
+      <div className="mt-3 flex gap-2">
+        <button type="button" disabled={busy || (!chosen.length && !create)} onClick={() => onDone(chosen, create || undefined)} className={primary}>
+          Готово
+        </button>
+        {onCancel ? (
+          <button type="button" onClick={onCancel} className="px-3 text-sm text-ink-500">
+            Скасувати
+          </button>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+/** «Змінити» on a bank payment in «Проекти»: the same choice as in «Розібрати». */
+interface Change {
+  projects: Project[];
+  open: string | null;
+  setOpen: (k: string | null) => void;
+  of: (op: Operation) => string[];
+  assign: (op: Operation, projects: string[], create?: string) => Promise<boolean>;
+}
+
+function ChangeButton({ id, change, busy }: { id: string; change: Change; busy: boolean }) {
+  return (
+    <button type="button" disabled={busy} onClick={() => change.setOpen(change.open === id ? null : id)} className="ml-1 min-h-8 px-1 text-xs text-ink-500 underline decoration-dotted">
+      Змінити
+    </button>
+  );
+}
+
+function ChangeForm({ op, change, busy }: { op: Operation; change: Change; busy: boolean }) {
+  return (
+    <div className="mt-2 rounded-xl bg-white/70 p-3">
+      <p className="mb-2 text-sm text-ink-700">{payerName(op)}: за який проект?</p>
+      <SortIncome projects={change.projects} busy={busy} initial={change.of(op)} onDone={(ids, create) => change.assign(op, ids, create)} onCancel={() => change.setOpen(null)} />
+    </div>
+  );
+}
+
+/** Incoming money Sasha put into «Інше»: in «Прийшло», for no project. */
+function OtherLine({ ops, currencyOf, busy, change }: { ops: Operation[]; currencyOf: (op: Operation) => Currency; busy: boolean; change: Change }) {
+  const open = ops.find((op) => change.open === `other:${op.id}`);
+  return (
+    <li className="py-2">
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0 text-ink-700">Інше</span>
+        <span className="shrink-0 text-right">
+          {ops.map((op) => (
+            <span key={op.id} className="block tabular-nums">
+              {money(op.amount, currencyOf(op))}
+              <span className="ml-1 text-xs text-ink-500">{opDay(op)}</span>
+              <ChangeButton id={`other:${op.id}`} change={change} busy={busy} />
+            </span>
+          ))}
+        </span>
+      </div>
+      {open ? <ChangeForm key={open.id} op={open} change={change} busy={busy} /> : null}
+    </li>
   );
 }
 
@@ -654,6 +755,7 @@ function ProjectLine({
   currencyOf,
   busy,
   onRemove,
+  change,
 }: {
   row: ProjectRow;
   month: string;
@@ -661,6 +763,7 @@ function ProjectLine({
   currencyOf: (op: Operation) => Currency;
   busy: boolean;
   onRemove: (entryId: string) => void;
+  change: Change;
 }) {
   const { project, payments } = row;
   if (row.paused && !payments.length) {
@@ -675,49 +778,56 @@ function ProjectLine({
     return (
       <li className="flex justify-between gap-3 py-2">
         <span className="min-w-0 truncate">{project.name}</span>
-        <span className="shrink-0 text-right">
-          <span className="block tabular-nums text-ink-500">{money(project.amount, project.currency)}</span>
-          <span className="block text-xs text-ink-500">ще ні</span>
-        </span>
+        {project.amount > 0 ? (
+          <span className="shrink-0 text-right">
+            <span className="block tabular-nums text-ink-500">{money(project.amount, project.currency)}</span>
+            <span className="block text-xs text-ink-500">ще ні</span>
+          </span>
+        ) : null}
       </li>
     );
   }
+  const open = payments.find(({ op }) => change.open === `${project.id}:${op.id}`)?.op;
   return (
-    <li className="flex items-start justify-between gap-3 py-2">
-      <span className="min-w-0">
-        <span className="block">
-          <span className="text-emerald-700" aria-label="заплатив">
-            ✓
-          </span>{" "}
-          {project.name}
+    <li className="py-2">
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block">
+            <span className="text-emerald-700" aria-label="заплатив">
+              ✓
+            </span>{" "}
+            {project.name}
+          </span>
+          {payments.some((p) => p.with.length) ? (
+            <span className="block text-xs text-ink-500">разом з {[...new Set(payments.flatMap((p) => p.with))].map((id) => names.get(id)).join(", ")}</span>
+          ) : null}
         </span>
-        {payments.some((p) => p.with.length) ? (
-          <span className="block text-xs text-ink-500">разом з {[...new Set(payments.flatMap((p) => p.with))].map((id) => names.get(id)).join(", ")}</span>
-        ) : null}
-      </span>
-      <span className="shrink-0 text-right">
-        {payments.map(({ op }) => {
-          const entry = entryIdOf(op);
-          return (
-            <span key={op.id} className="block tabular-nums">
-              {op.manual === "cash" ? "💵 " : ""}
-              {money(op.amount, currencyOf(op))}
-              <span className="ml-1 text-xs text-ink-500">{opDay(op)}</span>
-              {entry && monthOf(op.time) === month ? (
-                <button
-                  type="button"
-                  aria-label="Видалити запис"
-                  disabled={busy}
-                  onClick={() => window.confirm("Видалити цей запис?") && onRemove(entry)}
-                  className="ml-1 px-1 text-ink-500 hover:text-cherry-juice"
-                >
-                  ×
-                </button>
-              ) : null}
-            </span>
-          );
-        })}
-      </span>
+        <span className="shrink-0 text-right">
+          {payments.map(({ op }) => {
+            const entry = entryIdOf(op);
+            return (
+              <span key={op.id} className="block tabular-nums">
+                {op.manual === "cash" ? "💵 " : ""}
+                {money(op.amount, currencyOf(op))}
+                <span className="ml-1 text-xs text-ink-500">{opDay(op)}</span>
+                {entry && monthOf(op.time) === month ? (
+                  <button
+                    type="button"
+                    aria-label="Видалити запис"
+                    disabled={busy}
+                    onClick={() => window.confirm("Видалити цей запис?") && onRemove(entry)}
+                    className="ml-1 px-1 text-ink-500 hover:text-cherry-juice"
+                  >
+                    ×
+                  </button>
+                ) : null}
+                {entry ? null : <ChangeButton id={`${project.id}:${op.id}`} change={change} busy={busy} />}
+              </span>
+            );
+          })}
+        </span>
+      </div>
+      {open ? <ChangeForm key={open.id} op={open} change={change} busy={busy} /> : null}
     </li>
   );
 }

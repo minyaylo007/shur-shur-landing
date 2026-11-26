@@ -288,6 +288,63 @@ describe("projects: who paid this month", () => {
     expect(() => apply(b, { type: "entry.add", entry: { date: "2026-11-13", amount: 1_00, currency: "USD", projects: [], cash: false, spend: "other" } }, id)).toThrow("invalid");
   });
 
+  it("«Інше»: the payment stays in «Прийшло» and in the taxes, needs no project, leaves «Розібрати», and the payer is remembered", () => {
+    const pay = fopIn(4_000_00, "UA07");
+    const b = apply(book(), { type: "payer.assign", keys: payerKeys(pay), name: payerName(pay), projects: [] }, id);
+    const { ops, accounts: all } = everything(b, [pay, fopIn(1_000_00, "UA07", 20)], accounts);
+    const pm = projectsMonth(b, ops, all, "2026-11");
+    expect(pm.toSort).toEqual([]);
+    expect(pm.other).toHaveLength(2);
+    expect(pm.rows.every((r) => !r.payments.length)).toBe(true);
+    const m = summarize(ops, all, b.rules, "2026-11");
+    expect(m.income).toBe(5_000_00);
+    expect(m.tax.due).toBe(Math.round(5_000_00 * 0.06) + 190_234);
+    // an old book (payers always had a project) reads as it is; removing a project keeps «Інше» where it is
+    expect(bookSchema.parse(b).payers.UA07.projects).toEqual([]);
+    expect(apply(b, { type: "project.remove", id: "a" }, id).payers.UA07).toBeDefined();
+  });
+
+  it("a new project from «Розібрати»: made with sum 0, the payment on it; sum 0 is not «unpaid» and not in «N з M»", () => {
+    const pay = fopIn(3_000_00, "UA08");
+    const b = apply(book(), { type: "payer.assign", keys: payerKeys(pay), name: payerName(pay), projects: [], create: { name: "Тюльпан", currency: "UAH" } }, id);
+    const tulip = b.projects.find((p) => p.name === "Тюльпан")!;
+    expect(tulip.amount).toBe(0);
+    const { ops, accounts: all } = everything(b, [pay], accounts);
+    const pm = projectsMonth(b, ops, all, "2026-11");
+    expect(pm.rows.find((r) => r.project.id === tulip.id)!.payments).toHaveLength(1);
+    expect(pm.toSort).toEqual([]);
+    expect(pm.total).toBe(3); // А, Б, В — not Тюльпан, not the paused one
+    expect(pm.paid).toBe(0);
+    // next month Тюльпан has not paid: still not a debt
+    const dec = projectsMonth(b, [], all, "2026-12");
+    expect(dec.total).toBe(3);
+    // «Скасувати»: the payer is a question again and the new project is gone
+    const back = apply(b, { type: "payer.restore", payers: payerKeys(pay).map((key) => ({ key, payer: null })), drop: tulip.id }, id);
+    expect(back.projects.some((p) => p.id === tulip.id)).toBe(false);
+    expect(projectsMonth(back, ops, all, "2026-11").toSort).toHaveLength(1);
+  });
+
+  it("«Змінити»: reassigning a payer moves its payments to the new project, «Прийшло» does not double, undo puts it back", () => {
+    const pay = fopIn(20_000_00, "UA09");
+    const keys = payerKeys(pay);
+    const b = apply(book(), { type: "payer.assign", keys, name: payerName(pay), projects: ["a"] }, id);
+    const before = keys.map((key) => ({ key, payer: b.payers[key] ?? null }));
+    const b2 = apply(b, { type: "payer.assign", keys, name: payerName(pay), projects: ["b"] }, id);
+    const { ops, accounts: all } = everything(b2, [pay, fopIn(20_000_00, "UA09", 24)], accounts);
+    const pm = projectsMonth(b2, ops, all, "2026-11");
+    expect(pm.rows.find((r) => r.project.id === "a")!.payments).toHaveLength(0);
+    expect(pm.rows.find((r) => r.project.id === "b")!.payments).toHaveLength(2);
+    expect(summarize(ops, all, b2.rules, "2026-11").income).toBe(40_000_00);
+    expect(projectsOf(b2)(fopIn(1_00, "UA09"))).toEqual(["b"]); // remembered for the next payment
+    const undone = apply(b2, { type: "payer.restore", payers: before }, id);
+    expect(projectsOf(undone)(pay)).toEqual(["a"]);
+  });
+
+  it("a payment skipped in «Розібрати» is not saved: it waits there", () => {
+    const pay = fopIn(2_000_00, "UA10");
+    expect(projectsMonth(book(), [pay], accounts, "2026-11").toSort).toEqual([pay]);
+  });
+
   it("a pause covers its months only; «до» is the month it pays again", () => {
     const z = book().projects[3];
     expect(paused(z, "2026-09")).toBe(false);
