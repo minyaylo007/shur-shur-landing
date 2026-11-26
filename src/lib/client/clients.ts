@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
 import { z } from "zod";
 import { checkPassword, hashPassword, hashSetupToken, MAX_PASSWORD, passwordProblem } from "@/lib/cabinet/auth";
 import { cabinetStore, StoreConflictError } from "@/lib/cabinet/store";
+import { sheetSchema, type Sheet } from "./sheet";
 
 /**
  * Clients of the 15 €/month bot cabinet (/client/<id>). Server-only.
@@ -114,6 +115,8 @@ const clientSchema = z.object({
   billing: billingSchema,
   /** The bot's signing key for /api/client/ingest, sealed (see `sealKey`). Null: none issued. */
   ingest: z.object({ sealed: z.string(), createdAt: z.number() }).nullable().default(null),
+  /** The Google Sheet the bot writes into (lib/client/sheet), read by the site. Null: the bot pushes, or nothing. */
+  sheet: sheetSchema.nullable().default(null),
 });
 export type Client = z.infer<typeof clientSchema>;
 
@@ -203,6 +206,7 @@ export async function createClient(name: string, test: boolean, nowMs = Date.now
     },
     billing: structuredClone(EMPTY_BILLING),
     ingest: null,
+    sheet: null,
   };
   await writeClient(client);
   await changeIndex((ids) => [...ids.filter((id) => id !== client.id), client.id]);
@@ -270,6 +274,13 @@ export async function issueIngestKey(id: string, nowMs = Date.now()): Promise<{ 
     c.ingest = { sealed: sealKey(secret, key), createdAt: nowMs };
   });
   return client ? { secret } : "no_client";
+}
+
+/** The owner points the cabinet at the bot's Google Sheet (or, with null, away from it). */
+export async function setClientSheet(id: string, sheet: Sheet | null): Promise<Client | null> {
+  return updateClient(id, (c) => {
+    c.sheet = sheet;
+  });
 }
 
 /* ---------- sessions ---------- */

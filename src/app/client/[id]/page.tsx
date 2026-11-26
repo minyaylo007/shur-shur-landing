@@ -7,6 +7,7 @@ import { CherryIcon } from "@/components/ui/icons";
 import { isSignedIn, SESSION_COOKIE } from "@/lib/cabinet/auth";
 import { CLIENT_COOKIE, isClientId, isFree, readClient, signedInClient, type Client } from "@/lib/client/clients";
 import { readResults, SHOWN_ROWS, splitByDay, type Results } from "@/lib/client/results";
+import { syncSheet } from "@/lib/client/sheet";
 import { site } from "@/lib/site";
 
 /* One client's cabinet: the subscription and the bot's results. Everything
@@ -548,6 +549,9 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
   let results: Results | null = null;
   let attempts: Awaited<ReturnType<typeof readAttempts>> = null;
   let down = false;
+  // A bot that writes into a Google Sheet: new rows are taken in first (cached 5 min, 5 s
+  // at most). The sheet down → what is stored is shown, with a quiet line, never an error page.
+  const sheetDown = client.sheet ? (await syncSheet(client.id, client.sheet)).outcome !== "ok" : false;
   try {
     [results, attempts] = await Promise.all([readResults(client.id), readAttempts(client.id)]);
   } catch {
@@ -606,6 +610,11 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
             </a>
           ) : null}
         </div>
+        {sheetDown && !down ? (
+          <p role="status" className="mt-2 text-sm text-ink-700">
+            Таблиця тимчасово недоступна — показано збережене.
+          </p>
+        ) : null}
         <div className="mt-4">
           {down ? (
             <Plate title="Дані тимчасово недоступні">Сховище не відповіло. Спробуйте оновити сторінку пізніше.</Plate>

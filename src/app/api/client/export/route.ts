@@ -4,6 +4,7 @@ import { readAttempts } from "@/lib/client/attempts";
 import { clientCookieValue, isClientId, readClient, signedInClient, type Client } from "@/lib/client/clients";
 import { attemptsCsv, tableCsv } from "@/lib/client/export";
 import { readResults } from "@/lib/client/results";
+import { syncSheet } from "@/lib/client/sheet";
 
 export const runtime = "nodejs";
 
@@ -36,6 +37,8 @@ export async function GET(request: Request) {
   if (!client) return fail(401);
 
   let body: string | null = null;
+  // The sheet's newest rows first; down → the file has what is stored.
+  if (client.sheet) await syncSheet(client.id, client.sheet);
   try {
     const attempts = await readAttempts(client.id);
     if (attempts?.attempts.length) body = attemptsCsv(attempts.attempts);
