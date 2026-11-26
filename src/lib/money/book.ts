@@ -85,6 +85,8 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("entry.remove"), id }),
   z.object({ type: z.literal("payer.assign"), keys: z.array(z.string().min(1).max(300)).min(1).max(3), name: z.string().max(300), projects: z.array(id).min(1).max(20) }),
   z.object({ type: z.literal("rule.set"), key: z.string().min(1).max(300), name: z.string().max(300), category: z.enum(SPENDS) }),
+  /** «Скасувати» right after a tap: the recipient is a question again */
+  z.object({ type: z.literal("rule.remove"), key: z.string().min(1).max(300) }),
   z.object({ type: z.literal("plan.save"), row: z.object({ id: id.optional(), ...planFields }) }),
   z.object({ type: z.literal("plan.remove"), id }),
 ]);
@@ -129,6 +131,11 @@ export function apply(book: Book, action: Action, newId: () => string): Book {
     }
     case "rule.set":
       return { ...book, rules: { ...book.rules, [action.key]: { category: action.category, name: action.name } } };
+    case "rule.remove": {
+      const rules = { ...book.rules };
+      delete rules[action.key];
+      return { ...book, rules };
+    }
     case "plan.save": {
       const { id: given, ...fields } = action.row;
       if (fields.project) known([fields.project]);

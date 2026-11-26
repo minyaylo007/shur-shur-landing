@@ -17,27 +17,38 @@ import {
   type ProjectRow,
 } from "@/lib/money/book";
 import {
+  accountLabel,
+  BUSINESS,
+  classify,
   monthOf,
   monthsOf,
   nextPayout,
   payouts,
+  planRowOf,
   recipientKey,
   recipientName,
   SPENDS,
   summarize,
   type Account,
+  type Category,
   type Operation,
+  type Payout,
+  type Reminder,
+  type Rule,
   type Spend,
 } from "@/lib/money/ledger";
 import { AddMoney } from "./add-money";
 import { dropUnsaved, keepUnsaved, problemText, readUnsaved, retryable } from "@/lib/money/pending";
 
-/* One column, phone first. Big numbers, almost no words: «прийшло / пішло /
-   залишилось», then who of the projects paid. Empty blocks are not shown.
-   Two settings only, folded at the bottom: projects and the payout plan.
-   The same screen for the demo (memory only) and the cabinet (Blob). */
+/* One column, phone first, the way monobank does it. On top the month and
+   three numbers: прийшло / пішло / залишилось. Below, cards that open:
+   «Розібрати» (one operation per screen), «Куди пішло» (categories, each
+   opens to its operations), «Проекти», «Дивіденди», then the months and the
+   two settings. Every operation carries the account it went from. The same
+   screen for the demo (memory only) and the cabinet (Blob). */
 
-const LABEL: Record<Spend, string> = { team: "Команда", taxes: "Податки", ads: "Реклама і сервіси", other: "Інше" };
+const LABEL: Record<Spend, string> = { team: "Команда", taxes: "Податки", ads: "Реклама і сервіси", other: "Інше", dividends: "Дивіденди" };
+const ICON: Record<Spend, string> = { team: "👥", taxes: "🏛", ads: "📣", other: "🧾", dividends: "🍒" };
 const MONTH = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"];
 const MONTH_TO = ["січня", "лютого", "березня", "квітня", "травня", "червня", "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"];
 
@@ -57,13 +68,86 @@ const chip = (on: boolean) => `rounded-full border px-3 py-2 text-sm ${on ? "bor
 const input = "w-full rounded-xl border border-paper-200 bg-white px-3 py-2";
 const primary = "rounded-full bg-cherry-deep px-4 py-2 text-sm font-semibold text-cream-type disabled:opacity-40";
 
-/** A tile number on one line: big digits, a small «грн». */
-function Big({ kop }: { kop: number }) {
+/** The account an operation went from, as a small tag: «ФОП», «Біла», «Рожева», «Вручну». */
+function AccountTag({ label }: { label: string }) {
+  const tone =
+    label === "Рожева" ? "bg-pink-100 text-pink-900" : label === "Біла" ? "border border-paper-200 bg-white text-ink-700" : label === "Вручну" ? "bg-amber-50 text-amber-900" : "bg-paper-100 text-ink-700";
+  return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 ${tone}`}>{label}</span>;
+}
+
+/** A card that opens: a title and a number on one line, the rest inside. */
+function Group({ title, right, open, children, id }: { title: string; right?: React.ReactNode; open?: boolean; children: React.ReactNode; id?: string }) {
   return (
-    <p className="mt-1 whitespace-nowrap font-display text-[1.3rem] tabular-nums">
-      {Math.round(kop / 100).toLocaleString("uk-UA")}
-      <span className="ml-1 font-body text-sm text-ink-500">грн</span>
-    </p>
+    <details id={id} open={open} className={`${card} group scroll-mt-4`}>
+      <summary className="-m-1 flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 p-1 [&::-webkit-details-marker]:hidden">
+        <span className="font-display text-lg">{title}</span>
+        <span className="flex items-center gap-2 tabular-nums">
+          {right}
+          <span aria-hidden className="text-xl text-ink-500 transition-transform group-open:rotate-90">
+            ›
+          </span>
+        </span>
+      </summary>
+      <div className="mt-2">{children}</div>
+    </details>
+  );
+}
+
+/** The five categories as big buttons: one tap sorts the recipient for good. */
+function CategoryButtons({ current, busy, onPick }: { current?: Spend; busy: boolean; onPick: (s: Spend) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {SPENDS.map((s) => (
+        <button
+          key={s}
+          type="button"
+          disabled={busy || s === current}
+          onClick={() => onPick(s)}
+          className={`min-h-12 rounded-2xl border px-3 text-left text-sm font-medium disabled:opacity-50 ${s === "dividends" ? "col-span-2 border-pink-200 bg-pink-50" : "border-paper-200 bg-white"} ${s === current ? "ring-2 ring-cherry-deep" : "active:bg-paper-100"}`}
+        >
+          <span className="mr-1">{ICON[s]}</span>
+          {LABEL[s]}
+          {s === "dividends" ? <span className="ml-1 font-normal text-ink-500">· на себе</span> : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** One operation in a list: who, account and day under it, the sum on the right; a tap lets her change the category. */
+function OpLine({ op, tag, current, busy, onPick }: { op: Operation; tag: string; current?: Spend; busy: boolean; onPick?: (s: Spend) => void }) {
+  const [open, setOpen] = useState(false);
+  const body = (
+    <>
+      <span className="min-w-0">
+        <span className="block truncate">{recipientName(op)}</span>
+        <span className="mt-0.5 flex items-center gap-2 text-xs text-ink-500">
+          <AccountTag label={tag} />
+          {opDay(op)}
+        </span>
+      </span>
+      <span className="shrink-0 tabular-nums">{grn(Math.abs(op.amount))}</span>
+    </>
+  );
+  if (!onPick) return <li className="flex items-start justify-between gap-3 py-2">{body}</li>;
+  return (
+    <li className="py-2">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex w-full items-start justify-between gap-3 text-left">
+        {body}
+      </button>
+      {open ? (
+        <div className="mt-2">
+          <CategoryButtons
+            current={current}
+            busy={busy}
+            onPick={(s) => {
+              setOpen(false);
+              onPick(s);
+            }}
+          />
+        </div>
+      ) : null}
+    </li>
   );
 }
 
@@ -88,10 +172,15 @@ function Chips({ projects, chosen, onChange }: { projects: Project[]; chosen: st
   );
 }
 
-/** Projects shown before «Усі проекти»: the unpaid ones come first anyway. */
-const FIRST_PROJECTS = 5;
-
 export type BankState = "off" | "ok" | "stale";
+
+/** What the last tap changed, so «Скасувати» can put the book back exactly. */
+interface LastPick {
+  key: string;
+  name: string;
+  category: Spend;
+  before?: Rule;
+}
 
 export function MoneyView({
   initial,
@@ -113,6 +202,8 @@ export function MoneyView({
   const [busy, setBusy] = useState(false);
   /** What she typed and the server did not take: kept in this browser until saved. */
   const [unsaved, setUnsaved] = useState<Action | null>(null);
+  const [last, setLast] = useState<LastPick | null>(null);
+  const [at, setAt] = useState(0);
   const local = () => (typeof window === "undefined" ? undefined : window.localStorage);
 
   useEffect(() => {
@@ -125,6 +216,12 @@ export function MoneyView({
       setProblem("Минулого разу запис не зберігся. Введене на місці.");
     }
   }, [demo]);
+
+  useEffect(() => {
+    if (!last) return;
+    const t = setTimeout(() => setLast(null), 8000);
+    return () => clearTimeout(t);
+  }, [last]);
 
   /** The demo changes its memory; the cabinet saves first and shows what was saved. */
   async function run(action: Action): Promise<Book | null> {
@@ -142,7 +239,7 @@ export function MoneyView({
       status = res.status;
       if (res.status === 401) {
         keepUnsaved(local(), action);
-        window.location.href = "/login";
+        window.location.assign("/login");
         return null;
       }
       const answer = await res.json();
@@ -169,15 +266,29 @@ export function MoneyView({
     return null;
   }
 
+  /** Put the recipient of this operation into a category, remembering what was there for «Скасувати». */
+  async function pick(op: Operation, category: Spend) {
+    const key = recipientKey(op);
+    const name = recipientName(op);
+    const before = book.rules[key];
+    if (await run({ type: "rule.set", key, name, category })) setLast({ key, name, category, before });
+  }
+  async function undo() {
+    if (!last) return;
+    const { key, before } = last;
+    setLast(null);
+    await run(before ? { type: "rule.set", key, name: before.name, category: before.category } : { type: "rule.remove", key });
+  }
+
   const { ops, accounts } = useMemo(() => everything(book, bankOps, bankAccounts), [book, bankOps, bankAccounts]);
   const current = monthOf(now);
   const months = useMemo(() => [...new Set([...monthsOf(ops), current])].sort(), [ops, current]);
   const [month, setMonth] = useState(current);
-  const [allProjects, setAllProjects] = useState(false);
   const plan = ledgerPlan(book);
   const of = projectsOf(book);
   const names = new Map(book.projects.map((p) => [p.id, p.name]));
   const currencyOf = (op: Operation) => accounts.find((a) => a.id === op.account)?.currency ?? "UAH";
+  const tag = (op: Operation) => accountLabel(op, accounts);
 
   const m = summarize(ops, accounts, book.rules, month, plan);
   const pm = projectsMonth(book, ops, accounts, month);
@@ -189,11 +300,30 @@ export function MoneyView({
   const next = nextPayout(ops, accounts, plan, now);
   const i = months.indexOf(month);
 
+  /** This month's operations by category, newest first. */
+  const byCategory = new Map<Category, Operation[]>();
+  for (const op of ops) {
+    if (monthOf(op.time) !== month) continue;
+    const c = classify(op, accounts, book.rules, plan);
+    byCategory.set(c, [...(byCategory.get(c) ?? []), op]);
+  }
+  for (const list of byCategory.values()) list.sort((a, b) => b.time - a.time);
+  /** A category can be changed only where a remembered recipient decides it. */
+  const changeable = (op: Operation) => !op.spend && !planRowOf(op, accounts, plan);
+  const onPick = (op: Operation) => (changeable(op) ? (s: Spend) => pick(op, s) : undefined);
+
+  const toSortIn = book.projects.length ? pm.toSort : [];
+  const toSortCount = m.toSort.length + toSortIn.length;
+  const toSortSum = m.toSort.reduce((s, o) => s - o.amount, 0);
+  const onSelf = m.self + m.dividends;
+  const selfOps = byCategory.get("self") ?? [];
+  const dividendOps = byCategory.get("dividends") ?? [];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {demo ? <p className="rounded-full bg-amber-100 px-3 py-1 text-center text-xs font-semibold text-amber-900">Демо · дані вигадані</p> : null}
-      {bank === "off" ? <p className="rounded-full bg-paper-100 px-3 py-1 text-center text-xs text-ink-700">Банк ще не підключено · приходи додавай вручну</p> : null}
-      {bank === "stale" ? <p className="rounded-full bg-paper-100 px-3 py-1 text-center text-xs text-ink-700">Банк зараз не відповідає · показано збережене</p> : null}
+      {bank === "off" ? <p className="rounded-full bg-paper-100 px-3 py-1 text-center text-xs text-ink-700">Банк не підключено · приходи вносиш вручну</p> : null}
+      {bank === "stale" ? <p className="rounded-full bg-paper-100 px-3 py-1 text-center text-xs text-ink-700">Банк не відповідає · показано збережене</p> : null}
       {problem ? (
         <div role="alert" className="rounded-xl bg-cherry-juice px-3 py-2 text-center text-sm text-cream-type">
           <p>{problem}</p>
@@ -215,170 +345,125 @@ export function MoneyView({
         </button>
       </header>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className={card}>
-          <p className={eyebrow}>Прийшло</p>
-          <Big kop={m.income} />
-          {m.incomeUsd > 0 ? <p className="whitespace-nowrap text-sm tabular-nums">+ {money(m.incomeUsd, "USD")}</p> : null}
-          {m.cash > 0 ? <p className="whitespace-nowrap text-xs text-ink-500">💵 готівкою {grn(m.cash)}</p> : null}
-        </div>
-        <div className={card}>
-          <p className={eyebrow}>Пішло</p>
-          <Big kop={m.spent} />
-        </div>
-      </div>
-
-      <section className="rounded-2xl bg-cherry-deep p-5 text-cream-type">
-        <p className="text-xs font-medium uppercase tracking-widest text-cream-type/70">Залишилось тобі</p>
+      <section className="rounded-3xl bg-cherry-deep p-5 text-cream-type" aria-label="Підсумок місяця">
+        <p className="text-xs font-medium uppercase tracking-widest text-cream-type/70">Залишилось</p>
         <p className="mt-1 font-display text-4xl tabular-nums">{grn(m.left)}</p>
-        {m.incomeUsd > 0 ? <p className="mt-1 text-sm text-cream-type/75">і ще {money(m.incomeUsd, "USD")}</p> : null}
-        {m.self > 0 ? <p className="mt-1 text-sm text-cream-type/75">з них уже взяла собі {grn(m.self)}</p> : null}
-      </section>
-
-      {m.tax.setAside > 0 ? (
-        <p className={`${card} flex items-baseline justify-between gap-3`}>
-          <span className="text-sm">Відкласти на податки</span>
-          <span className="text-right">
-            <strong className="tabular-nums">{grn(m.tax.setAside)}</strong>
-            <span className="block text-xs text-ink-500">до {dayMonth(m.tax.by)}</span>
-          </span>
-        </p>
-      ) : null}
-
-      {book.projects.length ? (
-        <section className={card}>
-          <h2 className={eyebrow}>Проекти</h2>
-          <p className="mt-1 text-lg">
-            Заплатили <strong className="tabular-nums">{pm.paid}</strong> з <span className="tabular-nums">{pm.total}</span>
-          </p>
-          <ul className="mt-2 divide-y divide-paper-100">
-            {(allProjects ? pm.rows : pm.rows.slice(0, FIRST_PROJECTS)).map((r) => (
-              <ProjectLine key={r.project.id} row={r} month={month} names={names} currencyOf={currencyOf} busy={busy} onRemove={(id) => run({ type: "entry.remove", id })} />
-            ))}
-          </ul>
-          {pm.rows.length > FIRST_PROJECTS ? (
-            <button type="button" onClick={() => setAllProjects(!allProjects)} className="mt-1 min-h-11 w-full text-sm font-medium text-cherry-deep">
-              {allProjects ? "Згорнути" : `Усі проекти (${pm.rows.length})`}
-            </button>
-          ) : null}
-        </section>
-      ) : null}
-
-      <AddMoney
-        projects={pm.rows.map((r) => r.project)}
-        today={kyivIso(now)}
-        yesterday={kyivIso(now - 86_400)}
-        busy={busy}
-        problem={problem}
-        onSave={async (entry) => {
-          const saved = await run({ type: "entry.add", entry });
-          return saved?.entries.at(-1)?.id ?? null;
-        }}
-        onUndo={async (id) => !!(await run({ type: "entry.remove", id }))}
-      />
-
-      {pm.toSort.length && book.projects.length ? (
-        <section className={card}>
-          <h2 className={eyebrow}>Розібрати · прийшло</h2>
-          <ul className="mt-2 space-y-5">
-            {pm.toSort.map((op) => (
-              <SortIncome key={op.id} op={op} money={money(op.amount, currencyOf(op))} projects={book.projects} busy={busy} onDone={(projects) => run({ type: "payer.assign", keys: payerKeys(op), name: payerName(op), projects })} />
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {m.spent > 0 ? (
-        <section className={card}>
-          <h2 className={eyebrow}>Куди пішло</h2>
-          <ul className="mt-2 divide-y divide-paper-100">
-            {SPENDS.filter((s) => m.by[s] > 0).map((s) => (
-              <li key={s} className="flex justify-between py-2">
-                <span>{LABEL[s]}</span>
-                <span className="tabular-nums">{grn(m.by[s])}</span>
+        {m.incomeUsd > 0 ? <p className="text-sm text-cream-type/75">і ще {money(m.incomeUsd, "USD")}</p> : null}
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-cream-type/20 pt-3">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-cream-type/70">Прийшло</p>
+            <p className="whitespace-nowrap text-xl tabular-nums">{grn(m.income)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-widest text-cream-type/70">Пішло</p>
+            <p className="whitespace-nowrap text-xl tabular-nums">{grn(m.spent)}</p>
+          </div>
+        </div>
+        {m.tax.setAside > 0 || onSelf > 0 ? (
+          <ul className="mt-3 space-y-1 border-t border-cream-type/20 pt-3 text-sm text-cream-type/85">
+            {m.tax.setAside > 0 ? (
+              <li className="flex justify-between gap-3">
+                <span>На податки, до {dayMonth(m.tax.by)}</span>
+                <span className="tabular-nums">{grn(m.tax.setAside)}</span>
               </li>
-            ))}
-            {m.toSort.length ? (
-              <li className="flex justify-between py-2 text-cherry-juice">
-                <a href="#sort">Розібрати</a>
-                <span className="tabular-nums">{grn(m.toSort.reduce((s, o) => s - o.amount, 0))}</span>
+            ) : null}
+            {onSelf > 0 ? (
+              <li className="flex justify-between gap-3">
+                <a href="#dividends">Дивіденди, на себе</a>
+                <span className="tabular-nums">{grn(onSelf)}</span>
               </li>
             ) : null}
           </ul>
-        </section>
+        ) : null}
+      </section>
+
+      {toSortCount ? (
+        <Group id="sort" title={`Розібрати (${toSortCount})`} open right={toSortSum ? <span className="text-cherry-juice">{grn(toSortSum)}</span> : null}>
+          <SortOne
+            spend={m.toSort}
+            income={toSortIn}
+            at={at}
+            setAt={setAt}
+            tag={tag}
+            money={(op) => money(op.amount, currencyOf(op))}
+            projects={book.projects}
+            busy={busy}
+            onSpend={pick}
+            onIncome={(op, projects) => run({ type: "payer.assign", keys: payerKeys(op), name: payerName(op), projects })}
+          />
+        </Group>
       ) : null}
 
-      {team.length || extraTeam.length ? (
-        <section className={card}>
-          <h2 className={eyebrow}>Команда</h2>
-          {next && month === current ? (
-            <p className="mt-2 rounded-xl bg-paper-100 px-3 py-2 text-sm">
-              Найближча виплата: <strong>{when(next.date, now)}</strong>, {next.items.map((it) => `${it.name} ${grn(it.amount)}`).join(", ")}
-              {next.items.length > 1 ? ` · разом ${grn(next.total)}` : ""}
-            </p>
-          ) : null}
-          <ul className="mt-2 divide-y divide-paper-100">
-            {team.map((p) => {
-              const project = names.get(p.forClient ?? p.row.project ?? "");
-              return (
-                <li key={p.row.id} className="flex items-start justify-between gap-3 py-2">
-                  <span className="min-w-0">
-                    <span className="block">{p.row.name}</span>
-                    {project ? <span className="block text-xs text-ink-500">за {project}</span> : null}
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block tabular-nums">{grn(p.row.amount)}</span>
-                    <span className={`block text-xs ${p.paidOn ? "text-emerald-700" : month < current ? "text-cherry-juice" : "text-ink-500"}`}>
-                      {p.paidOn ? `виплачено ${p.paidOn}-го` : month < current ? "не виплачено" : `виплата ${p.day}-го`}
-                    </span>
-                  </span>
-                </li>
-              );
-            })}
-            {extraTeam.map((t) => (
-              <li key={t.name} className="flex justify-between gap-3 py-2">
-                <span>{t.name}</span>
-                <span className="tabular-nums">{grn(t.amount)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {m.toSort.length ? (
-        <section id="sort" className={`${card} scroll-mt-4`}>
-          <h2 className={eyebrow}>Розібрати · пішло</h2>
-          <ul className="mt-2 space-y-4">
-            {m.toSort.map((op) => (
-              <li key={op.id}>
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 truncate">{recipientName(op)}</span>
-                  <span className="shrink-0 tabular-nums">{grn(-op.amount)}</span>
-                </div>
-                <p className="text-xs text-ink-500">{opDay(op)}</p>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {SPENDS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      disabled={busy}
-                      onClick={() => run({ type: "rule.set", key: recipientKey(op), name: recipientName(op), category: s })}
-                      className="rounded-full border border-paper-200 px-3 py-2 text-sm hover:border-cherry-juice active:bg-paper-100"
-                    >
+      {m.spent > 0 ? (
+        <Group title="Куди пішло" right={grn(m.spent)}>
+          <ul className="divide-y divide-paper-100">
+            {BUSINESS.filter((s) => m.by[s] > 0).map((s) => (
+              <li key={s}>
+                <details>
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-1 [&::-webkit-details-marker]:hidden">
+                    <span>
+                      <span className="mr-2">{ICON[s]}</span>
                       {LABEL[s]}
-                    </button>
-                  ))}
-                </div>
+                    </span>
+                    <span className="tabular-nums">{grn(m.by[s])}</span>
+                  </summary>
+                  {s === "team" && (team.length || extraTeam.length) ? (
+                    <TeamList team={team} extra={extraTeam} names={names} month={month} current={current} next={month === current ? next : undefined} now={now} />
+                  ) : null}
+                  <ul className="mb-2 divide-y divide-paper-100 rounded-xl bg-white/60 px-3">
+                    {(byCategory.get(s) ?? []).map((op) => (
+                      <OpLine key={op.id} op={op} tag={tag(op)} current={s} busy={busy} onPick={onPick(op)} />
+                    ))}
+                  </ul>
+                </details>
               </li>
             ))}
+            {m.toSort.length ? (
+              <li className="flex min-h-11 items-center justify-between gap-3 py-1 text-cherry-juice">
+                <a href="#sort">❓ Не розібрано</a>
+                <span className="tabular-nums">{grn(toSortSum)}</span>
+              </li>
+            ) : null}
           </ul>
-        </section>
+        </Group>
+      ) : null}
+
+      {book.projects.length ? (
+        <Group title="Проекти" right={<span className="text-sm text-ink-700">заплатили {pm.paid} з {pm.total}</span>}>
+          <ul className="divide-y divide-paper-100">
+            {pm.rows.map((r) => (
+              <ProjectLine key={r.project.id} row={r} month={month} names={names} currencyOf={currencyOf} busy={busy} onRemove={(id) => run({ type: "entry.remove", id })} />
+            ))}
+          </ul>
+        </Group>
+      ) : null}
+
+      {onSelf > 0 ? (
+        <Group id="dividends" title="Дивіденди" right={grn(onSelf)}>
+          <p className="text-xs text-ink-500">Не входять у «Пішло»</p>
+          <ul className="divide-y divide-paper-100">
+            {selfOps.map((op) => (
+              <li key={op.id} className="flex items-start justify-between gap-3 py-2">
+                <span className="min-w-0">
+                  <span className="block">На рожеву картку</span>
+                  <span className="mt-0.5 flex items-center gap-2 text-xs text-ink-500">
+                    <AccountTag label={tag(op)} />
+                    {opDay(op)}
+                  </span>
+                </span>
+                <span className="shrink-0 tabular-nums">{grn(-op.amount)}</span>
+              </li>
+            ))}
+            {dividendOps.map((op) => (
+              <OpLine key={op.id} op={op} tag={tag(op)} current="dividends" busy={busy} onPick={onPick(op)} />
+            ))}
+          </ul>
+        </Group>
       ) : null}
 
       {history.length > 1 ? (
-        <section className={card}>
-          <h2 className={eyebrow}>По місяцях</h2>
-          <ul className="mt-2 space-y-1">
+        <Group title="По місяцях">
+          <ul className="space-y-1">
             {history.map((h) => (
               <li key={h.month}>
                 <button type="button" onClick={() => setMonth(h.month)} aria-current={h.month === month} className={`w-full rounded-xl px-2 py-2 text-left ${h.month === month ? "bg-paper-100" : ""}`}>
@@ -395,13 +480,167 @@ export function MoneyView({
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-ink-500">прийшло / пішло / тобі, тис. грн</p>
-        </section>
+          <p className="mt-2 text-xs text-ink-500">прийшло / пішло / залишилось, тис. грн</p>
+        </Group>
       ) : null}
 
+      <AddMoney
+        projects={pm.rows.map((r) => r.project)}
+        today={kyivIso(now)}
+        yesterday={kyivIso(now - 86_400)}
+        busy={busy}
+        problem={problem}
+        onSave={async (entry) => {
+          const saved = await run({ type: "entry.add", entry });
+          return saved?.entries.at(-1)?.id ?? null;
+        }}
+        onUndo={async (id) => !!(await run({ type: "entry.remove", id }))}
+      />
+
       <Settings book={book} busy={busy} run={run} />
+
+      {last ? (
+        <div
+          role="status"
+          className="fixed inset-x-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl bg-ink-900 px-4 py-2 text-sm text-cream-type shadow-lg"
+        >
+          <span className="min-w-0 truncate">
+            {ICON[last.category]} {last.name} → {LABEL[last.category]}
+          </span>
+          <button type="button" disabled={busy} onClick={undo} className="min-h-11 shrink-0 px-2 font-semibold text-amber-200">
+            Скасувати
+          </button>
+        </div>
+      ) : null}
       {/* room under the floating «＋ Внести» */}
       <div className="h-20" aria-hidden />
+    </div>
+  );
+}
+
+/* ---------- «Розібрати»: one operation per screen ---------- */
+
+function SortOne({
+  spend,
+  income,
+  at,
+  setAt,
+  tag,
+  money: sum,
+  projects,
+  busy,
+  onSpend,
+  onIncome,
+}: {
+  spend: Operation[];
+  income: Operation[];
+  at: number;
+  setAt: (n: number) => void;
+  tag: (op: Operation) => string;
+  money: (op: Operation) => string;
+  projects: Project[];
+  busy: boolean;
+  onSpend: (op: Operation, s: Spend) => void;
+  onIncome: (op: Operation, projects: string[]) => void;
+}) {
+  const all = [...spend, ...income];
+  const k = all.length ? at % all.length : 0;
+  const op = all[k];
+  if (!op) return null;
+  const isIncome = op.amount > 0;
+  return (
+    <div>
+      <div className="rounded-2xl bg-white/70 p-4 text-center">
+        <p className={`font-display text-3xl tabular-nums ${isIncome ? "text-emerald-700" : ""}`}>
+          {isIncome ? "+" : "−"}
+          {sum({ ...op, amount: Math.abs(op.amount) })}
+        </p>
+        <p className="mt-1 break-words text-lg">{isIncome ? payerName(op) : recipientName(op)}</p>
+        <p className="mt-1 flex items-center justify-center gap-2 text-sm text-ink-500">
+          <AccountTag label={tag(op)} />
+          {opDay(op)}
+        </p>
+      </div>
+      <p className="mb-2 mt-3 text-sm text-ink-700">{isIncome ? "За який проект? Можна кілька" : "Куди це?"}</p>
+      {isIncome ? <SortIncome key={op.id} busy={busy} projects={projects} onDone={(ids) => onIncome(op, ids)} /> : <CategoryButtons busy={busy} onPick={(s) => onSpend(op, s)} />}
+      {all.length > 1 ? (
+        <div className="mt-3 flex items-center justify-between text-sm text-ink-500">
+          <span className="tabular-nums">
+            {k + 1} з {all.length}
+          </span>
+          <button type="button" onClick={() => setAt(k + 1)} className="min-h-11 px-2 font-medium text-cherry-deep">
+            Пропустити ›
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SortIncome({ projects, busy, onDone }: { projects: Project[]; busy: boolean; onDone: (ids: string[]) => void }) {
+  const [chosen, setChosen] = useState<string[]>([]);
+  return (
+    <div>
+      <Chips projects={projects} chosen={chosen} onChange={setChosen} />
+      <button type="button" disabled={busy || !chosen.length} onClick={() => onDone(chosen)} className={`mt-3 ${primary}`}>
+        Готово
+      </button>
+    </div>
+  );
+}
+
+/* ---------- the team, inside «Куди пішло» ---------- */
+
+function TeamList({
+  team,
+  extra,
+  names,
+  month,
+  current,
+  next,
+  now,
+}: {
+  team: Payout[];
+  extra: { name: string; amount: number }[];
+  names: Map<string, string>;
+  month: string;
+  current: string;
+  next?: Reminder;
+  now: number;
+}) {
+  return (
+    <div className="mb-2">
+      {next ? (
+        <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm">
+          Виплата <strong>{when(next.date, now)}</strong>: {next.items.map((it) => `${it.name} ${grn(it.amount)}`).join(", ")}
+        </p>
+      ) : null}
+      <ul className="divide-y divide-paper-100">
+        {team.map((p) => {
+          const project = names.get(p.forClient ?? p.row.project ?? "");
+          return (
+            <li key={p.row.id} className="flex items-start justify-between gap-3 py-2">
+              <span className="min-w-0">
+                <span className="block">{p.row.name}</span>
+                {project ? <span className="block text-xs text-ink-500">за {project}</span> : null}
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="block tabular-nums">{grn(p.row.amount)}</span>
+                <span className={`block text-xs ${p.paidOn ? "text-emerald-700" : month < current ? "text-cherry-juice" : "text-ink-500"}`}>
+                  {p.paidOn ? `✓ ${p.paidOn}-го` : month < current ? "не виплачено" : `${p.day}-го`}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+        {extra.map((t) => (
+          <li key={t.name} className="flex justify-between gap-3 py-2">
+            <span>{t.name}</span>
+            <span className="tabular-nums">{grn(t.amount)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className={`${eyebrow} mt-2`}>Усі перекази</p>
     </div>
   );
 }
@@ -479,25 +718,6 @@ function ProjectLine({
           );
         })}
       </span>
-    </li>
-  );
-}
-
-function SortIncome({ op, money: sum, projects, busy, onDone }: { op: Operation; money: string; projects: Project[]; busy: boolean; onDone: (ids: string[]) => void }) {
-  const [chosen, setChosen] = useState<string[]>([]);
-  return (
-    <li>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate">{payerName(op)}</span>
-        <span className="shrink-0 tabular-nums">{sum}</span>
-      </div>
-      <p className="text-xs text-ink-500">{opDay(op)} · За який проект? Можна кілька.</p>
-      <div className="mt-2">
-        <Chips projects={projects} chosen={chosen} onChange={setChosen} />
-      </div>
-      <button type="button" disabled={busy || !chosen.length} onClick={() => onDone(chosen)} className={`mt-2 ${primary}`}>
-        Готово
-      </button>
     </li>
   );
 }
