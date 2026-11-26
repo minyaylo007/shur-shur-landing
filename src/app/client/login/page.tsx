@@ -1,8 +1,8 @@
-/* The client's login: phone + password. The phone finds the cabinet; the
-   form never says whether a number is known. */
+/* The client's login: login + password. The login (or, for a client who set
+   one, the phone) finds the cabinet; the form never says whether it is known. */
 
 const MESSAGES: Record<string, string> = {
-  bad: "Номер або пароль не підійшли.",
+  bad: "Логін або пароль не підійшли.",
   limit: "Забагато спроб. Зачекайте трохи й спробуйте знову.",
   unset: "Пароль ще не задано — відкрийте посилання, яке ви отримали від SHUR-SHUR.",
   down: "Кабінет тимчасово недоступний. Спробуйте пізніше.",
@@ -18,8 +18,8 @@ export default async function ClientPhoneLogin({ searchParams }: { searchParams:
       <h1 className="font-display text-2xl">Кабінет клієнта SHUR-SHUR</h1>
       <form method="post" action="/api/client/login" className="mt-6 space-y-4">
         <label className="block">
-          <span className="text-sm text-ink-700">Номер телефону</span>
-          <input type="tel" name="phone" required autoComplete="tel" autoFocus placeholder="+380 67 123 45 67" className={input} />
+          <span className="text-sm text-ink-700">Логін</span>
+          <input type="text" name="login" required autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoFocus className={input} />
         </label>
         <label className="block">
           <span className="text-sm text-ink-700">Пароль</span>
@@ -34,7 +34,7 @@ export default async function ClientPhoneLogin({ searchParams }: { searchParams:
           Увійти
         </button>
       </form>
-      <p className="mt-6 text-sm text-ink-700">Забули пароль — напишіть нам, надішлемо нове посилання.</p>
+      <p className="mt-6 text-sm text-ink-700">Забули пароль — напишіть нам.</p>
     </div>
   );
 }

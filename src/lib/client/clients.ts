@@ -27,6 +27,12 @@ export const CLIENT_SETUP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const CLIENT_FAILURE_LIMIT = 10;
 export const CLIENT_FAILURE_WINDOW_MS = 60 * 60 * 1000;
 export const MAX_CLIENT_NAME = 80;
+/** The end of 03.12.2026 in Kyiv (UTC+2 in December): the free week of the clients that came before it (owner, 26.11.2026). */
+export const FREE_UNTIL_EXISTING = Date.UTC(2026, 11, 3, 22, 0, 0);
+/** A new client's free week. */
+export const FREE_DAYS = 7;
+/** The owner allows simple client passwords (26.11.2026): 5 characters at least. */
+export const MIN_CLIENT_PASSWORD = 5;
 
 const ID_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 const ID = /^[a-z2-9]{12}$/;
@@ -93,8 +99,12 @@ const clientSchema = z.object({
   createdAt: z.number(),
   /** A test client pays in monobank's test environment only (MONO_TEST_TOKEN). */
   test: z.boolean(),
-  /** The login: the client's phone, digits only (set with the password). Null: not given yet. */
+  /** The older login: the client's phone, digits only (set with the password). Null: not given. */
   phone: z.string().nullable().default(null),
+  /** The simple login the owner gives (lowercase latin letters and digits, 3–32). Null: none. */
+  login: z.string().nullable().default(null),
+  /** Free until this moment (ms): no payment asked before it. Records older than the field: end of 03.12.2026. */
+  freeUntil: z.number().default(() => FREE_UNTIL_EXISTING),
   auth: z.object({
     password: z.object({ salt: z.string(), hash: z.string() }).nullable(),
     sessionKey: z.string().nullable(),
@@ -183,6 +193,8 @@ export async function createClient(name: string, test: boolean, nowMs = Date.now
     createdAt: nowMs,
     test,
     phone: null,
+    login: null,
+    freeUntil: nowMs + FREE_DAYS * 24 * 60 * 60 * 1000,
     auth: {
       password: null,
       sessionKey: null,
@@ -336,6 +348,47 @@ export async function findClientByPhone(raw: string): Promise<string | null> {
   const same = (await listClients()).filter((c) => c.phone !== null && samePhone(c.phone, phone));
   return same.length === 1 ? same[0].id : null;
 }
+
+/* ---------- the simple login ----------
+   Latin letters and digits, 3–32, case does not matter: «Marina» and «marina»
+   are one login. Set by the owner together with the password (setLoginPassword). */
+
+const LOGIN = /^[a-z0-9]{3,32}$/;
+export function normalizeLogin(raw: string): string | null {
+  const login = raw.trim().toLowerCase();
+  return LOGIN.test(login) ? login : null;
+}
+
+/** The id of the client with this login, or null. */
+export async function findClientByLogin(raw: string): Promise<string | null> {
+  const login = normalizeLogin(raw);
+  if (!login) return null;
+  const same = (await listClients()).filter((c) => c.login === login);
+  return same.length === 1 ? same[0].id : null;
+}
+
+export type SetLoginOutcome = { ok: true } | { ok: false; error: "no_client" | "bad_login" | "login_taken" | "weak_password" };
+
+/**
+ * The owner sets a client's login and password, no link needed. Every earlier
+ * session ends (a new session key), an unused setup link stops working, the
+ * failure count starts over. Only the scrypt hash is stored.
+ */
+export async function setLoginPassword(id: string, rawLogin: string, password: string): Promise<SetLoginOutcome> {
+  const login = normalizeLogin(rawLogin);
+  if (!login) return { ok: false, error: "bad_login" };
+  if (password.length < MIN_CLIENT_PASSWORD || password.length > MAX_PASSWORD) return { ok: false, error: "weak_password" };
+  if ((await listClients()).some((c) => c.id !== id && c.login === login)) return { ok: false, error: "login_taken" };
+  const hashed = await hashPassword(password);
+  const client = await updateClient(id, (c) => {
+    c.login = login;
+    c.auth = { password: hashed, sessionKey: randomBytes(32).toString("hex"), setup: null, failures: { since: 0, count: 0 } };
+  });
+  return client ? { ok: true } : { ok: false, error: "no_client" };
+}
+
+/** Before `freeUntil` no payment is asked. */
+export const isFree = (client: Client, nowMs = Date.now()) => nowMs < client.freeUntil;
 
 export type ClientSetupOutcome = { ok: true; session: string } | { ok: false; error: "bad_link" | "weak_password" | "mismatch" | "bad_phone" | "phone_taken" };
 

@@ -123,10 +123,12 @@ let store: ReturnType<typeof useMemoryStore>;
 let ip = 0;
 let logged: string[];
 
-async function newClient(name: string, test = false) {
+/** A client past its free week (the money tests ask for payment); `free` keeps the week. */
+async function newClient(name: string, test = false, free = false) {
   const { client, token } = await clients.createClient(name, test);
   const done = await clients.completeClientSetup(client.id, token, PASSWORD, PASSWORD);
   if (!done.ok) throw new Error("setup failed");
+  if (!free) await clients.updateClient(client.id, (c) => void (c.freeUntil = Date.now() - 1));
   return { id: client.id, session: done.session, cookie: `${clients.CLIENT_COOKIE}=${done.session}` };
 }
 
@@ -168,6 +170,13 @@ function webhook(id: string, body: string, signature: string | null): Request {
     headers: { "content-type": "application/json", ...(signature ? { "x-sign": signature } : {}) },
     body,
   });
+}
+
+/** A call to the site signed by ace-main (CABINET_HMAC_SECRET). */
+function signedRequest(path: string, payload: unknown): Request {
+  const body = JSON.stringify(payload);
+  const ts = String(Math.floor(Date.now() / 1000));
+  return new Request(`https://shur-shur.com${path}`, { method: "POST", headers: { "x-shur-timestamp": ts, "x-shur-signature": signLedgerBody(HMAC, ts, body) }, body });
 }
 
 /** The key the owner's cabinet issues for the client's bot. */
@@ -520,6 +529,36 @@ describe("one client cannot reach another", () => {
     expect(logged.join("\n")).not.toMatch(/67.?123|0999/);
   });
 
+  it("the simple login: set by the signed call, any case signs in, a wrong one does not, the old link and sessions end", async () => {
+    const a = await newClient("Марина");
+    const link = await clients.reissueSetup(a.id);
+    const set = (payload: Record<string, unknown>) => CLIENT_KEY(signedRequest("/api/cabinet/client-key", payload));
+
+    expect((await set({ action: "password", client_id: a.id, login: "marina", password: "1234" })).status).toBe(400);
+    expect((await set({ action: "password", client_id: a.id, login: "ма", password: "12345" })).status).toBe(400);
+    expect((await set({ action: "password", client_id: a.id, login: "marina", password: "12345" })).status).toBe(200);
+    const b = await newClient("Інший");
+    expect((await set({ action: "password", client_id: b.id, login: "MARINA", password: "12345" })).status).toBe(409);
+
+    // A new password: the earlier session and the unused link stop working.
+    expect(await clients.signedInClient(a.session, a.id)).toBeNull();
+    expect(await clients.clientSetupValid(a.id, link!)).toBe(false);
+
+    for (const login of ["marina", "Marina", " MARINA "]) {
+      const right = await LOGIN(post("/api/client/login", undefined, { login, password: "12345" }));
+      expect(right.headers.get("location")).toMatch(new RegExp(`/client/${a.id}$`));
+      const session = /shur_client=([^;]+)/.exec(right.headers.get("set-cookie") ?? "")![1];
+      expect(await clients.signedInClient(session, a.id)).not.toBeNull();
+    }
+    for (const form of [{ login: "marina", password: "12346" }, { login: "marinka", password: "12345" }, { login: "marina", password: "" }]) {
+      const refused = await LOGIN(post("/api/client/login", undefined, form));
+      expect(refused.headers.get("location")).toMatch(/\/client\/login\?e=bad$/);
+      expect(refused.headers.get("set-cookie")).toBeNull();
+    }
+    expect(logged.join("\n")).not.toMatch(/12345|12346|marina/i);
+    expect(JSON.stringify(store.get(clients.clientKey(a.id)))).not.toContain("12345");
+  });
+
   it("the back office sees any client's page read-only; a forged back-office cookie sees nothing", async () => {
     const a = await newClient("Кав'ярня");
     const sessionKey = "ab".repeat(32);
@@ -728,6 +767,40 @@ describe("personal data stays in the cabinet", () => {
     expect(html).toContain("5–8: є з чого почати");
     expect(html).toContain("Чи є у вас план продажів?");
     expect(html).toContain("17.11.2026");
+  });
+});
+
+describe("the free week", () => {
+  it("before freeUntil: one line «Безкоштовно до …», no payment button, results shown; after it the button is back", async () => {
+    const a = await newClient("Кав'ярня", false, true);
+    await saveResults(a.id, table, "upload");
+    const until = Date.UTC(2026, 11, 3, 22);
+    await clients.updateClient(a.id, (c) => void (c.freeUntil = until));
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(until - DAY);
+
+    const free = (await page(a.id, a.session)).html;
+    expect(free).toContain("Безкоштовно до 03.12. Далі — 15 € на місяць");
+    expect(free).not.toContain("/api/client/subscribe");
+    expect(free).not.toMatch(/[Оо]формі?ть підписку|[Оо]платіть/);
+    expect(free).toContain("Олена Петренко");
+    expect(free).toContain(`href="/api/client/export?id=${a.id}"`);
+
+    vi.setSystemTime(until + 1);
+    const after = (await page(a.id, a.session)).html;
+    expect(after).toContain('action="/api/client/subscribe"');
+    expect(after).toContain("Олена Петренко");
+  });
+
+  it("a new client is free for 7 days; a record from before the field is free until 03.12.2026", async () => {
+    const now = Date.UTC(2026, 11, 10, 12);
+    const { client } = await clients.createClient("Новий", false, now);
+    expect(client.freeUntil).toBe(now + 7 * DAY);
+    const old = { ...client } as Partial<typeof client>;
+    delete old.freeUntil;
+    store.set(clients.clientKey(client.id), { text: JSON.stringify(old), etag: "x" });
+    expect((await record(client.id)).freeUntil).toBe(clients.FREE_UNTIL_EXISTING);
+    expect(new Date(clients.FREE_UNTIL_EXISTING - 1).toLocaleDateString("uk-UA", { timeZone: "Europe/Kyiv" })).toBe("03.12.2026");
   });
 });
 

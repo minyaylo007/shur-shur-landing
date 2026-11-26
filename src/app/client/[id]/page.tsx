@@ -1,11 +1,11 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { accessOf, monoToken, price, syncBilling, type Access } from "@/lib/billing/mono";
+import { accessOf, monoToken, price, PRICE_EUR, syncBilling, type Access } from "@/lib/billing/mono";
 import { readAttempts, summarize, type Attempt } from "@/lib/client/attempts";
 import { CherryIcon } from "@/components/ui/icons";
 import { isSignedIn, SESSION_COOKIE } from "@/lib/cabinet/auth";
-import { CLIENT_COOKIE, isClientId, readClient, signedInClient, type Client } from "@/lib/client/clients";
+import { CLIENT_COOKIE, isClientId, isFree, readClient, signedInClient, type Client } from "@/lib/client/clients";
 import { readResults, SHOWN_ROWS, splitByDay, type Results } from "@/lib/client/results";
 import { site } from "@/lib/site";
 
@@ -139,6 +139,18 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
   const cost = price().label;
   const subscribe = `Оформити підписку — ${cost} / міс`;
   const lastPaid: [string, string][] = billing.lastPaidAt ? [["Остання оплата", day(billing.lastPaidAt)]] : [];
+
+  // The free week (owner, 26.11.2026): one line, no button, nothing to pay.
+  // `freeUntil` is the first moment that is not free, so the last free day is a millisecond before it.
+  if (isFree(client) && billing.status !== "active" && billing.status !== "pending") {
+    return (
+      <section aria-label="Підписка" className={card}>
+        <p className="font-semibold">
+          Безкоштовно до {day(client.freeUntil - 1).slice(0, 5)}. Далі — {PRICE_EUR} € на місяць
+        </p>
+      </section>
+    );
+  }
 
   if (access.state === "no_billing") {
     return (
@@ -565,7 +577,7 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
       </header>
       {admin ? (
         <p className="mt-4 rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-900 ring-1 ring-sky-200">
-          Перегляд адміністратора: так цю сторінку бачить клієнт{client.phone ? ` (логін +${client.phone})` : " (номер ще не задано)"}. Кнопки тут не діють.
+          Перегляд адміністратора: так цю сторінку бачить клієнт{client.login ? ` (логін ${client.login})` : client.phone ? ` (логін +${client.phone})` : " (логін ще не задано)"}. Кнопки тут не діють.
         </p>
       ) : null}
       <fieldset disabled={admin} className="contents">

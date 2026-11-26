@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readSignedBody, storeFailure } from "@/lib/cabinet/signed";
 import { attemptsKey } from "@/lib/client/attempts";
-import { createClient, deleteClient, isClientId, issueIngestKey, listClients, MAX_CLIENT_NAME, readClient, reissueSetup, setupPath } from "@/lib/client/clients";
+import { createClient, deleteClient, isClientId, issueIngestKey, listClients, MAX_CLIENT_NAME, readClient, reissueSetup, setLoginPassword, setupPath } from "@/lib/client/clients";
 import { site } from "@/lib/site";
 import { resultsKey } from "@/lib/client/results";
 
@@ -21,6 +21,9 @@ export const runtime = "nodejs";
    action "link":   a NEW one-time setup link (short form, 7 days); the
                     password set by it replaces the old one and signs out
                     every earlier session.
+   action "password": sets the client's simple login and password (owner,
+                    26.11.2026) — no link; ends every earlier session and
+                    an unused link. The password is never logged or echoed.
    action "delete": removes the client and its data; refused while a
                     subscription is charging. */
 
@@ -30,6 +33,7 @@ const schema = z.union([
   z.strictObject({ action: z.literal("delete"), client_id: z.string().refine(isClientId) }),
   z.strictObject({ action: z.literal("list") }),
   z.strictObject({ action: z.literal("link"), client_id: z.string().refine(isClientId) }),
+  z.strictObject({ action: z.literal("password"), client_id: z.string().refine(isClientId), login: z.string().max(64), password: z.string().max(200) }),
 ]);
 
 const no = (error: string, status: number) => NextResponse.json({ ok: false, error }, { status });
@@ -51,8 +55,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (input.action === "password") {
+      const outcome = await setLoginPassword(input.client_id, input.login, input.password);
+      if (!outcome.ok) return no(outcome.error, outcome.error === "no_client" ? 404 : outcome.error === "login_taken" ? 409 : 400);
+      console.info("[cabinet] client login and password set (signed call)");
+      return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (input.action === "list") {
-      const clients = (await listClients()).map((c) => ({ id: c.id, name: c.name, test: c.test, password_set: c.auth.password !== null }));
+      const clients = (await listClients()).map((c) => ({ id: c.id, name: c.name, test: c.test, login: c.login, password_set: c.auth.password !== null }));
       return NextResponse.json({ ok: true, clients }, { headers: { "Cache-Control": "no-store" } });
     }
     if (input.action === "link") {
