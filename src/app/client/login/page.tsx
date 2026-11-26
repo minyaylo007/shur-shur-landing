@@ -1,6 +1,8 @@
 /* The client's login: login + password. The login (or, for a client who set
    one, the phone) finds the cabinet; the form never says whether it is known. */
 
+import { site } from "@/lib/site";
+
 const MESSAGES: Record<string, string> = {
   bad: "Логін або пароль не підійшли.",
   limit: "Забагато спроб. Зачекайте трохи й спробуйте знову.",
@@ -34,7 +36,12 @@ export default async function ClientPhoneLogin({ searchParams }: { searchParams:
           Увійти
         </button>
       </form>
-      <p className="mt-6 text-sm text-ink-700">Забули пароль — напишіть нам.</p>
+      <p className="mt-6 text-sm text-ink-700">
+        Забули пароль? Подзвоніть або напишіть:{" "}
+        <a href={site.phone.tel} className="font-medium text-cherry-700 underline underline-offset-4">
+          <span dir="ltr">{site.phone.display}</span>
+        </a>
+      </p>
     </div>
   );
 }
