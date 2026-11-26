@@ -771,25 +771,83 @@ describe("personal data stays in the cabinet", () => {
 });
 
 describe("the free week", () => {
-  it("before freeUntil: one line «Безкоштовно до …», no payment button, results shown; after it the button is back", async () => {
+  it("before freeUntil: «Оплата з <дд.мм>» and the «Оплатити» button, results and .csv shown; after it, unpaid, still shown", async () => {
     const a = await newClient("Кав'ярня", false, true);
     await saveResults(a.id, table, "upload");
-    const until = Date.UTC(2026, 11, 3, 22);
+    const until = Date.UTC(2026, 10, 26, 22); // 27.11.2026 00:00 Kyiv
     await clients.updateClient(a.id, (c) => void (c.freeUntil = until));
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(until - DAY);
+    vi.setSystemTime(until - 10 * 60 * 60 * 1000);
 
     const free = (await page(a.id, a.session)).html;
-    expect(free).toContain("Безкоштовно до 03.12. Далі — 15 € на місяць");
-    expect(free).not.toContain("/api/client/subscribe");
-    expect(free).not.toMatch(/[Оо]формі?ть підписку|[Оо]платіть/);
+    expect(free).toContain("Оплата з 27.11 — 15 € на місяць");
+    expect(free).toContain('action="/api/client/subscribe"');
+    expect(free).toMatch(/<button[^>]*>Оплатити<\/button>/);
     expect(free).toContain("Олена Петренко");
     expect(free).toContain(`href="/api/client/export?id=${a.id}"`);
+    expect((await download(a.id, a.cookie)).status).toBe(200);
 
-    vi.setSystemTime(until + 1);
+    // Payment off on the site: the line stays, no button that would lead nowhere.
+    delete process.env.MONO_TOKEN;
+    const off = (await page(a.id, a.session)).html;
+    expect(off).toContain("Оплата з 27.11 — 15 € на місяць");
+    expect(off).not.toContain("/api/client/subscribe");
+    process.env.MONO_TOKEN = "live-token";
+
+    // The date passed, nothing paid: nothing is closed.
+    vi.setSystemTime(until + DAY);
     const after = (await page(a.id, a.session)).html;
     expect(after).toContain('action="/api/client/subscribe"');
+    expect(after).not.toContain("Оплата з 27.11");
     expect(after).toContain("Олена Петренко");
+    expect(after).toContain(`href="/api/client/export?id=${a.id}"`);
+    expect((await download(a.id, a.cookie)).status).toBe(200);
+  });
+
+  it("paid ahead during the free days: the paid month starts at freeUntil, the next charge a month after it", async () => {
+    const a = await newClient("Кав'ярня", false, true);
+    const until = Date.UTC(2026, 10, 26, 22); // 27.11.2026 00:00 Kyiv
+    await clients.updateClient(a.id, (c) => void (c.freeUntil = until));
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const paidAt = until - 10 * 60 * 60 * 1000;
+    vi.setSystemTime(paidAt);
+
+    const response = await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
+    expect(response.headers.get("location")).toBe("https://pay.mbnk.biz/inv_1");
+    expect(called("/invoice/create")[0].body).toMatchObject({ amount: 1500, ccy: 978 });
+    pay("inv_1", paidAt + 60_000);
+    vi.setSystemTime(paidAt + 2 * 60_000);
+    const html = (await page(a.id, a.session)).html;
+
+    const { billing } = await record(a.id);
+    expect(billing).toMatchObject({ status: "active", lastPaidAt: until, nextChargeAt: mono.addMonth(until) });
+    expect(mono.addMonth(until)).toBe(Date.UTC(2026, 11, 26, 22)); // 27.12 00:00 Kyiv
+    expect(html).toContain("Підписка активна");
+    expect(html).toContain("27.12.2026");
+
+    // No charge before the paid month ends; the first one asks for the month from 27.12.
+    expect(await mono.runCharges(Date.UTC(2026, 11, 20))).toMatchObject({ not_due: 1 });
+    expect(called("/wallet/payment")).toHaveLength(0);
+  });
+
+  it("paid after freeUntil: the month starts at the payment, as before", async () => {
+    const a = await newClient("Кав'ярня");
+    await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
+    const at = Date.now() + 1000;
+    pay("inv_1", at);
+    await page(a.id, a.session);
+    expect((await record(a.id)).billing.lastPaidAt).toBe(at);
+  });
+
+  it("the free days are set by the signed call only", async () => {
+    const a = await newClient("Кав'ярня", false, true);
+    const until = Date.UTC(2026, 10, 26, 22);
+    const ok = await CLIENT_KEY(signedRequest("/api/cabinet/client-key", { action: "free_until", client_id: a.id, free_until: until }));
+    expect(ok.status).toBe(200);
+    expect((await record(a.id)).freeUntil).toBe(until);
+    const forged = await CLIENT_KEY(new Request("https://shur-shur.com/api/cabinet/client-key", { method: "POST", body: JSON.stringify({ action: "free_until", client_id: a.id, free_until: 1 }) }));
+    expect(forged.status).toBeGreaterThanOrEqual(400);
+    expect((await record(a.id)).freeUntil).toBe(until);
   });
 
   it("a new client is free for 7 days; a record from before the field is free until 03.12.2026", async () => {

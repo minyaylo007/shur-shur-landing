@@ -277,15 +277,20 @@ function paid(billing: Billing, startMs: number): void {
   billing.nextChargeAt = billing.status === "cancelled" ? null : addMonth(billing.lastPaidAt);
 }
 
-/** What the first invoice says, into the record. */
-function applyFirst(billing: Billing, read: InvoiceRead, nowMs: number): void {
+/**
+ * What the first invoice says, into the record. Paid during the free days
+ * (`freeUntil` ahead): the paid month starts at `freeUntil`, not at the
+ * payment — the free days are not lost (owner, 26.11.2026).
+ */
+function applyFirst(billing: Billing, read: InvoiceRead, nowMs: number, freeUntil = 0): void {
   if (read.cardToken) billing.card = sealCard(read.cardToken) ?? billing.card;
   if (billing.status !== "pending") return;
   if (read.state === "success") {
     billing.status = "active";
     billing.pageUrl = null;
     billing.charge = null;
-    const at = read.at ?? nowMs;
+    // The owner's card check keeps its own days; a usual first payment waits for the free days to end.
+    const at = billing.first ? (read.at ?? nowMs) : Math.max(read.at ?? nowMs, freeUntil);
     // A card check pays a little for a few days; the monthly charge comes when they end.
     paid(billing, billing.first ? monthEndingAt(at + billing.first.days * 24 * 60 * 60 * 1000) : at);
     billing.first = null;
@@ -328,7 +333,7 @@ export async function syncBilling(client: Client, seen?: string, nowMs = Date.no
   const firstRead = first ? await invoiceStatus(token, first) : null;
   const chargeRead = charge ? await invoiceStatus(token, charge.invoiceId!) : null;
   return updateClient(client.id, (c) => {
-    if (firstRead && c.billing.invoiceId === first) applyFirst(c.billing, firstRead, nowMs);
+    if (firstRead && c.billing.invoiceId === first) applyFirst(c.billing, firstRead, nowMs, c.freeUntil);
     if (chargeRead && c.billing.charge?.invoiceId === charge!.invoiceId && c.billing.charge.status === "processing") applyCharge(c.billing, c.billing.charge, chargeRead, nowMs);
     c.billing.syncedAt = nowMs;
     if (seen && !c.billing.seen.includes(seen)) c.billing.seen = [...c.billing.seen, seen].slice(-SEEN_KEPT);

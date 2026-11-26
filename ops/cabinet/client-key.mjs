@@ -9,6 +9,11 @@
 //   node ops/cabinet/client-key.mjs --id <id клиента> --login <логин> --password-file <файл>
 //   node ops/cabinet/client-key.mjs --id <id клиента> --sheet-file <файл>
 //   node ops/cabinet/client-key.mjs --id <id клиента> --sheet-off
+//   node ops/cabinet/client-key.mjs --id <id клиента> --free-until <ГГГГ-ММ-ДД>
+//
+// --free-until: бесплатные дни клиента кончаются в 00:00 по Киеву этого дня —
+// с него в кабинете «Оплата з <дд.мм>»; оплатить наперёд можно и раньше,
+// оплаченный месяц начнётся с этой даты. Результаты открыты всегда.
 //
 // --sheet-file: бот клиента пишет в открытую Google-таблицу — сайт читает её
 // сам (src/lib/client/sheet.ts). Файл (в git не класть): строки
@@ -40,13 +45,13 @@ import { parseArgs } from "node:util";
 import { config, postSigned } from "./lib.mjs";
 
 const { values } = parseArgs({
-  options: { name: { type: "string" }, id: { type: "string" }, out: { type: "string" }, test: { type: "boolean" }, delete: { type: "boolean" }, list: { type: "boolean" }, link: { type: "boolean" }, login: { type: "string" }, "password-file": { type: "string" }, "sheet-file": { type: "string" }, "sheet-off": { type: "boolean" } },
+  options: { name: { type: "string" }, id: { type: "string" }, out: { type: "string" }, test: { type: "boolean" }, delete: { type: "boolean" }, list: { type: "boolean" }, link: { type: "boolean" }, login: { type: "string" }, "password-file": { type: "string" }, "sheet-file": { type: "string" }, "sheet-off": { type: "boolean" }, "free-until": { type: "string" } },
 });
 const usage = () => {
   console.error('нужно: --name "<название>" --out <файл> [--test] | --id <id> --out <файл> | --id <id> --delete | --id <id> --login <логин> --password-file <файл>');
   process.exit(2);
 };
-if (values["sheet-file"] !== undefined || values["sheet-off"]) {
+if (values["free-until"] !== undefined || values["sheet-file"] !== undefined || values["sheet-off"]) {
   if (!values.id) usage();
 } else if (values.login !== undefined || values["password-file"] !== undefined) {
   if (!values.id || !values.login || !values["password-file"]) usage();
@@ -54,6 +59,34 @@ if (values["sheet-file"] !== undefined || values["sheet-off"]) {
 
 const { secret, site } = config();
 const call = (payload) => postSigned(`${site}/api/cabinet/client-key`, secret, payload);
+
+/** 00:00 in Kyiv of the day `YYYY-MM-DD` (UTC+2 or +3 — taken from the calendar, not assumed). */
+function kyivMidnight(dayText) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayText ?? "");
+  if (!m) return null;
+  const utc = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  const offset = (ms) => {
+    const name = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Kyiv", timeZoneName: "shortOffset" }).formatToParts(ms).find((p) => p.type === "timeZoneName").value;
+    const [, sign, h, min] = /GMT([+-])(\d+)(?::(\d+))?/.exec(name);
+    return (sign === "-" ? -1 : 1) * (+h * 60 + +(min ?? 0)) * 60_000;
+  };
+  return utc - offset(utc - offset(utc));
+}
+
+if (values["free-until"] !== undefined) {
+  const at = kyivMidnight(values["free-until"]);
+  if (at === null) {
+    console.error("--free-until: дата в виде ГГГГ-ММ-ДД");
+    process.exit(2);
+  }
+  const { status, answer } = await call({ action: "free_until", client_id: values.id, free_until: at });
+  if (status !== 200) {
+    console.error(`сайт не задал дату: HTTP ${status} ${answer?.error ?? ""}`);
+    process.exit(1);
+  }
+  console.log(`оплата с ${new Date(answer.free_until).toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" })} (Киев); до этого — бесплатно, оплатить можно наперёд`);
+  process.exit(0);
+}
 
 if (values["sheet-file"] !== undefined || values["sheet-off"]) {
   let sheet = null;
