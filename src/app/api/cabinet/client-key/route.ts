@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readSignedBody, storeFailure } from "@/lib/cabinet/signed";
 import { attemptsKey } from "@/lib/client/attempts";
-import { createClient, deleteClient, isClientId, issueIngestKey, listClients, MAX_CLIENT_NAME, readClient, reissueSetup, setLoginPassword, setupPath } from "@/lib/client/clients";
+import { createClient, deleteClient, isClientId, issueIngestKey, listClients, MAX_CLIENT_NAME, readClient, reissueSetup, setClientSheet, setLoginPassword, setupPath } from "@/lib/client/clients";
+import { sheetSchema, syncSheet } from "@/lib/client/sheet";
 import { site } from "@/lib/site";
 import { resultsKey } from "@/lib/client/results";
 
@@ -24,6 +25,9 @@ export const runtime = "nodejs";
    action "password": sets the client's simple login and password (owner,
                     26.11.2026) — no link; ends every earlier session and
                     an unused link. The password is never logged or echoed.
+   action "sheet":  points the cabinet at the bot's public Google Sheet
+                    ({id, name}) or away from it (null); reads it at once
+                    and answers how many rows it has and how many were new.
    action "delete": removes the client and its data; refused while a
                     subscription is charging. */
 
@@ -33,6 +37,7 @@ const schema = z.union([
   z.strictObject({ action: z.literal("delete"), client_id: z.string().refine(isClientId) }),
   z.strictObject({ action: z.literal("list") }),
   z.strictObject({ action: z.literal("link"), client_id: z.string().refine(isClientId) }),
+  z.strictObject({ action: z.literal("sheet"), client_id: z.string().refine(isClientId), sheet: sheetSchema.nullable() }),
   z.strictObject({ action: z.literal("password"), client_id: z.string().refine(isClientId), login: z.string().max(64), password: z.string().max(200) }),
 ]);
 
@@ -62,8 +67,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    if (input.action === "sheet") {
+      const client = await setClientSheet(input.client_id, input.sheet);
+      if (!client) return no("no_client", 404);
+      console.info(`[cabinet] client sheet ${input.sheet ? "set" : "removed"} (signed call)`);
+      if (!input.sheet) return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+      const read = await syncSheet(client.id, input.sheet, { force: true });
+      return NextResponse.json({ ok: true, sheet: read.outcome, rows: read.rows, stored: read.stored }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (input.action === "list") {
-      const clients = (await listClients()).map((c) => ({ id: c.id, name: c.name, test: c.test, login: c.login, password_set: c.auth.password !== null }));
+      const clients = (await listClients()).map((c) => ({ id: c.id, name: c.name, test: c.test, login: c.login, password_set: c.auth.password !== null, sheet: c.sheet !== null }));
       return NextResponse.json({ ok: true, clients }, { headers: { "Cache-Control": "no-store" } });
     }
     if (input.action === "link") {
