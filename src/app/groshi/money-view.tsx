@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   apply,
   everything,
@@ -29,6 +29,7 @@ import {
   type Operation,
   type Spend,
 } from "@/lib/money/ledger";
+import { dropUnsaved, keepUnsaved, problemText, readUnsaved, retryable } from "@/lib/money/pending";
 
 /* One column, phone first. Big numbers, almost no words: «прийшло / пішло /
    залишилось», then who of the projects paid. Empty blocks are not shown.
@@ -106,6 +107,20 @@ export function MoneyView({
   const [book, setBook] = useState(initial);
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
+  /** What she typed and the server did not take: kept in this browser until saved. */
+  const [unsaved, setUnsaved] = useState<Action | null>(null);
+  const local = () => (typeof window === "undefined" ? undefined : window.localStorage);
+
+  useEffect(() => {
+    if (demo) return;
+    const left = readUnsaved(local());
+    if (left) {
+      // localStorage exists only after hydration; reading it in render would mismatch the server's HTML
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setUnsaved(left);
+      setProblem("Минулого разу запис не зберігся. Введене на місці.");
+    }
+  }, [demo]);
 
   /** The demo changes its memory; the cabinet saves first and shows what was saved. */
   async function run(action: Action): Promise<boolean> {
@@ -115,22 +130,38 @@ export function MoneyView({
       return true;
     }
     setBusy(true);
+    let status = 0;
+    let error = "";
     try {
       const res = await fetch("/api/cabinet/groshi", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(action) });
+      status = res.status;
       if (res.status === 401) {
+        keepUnsaved(local(), action);
         window.location.href = "/cabinet/login";
         return false;
       }
       const answer = await res.json();
-      if (!answer.ok) throw new Error(answer.error);
-      setBook(answer.book);
-      return true;
+      if (answer.ok) {
+        setBook(answer.book);
+        setUnsaved(null);
+        dropUnsaved(local());
+        return true;
+      }
+      error = String(answer.error ?? "");
     } catch {
-      setProblem("Не збереглось. Спробуй ще раз за хвилину.");
-      return false;
+      /* no answer at all: status stays 0 */
     } finally {
       setBusy(false);
     }
+    setProblem(problemText(error, status));
+    if (retryable(status)) {
+      setUnsaved(action);
+      keepUnsaved(local(), action);
+    } else {
+      setUnsaved(null);
+      dropUnsaved(local());
+    }
+    return false;
   }
 
   const { ops, accounts } = useMemo(() => everything(book, bankOps, bankAccounts), [book, bankOps, bankAccounts]);
@@ -158,9 +189,14 @@ export function MoneyView({
       {bank === "off" ? <p className="rounded-full bg-paper-100 px-3 py-1 text-center text-xs text-ink-700">Банк ще не підключено · приходи додавай вручну</p> : null}
       {bank === "stale" ? <p className="rounded-full bg-paper-100 px-3 py-1 text-center text-xs text-ink-700">Банк зараз не відповідає · показано збережене</p> : null}
       {problem ? (
-        <p role="alert" className="rounded-xl bg-cherry-juice px-3 py-2 text-center text-sm text-cream-type">
-          {problem}
-        </p>
+        <div role="alert" className="rounded-xl bg-cherry-juice px-3 py-2 text-center text-sm text-cream-type">
+          <p>{problem}</p>
+          {unsaved ? (
+            <button type="button" disabled={busy} onClick={() => run(unsaved)} className="mt-2 min-h-11 w-full rounded-full bg-cream-type px-4 font-semibold text-cherry-deep disabled:opacity-50">
+              {busy ? "Зберігаю…" : "Зберегти ще раз"}
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <header className="flex items-center justify-between gap-2">

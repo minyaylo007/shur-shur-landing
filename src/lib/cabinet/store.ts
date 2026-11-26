@@ -39,7 +39,9 @@ const blobStore: CabinetStore = {
     const result = await get(key, { access: "private", useCache: false });
     if (!result || result.statusCode !== 200) return null;
     const text = await new Response(result.stream).text();
-    return { text, etag: result.blob.etag };
+    // A compressed answer carries a WEAK etag (W/"…"); a conditional write wants the strong
+    // one, so a weak etag never matched and every write was a «conflict» (26.11.2026).
+    return { text, etag: strongEtag(result.blob.etag) };
   },
   async write(key, text, ifMatch) {
     try {
@@ -60,6 +62,9 @@ const blobStore: CabinetStore = {
     await del(key);
   },
 };
+
+/** `W/"abc"` → `"abc"`: the same version, in the form `put({ ifMatch })` accepts. */
+export const strongEtag = (etag: string) => etag.replace(/^W\//, "");
 
 let override: CabinetStore | null = null;
 

@@ -13,6 +13,10 @@ on:
   schedule:
     - cron: "7,37 * * * *"
   workflow_dispatch:
+    inputs:
+      since:
+        description: окно
+        default: 33m
 
 permissions:
   contents: read
@@ -35,7 +39,7 @@ jobs:
       - name: Ошибки функций за 33 мин
         run: |
           npx --yes vercel@65.2.0 logs --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" \
-            --token "$VERCEL_TOKEN" --environment production --since 33m --limit 10000 --json \
+            --token "$VERCEL_TOKEN" --environment production --since ${{ inputs.since || '33m' }} --limit 10000 --json \
             > logs.jsonl 2> logs.err || { echo "::error::vercel logs не отработал (код $?)"; tail -c 600 logs.err | sed -E 's/[A-Za-z0-9_-]{24,}/<…>/g'; exit 1; }
           node - <<'EOF'
           const fs = require("node:fs");
@@ -62,6 +66,9 @@ jobs:
             if (!shape) shape = Object.keys(rec).sort().join(",");
             if (level !== "error" && level !== "fatal") continue;
             const path = String(rec.requestPath ?? rec.path ?? "?").split("?")[0].slice(0, 80);
+            // Only the action type and error class of «Гроші» failures — no sums, no names.
+            const gm = /\[groshi\] ([a-z.]{1,20}) failed: ([A-Za-z]{1,40})/.exec(String(rec.message ?? ""));
+            if (gm) { const g = `groshi ${gm[1]} ${gm[2]}`; counts.set(g, (counts.get(g) ?? 0) + 1); }
             const key = `${level} ${path}`;
             counts.set(key, (counts.get(key) ?? 0) + 1);
           }
