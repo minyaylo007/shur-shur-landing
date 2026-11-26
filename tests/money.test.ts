@@ -288,6 +288,36 @@ describe("projects: who paid this month", () => {
     expect(() => apply(b, { type: "entry.add", entry: { date: "2026-11-13", amount: 1_00, currency: "USD", projects: [], cash: false, spend: "other" } }, id)).toThrow("invalid");
   });
 
+  it("«+ Внести» «Інше»: typed-in income with no project lands in «Прийшло» and «Інше» only when «Інше» was tapped", () => {
+    const entry = { date: "2026-11-12", amount: 3_000_00, currency: "UAH" as const, projects: [], cash: true };
+    // no project and no «Інше» — refused, as before
+    expect(() => apply(book(), { type: "entry.add", entry }, id)).toThrow("no_project");
+    // «Інше» together with a project is not a choice
+    expect(() => apply(book(), { type: "entry.add", entry: { ...entry, projects: ["b"] }, other: true }, id)).toThrow("invalid");
+    const b = apply(book(), { type: "entry.add", entry, other: true }, id);
+    expect(b.entries[0].projects).toEqual([]);
+    const { ops, accounts: all } = everything(b, [], accounts);
+    expect(summarize(ops, all, b.rules, "2026-11").income).toBe(3_000_00);
+    const pm = projectsMonth(b, ops, all, "2026-11");
+    expect(pm.other).toHaveLength(1);
+    expect(pm.toSort).toEqual([]);
+    expect(pm.rows.every((r) => !r.payments.length)).toBe(true);
+    // removing some project never takes an «Інше» entry with it
+    expect(apply(b, { type: "project.remove", id: "b" }, id).entries).toHaveLength(1);
+  });
+
+  it("«+ Внести» «+ Новий проект»: the project is made with sum 0, the entry is on it, «Скасувати запис» removes both", () => {
+    const entry = { date: "2026-11-12", amount: 2_000_00, currency: "USD" as const, projects: [], cash: false };
+    const b = apply(book(), { type: "entry.add", entry, create: { name: "Тюльпан" } }, id);
+    const made = b.projects.at(-1)!;
+    expect(made).toMatchObject({ name: "Тюльпан", amount: 0, currency: "USD" });
+    expect(b.entries[0].projects).toEqual([made.id]);
+    const { ops, accounts: all } = everything(b, [], accounts);
+    expect(projectsMonth(b, ops, all, "2026-11").rows.find((r) => r.project.id === made.id)!.payments).toHaveLength(1);
+    const undone = apply(b, { type: "entry.remove", id: b.entries[0].id, drop: made.id }, id);
+    expect(undone).toEqual(book());
+  });
+
   it("«Інше»: the payment stays in «Прийшло» and in the taxes, needs no project, leaves «Розібрати», and the payer is remembered", () => {
     const pay = fopIn(4_000_00, "UA07");
     const b = apply(book(), { type: "payer.assign", keys: payerKeys(pay), name: payerName(pay), projects: [] }, id);

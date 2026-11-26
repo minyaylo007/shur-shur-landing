@@ -42,7 +42,7 @@ const entryFields = {
   date,
   amount: minor.min(1),
   currency: z.enum(CURRENCIES),
-  /** income: the projects it is for (at least one); a spending has none */
+  /** income: the projects it is for; none — «Інше» (income for no project); a spending has none */
   projects: z.array(id).max(20),
   cash: z.boolean(),
   /** set → this is money that WENT, into this category (hryvnias only) */
@@ -82,8 +82,15 @@ export const emptyBook = (): Book => ({ version: 1, projects: [], plan: [], rule
 export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("project.save"), project: z.object({ id: id.optional(), ...projectFields }) }),
   z.object({ type: z.literal("project.remove"), id }),
-  z.object({ type: z.literal("entry.add"), entry: z.object(entryFields) }),
-  z.object({ type: z.literal("entry.remove"), id }),
+  /** income with no project only when Sasha tapped «Інше» (`other`); `create` makes a project (sum 0) right from the step */
+  z.object({
+    type: z.literal("entry.add"),
+    entry: z.object(entryFields),
+    other: z.literal(true).optional(),
+    create: z.object({ name }).optional(),
+  }),
+  /** `drop`: the project that same entry created («Скасувати запис» right after saving) */
+  z.object({ type: z.literal("entry.remove"), id, drop: id.optional() }),
   /** projects: none and nothing created — «Інше»; `create` makes a project (sum 0) right from «Розібрати» and adds it */
   z.object({
     type: z.literal("payer.assign"),
@@ -134,17 +141,31 @@ export function apply(book: Book, action: Action, newId: () => string): Book {
             .filter(([, v]) => !v.projects.includes(action.id) || v.projects.length > 1)
             .map(([k, v]) => [k, { ...v, projects: drop(v.projects) }]),
         ),
-        entries: book.entries.map((e) => ({ ...e, projects: drop(e.projects) })).filter((e) => e.spend || e.projects.length),
+        // an income left without projects by this removal goes; one typed in as «Інше» stays
+        entries: book.entries
+          .filter((e) => e.spend || !e.projects.length || e.projects.some((p) => p !== action.id))
+          .map((e) => ({ ...e, projects: drop(e.projects) })),
       };
     }
     case "entry.add": {
-      const { spend, currency, projects } = action.entry;
-      if (spend && (currency !== "UAH" || projects.length)) throw new BookError("invalid");
-      if (!spend && !projects.length) throw new BookError("no_project");
-      return { ...book, entries: [...book.entries, { id: newId(), ...action.entry, projects: known(projects) }] };
+      const { spend, currency } = action.entry;
+      const { other, create } = action;
+      const projects = known(action.entry.projects);
+      if (spend && (currency !== "UAH" || projects.length || other || create)) throw new BookError("invalid");
+      if (other && (projects.length || create)) throw new BookError("invalid");
+      if (!spend && !other && !projects.length && !create) throw new BookError("no_project");
+      let next = book;
+      if (create) {
+        const created = { id: newId(), name: create.name, amount: 0, currency };
+        next = { ...book, projects: [...book.projects, created] };
+        projects.push(created.id);
+      }
+      return { ...next, entries: [...next.entries, { id: newId(), ...action.entry, projects }] };
     }
-    case "entry.remove":
-      return { ...book, entries: book.entries.filter((e) => e.id !== action.id) };
+    case "entry.remove": {
+      const base = { ...book, entries: book.entries.filter((e) => e.id !== action.id) };
+      return action.drop ? apply(base, { type: "project.remove", id: action.drop }, newId) : base;
+    }
     case "payer.assign": {
       const projects = known(action.projects);
       let next = book;

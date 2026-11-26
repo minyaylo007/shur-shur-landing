@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Currency, Project } from "@/lib/money/book";
 import type { Spend } from "@/lib/money/ledger";
+import { NewOrOther } from "./new-or-other";
 
 /* Typing money in, one thing per screen, phone first — the way monobank,
    Monefy and Wallet do it: the sum big, then where it goes, then save.
@@ -20,6 +21,15 @@ export interface NewEntry {
   projects: string[];
   cash: boolean;
   spend?: Spend;
+  /** income: a new project (sum 0) made right from step 2, by its name */
+  create?: string;
+  /** income for no project: «Інше» tapped on step 2 */
+  other?: boolean;
+}
+/** what was saved: the entry, and the project it created, so «Скасувати запис» removes both */
+export interface Saved {
+  id: string;
+  created?: string;
 }
 
 const SPEND_TILES: { key: Spend; label: string; icon: string }[] = [
@@ -62,8 +72,8 @@ export function AddMoney({
   /** what went wrong with the last save, shown on the screen it happened on */
   problem: string;
   /** saves; the new entry's id, or null when it did not save */
-  onSave: (entry: NewEntry) => Promise<string | null>;
-  onUndo: (entryId: string) => Promise<boolean>;
+  onSave: (entry: NewEntry) => Promise<Saved | null>;
+  onUndo: (saved: Saved) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("sum");
@@ -74,8 +84,12 @@ export function AddMoney({
   const [spend, setSpend] = useState<Spend | null>(null);
   const [date, setDate] = useState(today);
   const [cash, setCash] = useState(true);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [title, setTitle] = useState<string | null>(null);
+  const [other, setOther] = useState(false);
+  const [saved, setSaved] = useState<Saved | null>(null);
+  const [typing, setTyping] = useState(false);
   const sumInput = useRef<HTMLInputElement>(null);
+  const create = title?.trim() ?? "";
 
   const amount = toMinor(sum);
   const sumOk = amount > 0 && amount <= 100_000_000_00;
@@ -85,6 +99,8 @@ export function AddMoney({
     setStep("sum");
     setSum("");
     setChosen([]);
+    setTitle(null);
+    setOther(false);
     setSpend(null);
     setDate(today);
     setSaved(null);
@@ -96,6 +112,18 @@ export function AddMoney({
   useEffect(() => {
     if (open && step === "sum") sumInput.current?.focus();
   }, [open, step]);
+  // while Sasha types on the page (a new project's name in «Розібрати»), the floating button steps aside
+  useEffect(() => {
+    const field = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
+    const onIn = (e: FocusEvent) => setTyping(field(e.target));
+    const onOut = () => setTyping(false);
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("focusout", onOut);
+    return () => {
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("focusout", onOut);
+    };
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -108,30 +136,41 @@ export function AddMoney({
   }, [open]);
 
   async function save() {
-    const id = await onSave({
+    const done = await onSave({
       date,
       amount,
       currency: cur,
-      projects: income ? chosen : [],
+      projects: income && !other ? chosen : [],
       cash: income ? cash : false,
-      ...(income ? {} : { spend: spend ?? "other" }),
+      ...(income
+        ? other
+          ? { other: true }
+          : create
+            ? { create }
+            : {}
+        : { spend: spend ?? "other" }),
     });
-    if (id) {
-      setSaved(id);
+    if (done) {
+      setSaved(done);
       setStep("done");
     }
   }
 
   const where = income
-    ? chosen
-        .map((p) => projects.find((x) => x.id === p)?.name)
-        .filter(Boolean)
-        .join(", ")
+    ? other
+      ? "Інше"
+      : chosen
+          .map((p) => projects.find((x) => x.id === p)?.name)
+          .concat(create ? [create] : [])
+          .filter(Boolean)
+          .join(", ")
     : (SPEND_TILES.find((t) => t.key === spend)?.label ?? "");
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div
+        className={`pointer-events-none fixed inset-x-0 bottom-0 z-30 justify-center pb-[max(1rem,env(safe-area-inset-bottom))] ${typing ? "hidden" : "flex"}`}
+      >
         <button
           type="button"
           onClick={start}
@@ -279,13 +318,14 @@ export function AddMoney({
                             <button
                               type="button"
                               aria-pressed={on}
-                              onClick={() =>
+                              onClick={() => {
+                                setOther(false);
                                 setChosen(
                                   on
                                     ? chosen.filter((x) => x !== p.id)
                                     : [...chosen, p.id],
-                                )
-                              }
+                                );
+                              }}
                               className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border px-4 text-left ${on ? "border-cherry-deep bg-cherry-deep text-cream-type" : "border-paper-200"}`}
                             >
                               <span className="min-w-0 truncate">{p.name}</span>
@@ -295,11 +335,27 @@ export function AddMoney({
                         );
                       })}
                     </ul>
+                    <NewOrOther
+                      title={title}
+                      onTitle={(t) => {
+                        setOther(false);
+                        setTitle(t);
+                      }}
+                      onOther={() => {
+                        setChosen([]);
+                        setTitle(null);
+                        setOther(true);
+                        setStep("when");
+                      }}
+                      busy={busy}
+                      button="min-h-12 rounded-2xl border border-paper-200 px-4"
+                      field="min-h-12 w-full rounded-2xl border border-paper-200 bg-white px-4 text-base"
+                    />
                     <div className="flex-1" />
                     <div className="sticky bottom-0 bg-cream-type pt-3">
                       <button
                         type="button"
-                        disabled={!chosen.length}
+                        disabled={!chosen.length && !create}
                         onClick={() => setStep("when")}
                         className={primaryBig}
                       >
