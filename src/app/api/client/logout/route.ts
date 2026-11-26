@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 /* «Вийти»: the cookie is dropped on this device; back to the phone login. */
 
 export async function POST(request: Request) {
-  const response = back(request, "/client/login");
+  const response = back(request, "/login");
   response.cookies.set(CLIENT_COOKIE, "", { ...clientCookieOptions, maxAge: 0 });
   return response;
 }

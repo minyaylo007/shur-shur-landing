@@ -426,7 +426,7 @@ describe("one client cannot reach another", () => {
 
     for (const session of [a.session, undefined, a.session.replace(a.id, b.id), `${b.id}.9999999999.AAAA`]) {
       const got = await page(b.id, session);
-      expect(got.redirect).toBe("/client/login");
+      expect(got.redirect).toBe("/login");
       expect(got.html).toBe("");
     }
     expect((await page(b.id, b.session)).html).toContain("Олена Петренко");
@@ -523,7 +523,7 @@ describe("one client cannot reach another", () => {
 
     for (const form of [{ phone: "0671234567", password: "wrong password 1" }, { phone: "0999999999", password: PASSWORD }]) {
       const refused = await LOGIN(post("/api/client/login", undefined, form));
-      expect(refused.headers.get("location")).toMatch(/\/client\/login\?e=bad$/);
+      expect(refused.headers.get("location")).toMatch(/\/login\?e=bad$/);
       expect(refused.headers.get("set-cookie")).toBeNull();
     }
     expect(logged.join("\n")).not.toMatch(/67.?123|0999/);
@@ -552,7 +552,7 @@ describe("one client cannot reach another", () => {
     }
     for (const form of [{ login: "marina", password: "12346" }, { login: "marinka", password: "12345" }, { login: "marina", password: "" }]) {
       const refused = await LOGIN(post("/api/client/login", undefined, form));
-      expect(refused.headers.get("location")).toMatch(/\/client\/login\?e=bad$/);
+      expect(refused.headers.get("location")).toMatch(/\/login\?e=bad$/);
       expect(refused.headers.get("set-cookie")).toBeNull();
     }
     expect(logged.join("\n")).not.toMatch(/12345|12346|marina/i);
@@ -566,7 +566,7 @@ describe("one client cannot reach another", () => {
 
     cookieJar.clear();
     cookieJar.set(auth.SESSION_COOKIE, `${Math.floor(Date.now() / 1000) + 999}.forged`);
-    await expect(ClientPage({ params: Promise.resolve({ id: a.id }), searchParams: Promise.resolve({}) })).rejects.toThrow("REDIRECT /client/login");
+    await expect(ClientPage({ params: Promise.resolve({ id: a.id }), searchParams: Promise.resolve({}) })).rejects.toThrow("REDIRECT /login");
 
     cookieJar.set(auth.SESSION_COOKIE, auth.makeSession(sessionKey));
     const html = renderToStaticMarkup(await ClientPage({ params: Promise.resolve({ id: a.id }), searchParams: Promise.resolve({}) }));

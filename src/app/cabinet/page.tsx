@@ -216,9 +216,9 @@ export default async function Cabinet({ searchParams }: { searchParams: Promise<
   try {
     signedIn = await isSignedIn(jar.get(SESSION_COOKIE)?.value);
   } catch {
-    redirect("/cabinet/login?e=down");
+    redirect("/login?e=down");
   }
-  if (!signedIn) redirect("/cabinet/login");
+  if (!signedIn) redirect("/login");
 
   let snapshot: Snapshot | null = null;
   let down = false;

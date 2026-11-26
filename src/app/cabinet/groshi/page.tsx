@@ -14,7 +14,7 @@ const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 export default async function CabinetMoney() {
   const jar = await cookies();
-  if (!(await isSignedIn(jar.get(SESSION_COOKIE)?.value))) redirect("/cabinet/login");
+  if (!(await isSignedIn(jar.get(SESSION_COOKIE)?.value))) redirect("/login");
 
   const [{ book }, bank] = await Promise.all([readBook(), loadBank()]);
   const now = nowSeconds();

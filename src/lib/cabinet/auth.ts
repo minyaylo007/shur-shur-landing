@@ -181,6 +181,31 @@ export async function completeSetup(
   return { ok: true, session: makeSession(sessionKey, nowMs) };
 }
 
+/* ---------- the owner sets the password, no link ---------- */
+
+/** Set from ace-main (ops/cabinet/set-password.mjs); the owner chose a short one. */
+export const MIN_OWNER_PASSWORD = 5;
+
+/**
+ * ops → site: a new password without a link. Like completeSetup, every old
+ * session dies (a new key), an unused link stops working, failures start over.
+ */
+export async function setPasswordByOwner(password: string): Promise<"ok" | "weak_password"> {
+  if (password.length < MIN_OWNER_PASSWORD || password.length > MAX_PASSWORD) return "weak_password";
+  const hashed = await hashPassword(password);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { etag } = await readAuth();
+    const next: AuthState = { password: hashed, sessionKey: randomBytes(32).toString("hex"), setup: null, failures: { since: 0, count: 0 } };
+    try {
+      await writeAuth(next, etag);
+      return "ok";
+    } catch (error) {
+      if (!(error instanceof StoreConflictError)) throw error;
+    }
+  }
+  throw new StoreConflictError();
+}
+
 /* ---------- login ---------- */
 
 export type LoginOutcome = { ok: true; session: string } | { ok: false; error: "bad_password" | "locked" | "not_set" };
