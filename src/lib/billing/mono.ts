@@ -1,5 +1,5 @@
 import { createHash, createVerify } from "node:crypto";
-import { listClients, updateClient, type Billing, type Charge, type Client } from "@/lib/client/clients";
+import { listClients, updateClient, type Billing, type Charge, type Client, type Receipt } from "@/lib/client/clients";
 import { site } from "@/lib/site";
 import { chargeBlock, liveToken, openCard, sealCard, setChargeBlock } from "./settings";
 
@@ -133,6 +133,23 @@ export async function merchantDetails(token: string): Promise<{ merchantName: st
 
 const webhookUrl = (clientId: string) => `${site.siteUrl}/api/billing/mono?c=${clientId}`;
 const DESTINATION = "Підписка SHUR-SHUR: результати бота, 1 місяць";
+/** The receipt's one line. The code is the product code in Checkbox: never changes. */
+export const BASKET_NAME = "Підписка SHUR-SHUR, 1 місяць";
+export const BASKET_CODE = "shur-sub-1m";
+
+/**
+ * merchantPaymInfo with the basket (basketOrder): required by monobank once a
+ * PRRO (Checkbox) link is on for the merchant, harmless without one.
+ * BasketOrderItem: name, qty, sum (per unit, minor units), code — required.
+ * Exported for the tests.
+ */
+export function paymInfo(reference: string, amount: number) {
+  return {
+    reference,
+    destination: DESTINATION,
+    basketOrder: [{ name: BASKET_NAME, qty: 1, sum: amount, code: BASKET_CODE }],
+  };
+}
 
 /**
  * The first payment: an invoice that also saves the card into the wallet
@@ -145,7 +162,7 @@ export async function createInvoice(token: string, input: { clientId: string; re
     await call(token, "POST", "/api/merchant/invoice/create", {
       amount: p.amount,
       ccy: p.ccy,
-      merchantPaymInfo: { reference: input.reference, destination: DESTINATION },
+      merchantPaymInfo: paymInfo(input.reference, p.amount),
       redirectUrl: input.redirectUrl,
       webHookUrl: webhookUrl(input.clientId),
       validity: PAGE_VALIDITY_SECONDS,
@@ -217,7 +234,7 @@ async function payByCard(token: string, input: { cardToken: string; clientId: st
       ccy: p.ccy,
       initiationKind: "merchant",
       paymentType: "debit",
-      merchantPaymInfo: { reference: input.reference, destination: DESTINATION },
+      merchantPaymInfo: paymInfo(input.reference, p.amount),
       webHookUrl: webhookUrl(input.clientId),
     }),
   );
@@ -242,6 +259,77 @@ export async function inspectInvoice(token: string, invoiceId: string) {
   const json = await call(token, "GET", `/api/merchant/invoice/status?invoiceId=${encodeURIComponent(invoiceId)}`);
   const read = readInvoice(json);
   return { keys: shape(json), read: { state: read.state, at_read: read.at !== null, wallet_status: read.walletStatus, card_token_read: read.cardToken !== null, err_code: read.errCode } };
+}
+
+/* ---------- fiscal receipts ---------- */
+
+const RECEIPTS_KEPT = 12;
+/** A check still on its way is looked at again by the cabinet: at most hourly, for 3 days. */
+const RECEIPT_RECHECK_MS = 60 * 60 * 1000;
+const RECEIPT_WATCH_MS = 3 * 24 * 60 * 60 * 1000;
+const CHECK_STATES = new Set(["new", "process", "done", "failed"]);
+
+export interface ChecksRead {
+  status: Receipt["status"];
+  /** The tax service's link, only for a done check and only https. */
+  taxUrl: string | null;
+  /** checkbox | monopay — for the log line of a failed check. */
+  source: string | null;
+}
+
+/**
+ * GET invoice/fiscal-checks → the sale check of the payment. No checks (no
+ * PRRO link) → none. Exported for the tests.
+ */
+export function readChecks(json: unknown): ChecksRead {
+  const list = object(json)?.checks;
+  const sales = (Array.isArray(list) ? list : []).map(object).filter((c): c is Json => !!c && word(c.type) !== "return");
+  if (!sales.length) return { status: "none", taxUrl: null, source: null };
+  const pick = sales.find((c) => word(c.status) === "done") ?? sales[sales.length - 1];
+  const raw = word(pick.status);
+  const status = (CHECK_STATES.has(raw) ? raw : "process") as Receipt["status"];
+  const url = str(pick.taxUrl);
+  return {
+    status,
+    taxUrl: status === "done" && url && url.startsWith("https://") && url.length <= 600 ? url : null,
+    source: word(pick.fiscalizationSource).replace(/[^a-z]/g, "").slice(0, 12) || null,
+  };
+}
+
+/**
+ * One look at the fiscal checks of a paid invoice, into the client's record.
+ * Never fails the payment: a refused or lost read leaves the receipt «none»
+ * (the cabinet looks again). A failed check is one log line without personal data.
+ */
+export async function noteReceipt(client: Pick<Client, "id" | "test">, invoiceId: string, at: number, nowMs = Date.now()): Promise<Client | null> {
+  const token = await monoToken(client.test).catch(() => null);
+  if (!token) return null;
+  let read: ChecksRead | null = null;
+  try {
+    read = readChecks(await call(token, "GET", `/api/merchant/invoice/fiscal-checks?invoiceId=${encodeURIComponent(invoiceId)}`));
+  } catch {
+    read = null;
+  }
+  let failedNow = false;
+  const updated = await updateClient(client.id, (c) => {
+    failedNow = false;
+    const receipts = c.billing.receipts ?? [];
+    const old = receipts.find((r) => r.invoiceId === invoiceId);
+    if (old?.status === "done") return false;
+    const next: Receipt = { invoiceId, at, status: read?.status ?? old?.status ?? "none", taxUrl: read?.taxUrl ?? null, checkedAt: nowMs };
+    failedNow = next.status === "failed" && old?.status !== "failed";
+    c.billing.receipts = [...receipts.filter((r) => r.invoiceId !== invoiceId), next].sort((a, b) => a.at - b.at).slice(-RECEIPTS_KEPT);
+  }).catch(() => null);
+  if (failedNow) console.warn(`[billing] fiscal check failed: source=${read?.source ?? "unknown"}, test=${client.test}`);
+  return updated;
+}
+
+/** The cabinet: the latest payment's check while it is still on its way. Null: nothing to look at. */
+export async function refreshReceipt(client: Client, nowMs = Date.now()): Promise<Client | null> {
+  const last = client.billing.receipts?.at(-1);
+  if (!last || last.status === "done" || last.status === "failed") return null;
+  if (nowMs - last.at > RECEIPT_WATCH_MS || nowMs - last.checkedAt < RECEIPT_RECHECK_MS) return null;
+  return noteReceipt(client, last.invoiceId, last.at, nowMs);
 }
 
 /* ---------- months ---------- */
@@ -332,12 +420,26 @@ export async function syncBilling(client: Client, seen?: string, nowMs = Date.no
   if (!first && !charge) return null;
   const firstRead = first ? await invoiceStatus(token, first) : null;
   const chargeRead = charge ? await invoiceStatus(token, charge.invoiceId!) : null;
-  return updateClient(client.id, (c) => {
-    if (firstRead && c.billing.invoiceId === first) applyFirst(c.billing, firstRead, nowMs, c.freeUntil);
-    if (chargeRead && c.billing.charge?.invoiceId === charge!.invoiceId && c.billing.charge.status === "processing") applyCharge(c.billing, c.billing.charge, chargeRead, nowMs);
+  let paidNow: { invoiceId: string; at: number }[] = [];
+  const updated = await updateClient(client.id, (c) => {
+    paidNow = [];
+    if (firstRead && c.billing.invoiceId === first) {
+      const was = c.billing.status;
+      applyFirst(c.billing, firstRead, nowMs, c.freeUntil);
+      if (was === "pending" && c.billing.status === "active" && firstRead.state === "success") paidNow.push({ invoiceId: first!, at: firstRead.at ?? nowMs });
+    }
+    if (chargeRead && c.billing.charge?.invoiceId === charge!.invoiceId && c.billing.charge.status === "processing") {
+      applyCharge(c.billing, c.billing.charge, chargeRead, nowMs);
+      // applyCharge marks the charge paid exactly when monobank says success.
+      if (chargeRead.state === "success") paidNow.push({ invoiceId: charge!.invoiceId!, at: chargeRead.at ?? nowMs });
+    }
     c.billing.syncedAt = nowMs;
     if (seen && !c.billing.seen.includes(seen)) c.billing.seen = [...c.billing.seen, seen].slice(-SEEN_KEPT);
   });
+  // The fiscal check of what was paid just now: one read each, never a failure of the payment.
+  let latest = updated;
+  for (const p of paidNow) latest = (await noteReceipt(client, p.invoiceId, p.at, nowMs)) ?? latest;
+  return latest;
 }
 
 /** «Оформити підписку» after monobank opened the page: the record waits for the first payment. */
@@ -430,6 +532,7 @@ export async function chargeClient(client: Client, nowMs = Date.now(), force = f
     if (result.status === "success") paid(c.billing, period);
     if (result.status === "failure") c.billing.lastFailedAt = nowMs;
   });
+  if (result.status === "success" && result.invoiceId) await noteReceipt(client, result.invoiceId, nowMs, nowMs);
   return outcome;
 }
 

@@ -70,6 +70,36 @@
 - Страховка от потерянного вебхука: кабинет клиента сам спрашивает monobank, пока счёт
   `pending` или списание в обработке, и если состояние старше 6 часов.
 
+## Фискальный чек (Checkbox через monobank)
+
+Источник: архив документации monobank для ИИ (monobank.ua/api-docs/acquiring/dev/ai-tools/docs--ai-skills,
+«Завантажити архів»; файлы `SKILL.md` — MerchantPaymInfoItem / BasketOrderItem, `payment.md`,
+`fiscal.md`), 27.11.2026.
+
+- `merchantPaymInfo.basketOrder` обязателен, когда у мерчанта включена связка с ПРРО
+  (делается в web.monobank.ua); без связки — безвреден. `wallet/payment` принимает тот же
+  `MerchantPaymInfoItem`, что и `invoice/create`.
+- `BasketOrderItem`: обязательные `name` (string), `qty` (number), `sum` (integer — цена
+  ЗА ЕДИНИЦУ в минорных единицах), `code` (string, код товара — для фискализации).
+  Необязательные: `unit`, `total`, `tax` ([]integer — ставки из кабинета Checkbox), `uktzed`,
+  `barcode`, `header`, `footer`, `icon`, `discounts`.
+- Шлём в обоих вызовах одну строку: `{name: "Підписка SHUR-SHUR, 1 місяць", qty: 1, sum: amount,
+  code: "shur-sub-1m"}` (`paymInfo()` в `mono.ts`). `code` не менять: это товар в Checkbox.
+  `tax` не шлём (необязательное поле); если Checkbox Саши потребует ставку — её номер из кабинета Checkbox.
+- После успешной оплаты (вебхук, кабинет или ежедневное списание) — один `GET
+  /api/merchant/invoice/fiscal-checks?invoiceId=`: `checks[]` с `status` new / process / done /
+  failed, `type` sale / return, `fiscalizationSource` checkbox / monopay, `taxUrl`. В запись
+  клиента идёт `billing.receipts[]`: статус и `taxUrl` (только https, только у done). Пустой
+  список (нет связки) — `none`, оплата как раньше. Чек ещё в пути — кабинет перечитывает
+  последний не чаще раза в час, 3 дня. `failed` — одна строка `[billing] fiscal check failed:
+  source=…` без данных клиента; оплате это не мешает. Ошибка чтения — тоже не ошибка оплаты.
+- В кабинете клиента под блоком подписки: «Оплата дд.мм.рррр · Чек» (ссылка на налоговую) для
+  трёх последних оплат с готовым чеком.
+
+⚠ **Евро.** Ни архив, ни страницы monobank не говорят, пробивает ли Checkbox чек по оплате в
+евро (`ccy` 978); в примерах только 980. Не проверено. Валюту сами не переключаем; если после
+включения связки чеки будут `failed` или не появятся — вариант `MONO_PRICE_UAH` (оплата в гривне).
+
 ## Ключи
 
 - `MONO_TOKEN` (env) или токен, сохранённый Сашей в `/cabinet` (env главнее).

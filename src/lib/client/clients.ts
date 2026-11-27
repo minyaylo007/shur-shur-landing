@@ -52,6 +52,22 @@ const chargeSchema = z.object({
   note: z.string().nullable(),
 });
 
+/**
+ * The fiscal receipt of one payment, as monobank's GET invoice/fiscal-checks
+ * tells it (the PRRO link — Checkbox — is switched on in monobank's cabinet).
+ * none: no check came (no PRRO link, or not yet). Only a link, never the PDF.
+ */
+const receiptSchema = z.object({
+  invoiceId: z.string(),
+  /** When the payment came through (ms). */
+  at: z.number(),
+  status: z.enum(["none", "new", "process", "done", "failed"]),
+  /** The check on the tax service's site, once done. */
+  taxUrl: z.string().nullable(),
+  checkedAt: z.number(),
+});
+export type Receipt = z.infer<typeof receiptSchema>;
+
 const billingSchema = z.object({
   /** The first payment: monobank's invoice that also saves the card. */
   invoiceId: z.string().nullable().default(null),
@@ -73,6 +89,8 @@ const billingSchema = z.object({
   first: z.object({ amount: z.number().int().min(1), days: z.number().int().min(1).max(31) }).nullable().default(null),
   /** SHA-256 of the webhook bodies already applied — a repeat changes nothing. */
   seen: z.array(z.string()),
+  /** Fiscal receipts of the latest payments, newest last. */
+  receipts: z.array(receiptSchema).default([]),
 });
 export type Billing = z.infer<typeof billingSchema>;
 export type Charge = z.infer<typeof chargeSchema>;
@@ -92,6 +110,7 @@ export const EMPTY_BILLING: Billing = {
   charge: null,
   first: null,
   seen: [],
+  receipts: [],
 };
 
 const clientSchema = z.object({
