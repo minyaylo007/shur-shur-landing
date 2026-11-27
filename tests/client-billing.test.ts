@@ -69,6 +69,8 @@ let n = 0;
 /** What wallet/payment answers next: a status, or an error of monobank. */
 let wallet: { status: "success" | "processing" | "failure"; tds?: boolean } | { error: number; errText: string };
 let calls: { method: string; path: string; token: string | null; body: Record<string, unknown> | null }[];
+/** What invoice/fiscal-checks answers per invoice; unset → no checks (no PRRO link). */
+let fiscal: Map<string, Record<string, unknown>[] | "down">;
 
 const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(String(input));
@@ -109,6 +111,12 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
       const id = `ch_${++n}`;
       invoices.set(id, { status: wallet.status, modified: Date.now(), card: null });
       return json({ invoiceId: id, status: wallet.status, amount: 1500, ccy: 978, ...(wallet.tds ? { tdsUrl: "https://3ds.example/x" } : {}) });
+    }
+    case "/api/merchant/invoice/fiscal-checks": {
+      // No PRRO link: monobank answers an empty list.
+      const checks = fiscal.get(url.searchParams.get("invoiceId") ?? "");
+      if (checks === "down") return json({ errCode: "INTERNAL_ERROR", errText: "internal server error" }, 500);
+      return json({ checks: checks ?? [] });
     }
     default:
       return json({ errCode: "404", errText: "not found" }, 404);
@@ -241,6 +249,7 @@ beforeEach(() => {
   process.env.CRON_SECRET = "cron-secret";
   bankKey = pair();
   invoices = new Map();
+  fiscal = new Map();
   n = 0;
   wallet = { status: "success" };
   calls = [];
@@ -1139,6 +1148,100 @@ describe("money", () => {
     expect(called("/wallet/payment").length).toBeGreaterThan(0);
     const outside = [...logged, ...answers].join("\n");
     for (const secret of [CARD, "live-token", "test-token", "cron-secret"]) expect(outside).not.toContain(secret);
+  });
+});
+
+describe("the fiscal receipt (Checkbox through monobank)", () => {
+  const HOUR = 60 * 60 * 1000;
+  const TAX = "https://cabinet.tax.gov.ua/cashregs/check?id=abc";
+  const check = (status: string, more: Record<string, unknown> = {}) => ({ id: "c1", status, type: "sale", fiscalizationSource: "checkbox", ...more });
+  const basket = (amount: number) => ({ basketOrder: [{ name: "Підписка SHUR-SHUR, 1 місяць", qty: 1, sum: amount, code: "shur-sub-1m" }] });
+
+  it("both payments carry the basket: one line, qty 1, sum = amount, the same code", async () => {
+    const a = await newClient("Кав'ярня");
+    await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
+    const [create] = called("/invoice/create");
+    expect(create.body).toMatchObject({ amount: 1500, merchantPaymInfo: { reference: expect.any(String), ...basket(1500) } });
+    expect((create.body!.merchantPaymInfo as { basketOrder: unknown[] }).basketOrder).toHaveLength(1);
+
+    pay("inv_1", Date.now() - 40 * DAY);
+    await page(a.id, a.session);
+    await mono.runCharges(mono.addMonth((await record(a.id)).billing.lastPaidAt!) + HOUR);
+    const [charge] = called("/wallet/payment");
+    expect(charge.body).toMatchObject({ amount: 1500, merchantPaymInfo: basket(1500) });
+
+    process.env.MONO_PRICE_UAH = "730";
+    const b = await newClient("Пекарня");
+    await SUBSCRIBE(post("/api/client/subscribe", b.cookie));
+    expect(called("/invoice/create")[1].body).toMatchObject({ amount: 73000, merchantPaymInfo: basket(73000) });
+  });
+
+  it("a done check → «Чек» with the tax link in the cabinet, for the first payment and for the month's charge", async () => {
+    const a = await newClient("Кав'ярня");
+    await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
+    pay("inv_1", Date.now() - 40 * DAY);
+    fiscal.set("inv_1", [check("done", { taxUrl: TAX })]);
+    const html = (await page(a.id, a.session)).html;
+    expect(called("/invoice/fiscal-checks")).toHaveLength(1);
+    expect(html).toContain(`href="${TAX.replace(/&/g, "&amp;")}"`);
+    expect(html).toContain(">Чек</a>");
+    expect((await record(a.id)).billing.receipts).toEqual([expect.objectContaining({ invoiceId: "inv_1", status: "done", taxUrl: TAX })]);
+
+    // The daily charge: monobank answers success at once, the check is read right after.
+    fiscal.set("ch_2", [check("done", { taxUrl: `${TAX}2` })]);
+    expect(await mono.runCharges(mono.addMonth((await record(a.id)).billing.lastPaidAt!) + HOUR)).toMatchObject({ success: 1 });
+    expect((await record(a.id)).billing.receipts.map((r) => r.taxUrl)).toEqual([TAX, `${TAX}2`]);
+    // A done check is not asked again.
+    const asked = called("/invoice/fiscal-checks").length;
+    await page(a.id, a.session);
+    expect(called("/invoice/fiscal-checks")).toHaveLength(asked);
+  });
+
+  it("no PRRO link (no checks), monobank down, or a check on its way: the payment goes as before, no «Чек»; it comes on a later visit", async () => {
+    const a = await newClient("Кав'ярня");
+    await SUBSCRIBE(post("/api/client/subscribe", a.cookie));
+    pay("inv_1");
+    const html = (await page(a.id, a.session)).html;
+    expect((await record(a.id)).billing).toMatchObject({ status: "active", receipts: [expect.objectContaining({ status: "none", taxUrl: null })] });
+    expect(html).toContain("Підписка активна");
+    expect(html).not.toContain(">Чек</a>");
+
+    // fiscal-checks fails: still paid, nothing thrown, no warning about the payment.
+    const b = await newClient("Пекарня");
+    await SUBSCRIBE(post("/api/client/subscribe", b.cookie));
+    pay("inv_2");
+    fiscal.set("inv_2", "down");
+    expect((await page(b.id, b.session)).html).toContain("Підписка активна");
+    expect((await record(b.id)).billing.status).toBe("active");
+
+    // On its way → looked at again by the cabinet an hour later, then shown.
+    fiscal.set("inv_2", [check("process")]);
+    const later = Date.now() + 2 * HOUR;
+    await mono.refreshReceipt(await record(b.id), later);
+    expect((await record(b.id)).billing.receipts.at(-1)).toMatchObject({ status: "process", taxUrl: null });
+    expect(await mono.refreshReceipt(await record(b.id), later + 60_000)).toBeNull(); // not hourly yet
+    fiscal.set("inv_2", [check("done", { taxUrl: TAX })]);
+    await mono.refreshReceipt(await record(b.id), later + 2 * HOUR);
+    expect((await record(b.id)).billing.receipts.at(-1)).toMatchObject({ status: "done", taxUrl: TAX });
+  });
+
+  it("a failed check is one log line with no client data — not a failed payment", async () => {
+    const a = await newClient("Кав'ярня");
+    await subscribed(a.id, 20);
+    const due = mono.addMonth((await record(a.id)).billing.lastPaidAt!) + HOUR;
+    fiscal.set("ch_1", [check("failed", { statusDescription: "Петренко: помилка" })]);
+    expect(await mono.runCharges(due)).toMatchObject({ success: 1 });
+    expect((await record(a.id)).billing.charge).toMatchObject({ status: "success" });
+    const lines = logged.filter((l) => l.includes("fiscal"));
+    expect(lines).toEqual(["[billing] fiscal check failed: source=checkbox, test=false"]);
+    expect(logged.join("\n")).not.toContain("Петренко");
+    expect((await page(a.id, a.session)).html).not.toContain(">Чек</a>");
+  });
+
+  it("readChecks: a return check or a non-https link is never shown", () => {
+    expect(mono.readChecks({ checks: [check("done", { type: "return", taxUrl: TAX })] })).toMatchObject({ status: "none", taxUrl: null });
+    expect(mono.readChecks({ checks: [check("done", { taxUrl: "javascript:alert(1)" })] })).toMatchObject({ status: "done", taxUrl: null });
+    expect(mono.readChecks(null)).toMatchObject({ status: "none" });
   });
 });
 

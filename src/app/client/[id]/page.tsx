@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { accessOf, monoToken, price, PRICE_EUR, syncBilling, type Access } from "@/lib/billing/mono";
+import { accessOf, monoToken, price, PRICE_EUR, refreshReceipt, syncBilling, type Access } from "@/lib/billing/mono";
 import { readAttempts, summarize, type Attempt } from "@/lib/client/attempts";
 import { CherryIcon } from "@/components/ui/icons";
 import { isSignedIn, SESSION_COOKIE } from "@/lib/cabinet/auth";
@@ -217,6 +217,24 @@ function Subscription({ client, access }: { client: Client; access: Access }) {
       Оформіть підписку — списання раз на місяць, скасувати можна будь-коли.
       <Subscribe label={subscribe} />
     </Status>
+  );
+}
+
+/** Fiscal receipts (Checkbox through monobank): a «Чек» link for each payment whose check is done. Nothing otherwise. */
+function Receipts({ client }: { client: Client }) {
+  const done = (client.billing.receipts ?? []).filter((r) => r.status === "done" && r.taxUrl).slice(-3).reverse();
+  if (!done.length) return null;
+  return (
+    <ul aria-label="Фіскальні чеки" className="mt-3 flex flex-wrap gap-x-6 gap-y-1 px-1 text-sm text-ink-700">
+      {done.map((r) => (
+        <li key={r.invoiceId}>
+          Оплата {day(r.at)} ·{" "}
+          <a href={r.taxUrl!} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">
+            Чек
+          </a>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -551,6 +569,8 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
       // The stored state stands; the webhook or the next visit will catch up.
     }
   }
+  // The last payment's fiscal check, while it is on its way (at most hourly, for 3 days).
+  client = (await refreshReceipt(client).catch(() => null)) ?? client;
 
   // Results are always shown — paid or not (owner, 25.11.2026). The
   // subscription only decides the billing block above them.
@@ -608,6 +628,7 @@ export default async function ClientCabinet({ params, searchParams }: { params: 
 
       <div className="mt-6">
         <Subscription client={client} access={access} />
+        <Receipts client={client} />
       </div>
 
       <section className="mt-10">
